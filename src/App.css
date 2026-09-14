@@ -1,75 +1,111 @@
+@import url("https://fonts.googleapis.com/css2?family=Kode+Mono:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
 
 @layer base {
   :root {
-    --color-bg-dark: #0a0d14;
-    --color-card-dark: rgba(16, 21, 34, 0.75);
-    --color-border-dark: rgba(255, 255, 255, 0.08);
+    --color-bg-dark: #0f0b0b;
+    --color-card-dark: #140f10;
+    --color-border-dark: rgba(245, 90, 107, 0.25);
     
-    --color-bg-light: #f4f6fb;
-    --color-card-light: rgba(255, 255, 255, 0.92);
-    --color-border-light: rgba(0, 0, 0, 0.08);
+    --color-coral: #f55a6b;
+    --color-cyan: #5accf5;
+    --color-scanline: #221314;
+    --color-scanline-active: #521d20;
+
+    --color-bg-light: #f6f4f4;
+    --color-card-light: #ffffff;
+    --color-border-light: rgba(245, 90, 107, 0.35);
   }
 
   body {
     user-select: none;
     -webkit-user-select: none;
     overflow-x: hidden;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, "Helvetica Neue", Arial, sans-serif;
-    letter-spacing: -0.01em;
+    background-color: #0f0b0b;
+    color: #e5e0e1;
+    font-family: "Kode Mono", monospace, monospace;
+    letter-spacing: 0.02em;
   }
 }
 
-/* Studio Gaming Backdrop */
-.bg-gaming-dark {
-  background-color: #090c13;
+/* Retro Glitch Cyber Backdrop */
+.bg-retro-dark {
+  background-color: #0f0b0b;
   background-image: 
-    radial-gradient(ellipse 80% 50% at 50% -15%, rgba(6, 182, 212, 0.12), transparent 70%),
-    radial-gradient(ellipse 60% 40% at 90% 90%, rgba(244, 63, 94, 0.06), transparent 60%);
+    linear-gradient(rgba(34, 19, 20, 0.25) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(34, 19, 20, 0.15) 1px, transparent 1px),
+    radial-gradient(ellipse 70% 40% at 50% 0%, rgba(245, 90, 107, 0.08), transparent 70%);
+  background-size: 100% 4px, 4px 100%, 100% 100%;
 }
 
-.bg-gaming-light {
-  background-color: #f5f7fb;
+.bg-retro-light {
+  background-color: #f7f5f5;
   background-image: 
-    radial-gradient(ellipse 80% 50% at 50% -15%, rgba(14, 165, 233, 0.08), transparent 70%);
+    linear-gradient(rgba(245, 90, 107, 0.08) 1px, transparent 1px),
+    radial-gradient(ellipse 70% 40% at 50% 0%, rgba(245, 90, 107, 0.06), transparent 70%);
+  background-size: 100% 4px, 100% 100%;
 }
 
-/* Custom modern scrollbars */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+/* CodePen Scanlines pattern */
+.scanlines-overlay {
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(34, 19, 20, 0.4),
+    rgba(34, 19, 20, 0.4) 1px,
+    transparent 1px,
+    transparent 4px
+  );
+  pointer-events: none;
 }
 
-::-webkit-scrollbar-track {
-  background: transparent;
+/* Retro Sharp Glitch Box */
+.glitch-panel {
+  background-color: #140f10;
+  border: 1px solid rgba(245, 90, 107, 0.35);
+  position: relative;
+  transition: all 0.2s ease;
 }
 
-::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.25);
-  border-radius: 9999px;
+.glitch-panel:hover {
+  border-color: rgba(245, 90, 107, 0.8);
+  box-shadow: 0 0 15px -3px rgba(245, 90, 107, 0.2);
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.45);
-}
-
-/* Glassmorphism utility */
-.glass-panel {
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+/* Solid Glitch Header Bar (as in CodePen h1) */
+.glitch-title-bar {
+  background-color: #f55a6b;
+  color: #0f0b0b;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 /* Neon Glows */
+.neon-glow-coral {
+  box-shadow: 0 0 20px -2px rgba(245, 90, 107, 0.45), 0 0 8px -1px rgba(245, 90, 107, 0.3);
+}
+
 .neon-glow-cyan {
-  box-shadow: 0 0 25px -4px rgba(6, 182, 212, 0.45), 0 0 10px -2px rgba(6, 182, 212, 0.3);
+  box-shadow: 0 0 20px -2px rgba(90, 204, 245, 0.45), 0 0 8px -1px rgba(90, 204, 245, 0.3);
 }
 
-.neon-glow-rose {
-  box-shadow: 0 0 25px -4px rgba(244, 63, 94, 0.45), 0 0 10px -2px rgba(244, 63, 94, 0.3);
+/* Glitch Chromatic Aberration Text Effect */
+.glitch-text-chroma {
+  position: relative;
+  display: inline-block;
 }
 
-.neon-glow-emerald {
-  box-shadow: 0 0 25px -4px rgba(16, 185, 129, 0.45), 0 0 10px -2px rgba(16, 185, 129, 0.3);
+.glitch-text-chroma:hover {
+  text-shadow: -2px 0 #5accf5, 2px 0 #f55a6b;
+  animation: glitch-jitter 0.25s infinite;
+}
+
+@keyframes glitch-jitter {
+  0% { transform: translate(0, 0); }
+  25% { transform: translate(-1.5px, 0.5px); }
+  50% { transform: translate(1.5px, -0.5px); }
+  75% { transform: translate(-0.5px, -1px); }
+  100% { transform: translate(0, 0); }
 }
 
 /* Poster Card 2:3 Aspect Ratio */
@@ -77,13 +113,24 @@
   aspect-ratio: 2 / 3;
 }
 
-/* Smooth Card Hover Lift */
-.hover-card-lift {
-  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.22s ease;
+/* Custom retro scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
 }
 
-.hover-card-lift:hover {
-  transform: translateY(-4px);
+::-webkit-scrollbar-track {
+  background: #0f0b0b;
+  border-left: 1px solid rgba(245, 90, 107, 0.15);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(245, 90, 107, 0.4);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #f55a6b;
+  box-shadow: 0 0 8px rgba(245, 90, 107, 0.8);
 }
 
 /* Pulsing Status Dot */
@@ -99,5 +146,6 @@
 }
 
 .animate-status-pulse {
-  animation: statusPulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  animation: statusPulse 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
+

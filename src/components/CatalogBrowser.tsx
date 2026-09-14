@@ -13,6 +13,8 @@ import {
   Film,
   Zap,
 } from 'lucide-react';
+import { GlitchButton } from './GlitchButton';
+import { GlitchText } from './GlitchText';
 
 interface CatalogBrowserProps {
   config: AppConfig;
@@ -23,7 +25,6 @@ interface CatalogBrowserProps {
 export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
   config,
   onUpdateConfig,
-  isDark,
 }) => {
   const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -106,210 +107,199 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
     switch (tier) {
       case 'native':
         return (
-          <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold uppercase tracking-wider">
-            <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Nativní HDR
+          <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 bg-cyan-950/80 text-[#5accf5] border border-[#5accf5]/40 font-bold uppercase tracking-wider">
+            <CheckCircle2 className="w-3 h-3 text-[#5accf5]" /> Nativní HDR
           </span>
         );
       case 'limited':
         return (
-          <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2.5 py-0.5 rounded-md bg-teal-500/20 text-teal-300 border border-teal-500/30 font-bold uppercase tracking-wider">
+          <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 bg-teal-950/80 text-teal-300 border border-teal-500/40 font-bold uppercase tracking-wider">
             <Sparkles className="w-3 h-3 text-teal-400" /> Omezené
           </span>
         );
       case 'always_on':
         return (
-          <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2.5 py-0.5 rounded-md bg-lime-500/20 text-lime-300 border border-lime-500/30 font-bold uppercase tracking-wider">
-            <Lock className="w-3 h-3 text-lime-400" /> Vždy zapnuto
+          <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 bg-purple-950/80 text-purple-300 border border-purple-500/40 font-bold uppercase tracking-wider">
+            <Lock className="w-3 h-3 text-purple-400" /> Always-on
           </span>
         );
       case 'manual_fix':
         return (
-          <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2.5 py-0.5 rounded-md bg-blue-500/20 text-blue-300 border border-blue-500/30 font-bold uppercase tracking-wider">
-            <Wrench className="w-3 h-3 text-blue-400" /> Vyžaduje mod/fix
+          <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 bg-amber-950/80 text-amber-300 border border-amber-500/40 font-bold uppercase tracking-wider">
+            <Wrench className="w-3 h-3 text-amber-400" /> Vyžaduje mod
           </span>
         );
       case 'autohdr':
         return (
-          <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2.5 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold uppercase tracking-wider">
-            <Zap className="w-3 h-3 text-amber-400" /> Auto HDR
+          <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 bg-rose-950/80 text-[#f55a6b] border border-[#f55a6b]/40 font-bold uppercase tracking-wider">
+            <Zap className="w-3 h-3 text-[#f55a6b]" /> Windows Auto HDR
           </span>
         );
       case 'media':
         return (
-          <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2.5 py-0.5 rounded-md bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-bold uppercase tracking-wider">
-            <Film className="w-3 h-3 text-cyan-400" /> Média
+          <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 bg-blue-950/80 text-blue-300 border border-blue-500/40 font-bold uppercase tracking-wider">
+            <Film className="w-3 h-3 text-blue-400" /> Média / Video
           </span>
         );
       default:
-        return null;
+        return (
+          <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 bg-slate-900 text-slate-300 border border-slate-700 font-bold uppercase tracking-wider">
+            Vlastní
+          </span>
+        );
     }
   };
 
-  const countByTier = (tier: string) => {
+  const isGameTracked = (exe: string) => {
+    return config.apps.some((a) => a.exe_name.toLowerCase() === exe.toLowerCase());
+  };
+
+  const countForTier = (tier: string) => {
     if (tier === 'all') return catalog.length;
     return catalog.filter((i) => i.support_tier === tier).length;
   };
 
-  const tiers = [
-    { id: 'all', label: `Vše (${countByTier('all')})` },
-    { id: 'native', label: `Nativní HDR (${countByTier('native')})` },
-    { id: 'autohdr', label: `Auto HDR (${countByTier('autohdr')})` },
-    { id: 'manual_fix', label: `Vyžaduje fix (${countByTier('manual_fix')})` },
-    { id: 'limited', label: `Omezené (${countByTier('limited')})` },
-    { id: 'always_on', label: `Vždy zapnuto (${countByTier('always_on')})` },
-    { id: 'media', label: `Média (${countByTier('media')})` },
-  ];
-
   return (
-    <div className="space-y-5">
-      {/* Header with Search and Online Sync */}
+    <div className="space-y-5 font-mono">
+      {/* Top Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-black tracking-tight text-white flex items-center gap-2">
-            <span>Databáze her</span>
-            <span className="text-xs font-mono font-normal px-2.5 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-              {catalog.length} her a aplikací
+          <div className="flex items-center gap-2.5">
+            <h2 className="glitch-title-bar px-2.5 py-0.5 text-xs font-bold tracking-wider inline-block">
+              DATABÁZE HDR HER
+            </h2>
+            <span className="text-xs px-2 py-0.5 border border-[#5accf5]/40 text-[#5accf5] bg-[#140e10]">
+              {catalog.length} TITULŮ V ARCHIVU
             </span>
-          </h2>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Kompletní katalog her s ověřenou podporou Nativního HDR a Windows Auto HDR z PCGamingWiki.
+          </div>
+          <p className="text-xs text-[#8a7f81] mt-1">
+            Seznam her s nativní HDR podporou i oficiální databáze Windows Auto HDR (PCGamingWiki).
           </p>
         </div>
 
-        <button
-          onClick={handleSync}
+        <GlitchButton
+          label={syncing ? 'SYNCHRONIZUJI...' : 'AKTUALIZOVAT Z WEBU'}
+          variant="outline"
+          size="sm"
           disabled={syncing}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-xs font-bold cursor-pointer transition-all ${
-            isDark
-              ? 'border-white/10 hover:border-cyan-500/40 hover:bg-white/[0.04] text-slate-200 shadow-sm'
-              : 'border-slate-200 hover:bg-slate-100 text-slate-700 shadow-xs'
-          } disabled:opacity-50`}
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin text-cyan-400' : 'text-cyan-400'}`} />
-          <span>{syncing ? 'Aktualizuji databázi...' : 'Aktualizovat z webu'}</span>
-        </button>
+          icon={<RefreshCw className={`w-3.5 h-3.5 text-[#5accf5] ${syncing ? 'animate-spin' : ''}`} />}
+          onClick={handleSync}
+        />
       </div>
 
       {message && (
-        <div className="p-3.5 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 text-xs flex items-center gap-2.5 shadow-sm">
-          <Sparkles className="w-4 h-4 shrink-0 text-cyan-400" />
-          <span className="font-medium">{message}</span>
+        <div className="p-3 border border-[#5accf5]/40 bg-[#120e10] text-[#5accf5] text-xs flex items-center gap-2.5">
+          <Sparkles className="w-4 h-4 shrink-0 text-[#5accf5]" />
+          <span>&gt; {message}</span>
         </div>
       )}
 
-      {/* Search and Category Filter Toolbar */}
+      {/* Filter and Search Bar */}
       <div className="space-y-3">
         <div className="relative">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#8a7f81]" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Hledat v databázi (např. Cyberpunk, Witcher, Elden Ring, Forza, Battlefield)..."
-            className={`w-full pl-9 pr-4 py-2.5 text-xs md:text-sm rounded-xl border transition-all ${
-              isDark
-                ? 'bg-[#0e1322]/80 border-white/[0.08] focus:border-cyan-500/50 text-white placeholder-slate-500'
-                : 'bg-white border-slate-200 focus:border-cyan-500 text-slate-900 placeholder-slate-400 shadow-xs'
-            }`}
+            placeholder="Hledat hru podle názvu nebo .exe souboru..."
+            className="w-full pl-9 pr-4 py-2 text-xs border border-[#f55a6b]/30 bg-[#120d0e] focus:border-[#f55a6b] text-white placeholder-[#8a7f81] focus:outline-none transition-all"
           />
         </div>
 
-        {/* Filter Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-          {tiers.map((tier) => (
+        {/* Tier Filter Tabs */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+          {[
+            { id: 'all', label: `VŠECHNY (${countForTier('all')})` },
+            { id: 'native', label: `NATIVNÍ HDR (${countForTier('native')})` },
+            { id: 'autohdr', label: `AUTO HDR (${countForTier('autohdr')})` },
+            { id: 'limited', label: `OMEZENÉ (${countForTier('limited')})` },
+            { id: 'manual_fix', label: `MOD / FIX (${countForTier('manual_fix')})` },
+            { id: 'always_on', label: `ALWAYS-ON (${countForTier('always_on')})` },
+          ].map((tab) => (
             <button
-              key={tier.id}
-              onClick={() => setSelectedTier(tier.id)}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-all whitespace-nowrap ${
-                selectedTier === tier.id
-                  ? 'bg-cyan-500 text-slate-950 font-extrabold shadow-md neon-glow-cyan'
-                  : isDark
-                  ? 'bg-[#0e1322]/60 text-slate-400 hover:text-white border border-white/[0.06] hover:border-cyan-500/30'
-                  : 'bg-white text-slate-600 hover:text-slate-900 border border-slate-200'
+              key={tab.id}
+              onClick={() => setSelectedTier(tab.id)}
+              className={`px-3 py-1 text-xs uppercase font-bold cursor-pointer transition-all border ${
+                selectedTier === tab.id
+                  ? 'bg-[#f55a6b] text-[#0f0b0b] border-[#f55a6b] neon-glow-coral'
+                  : 'bg-[#120d0e] text-[#8a7f81] border-[#f55a6b]/20 hover:border-[#f55a6b]/50 hover:text-white'
               }`}
             >
-              {tier.label}
+              {tab.label}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Catalog items list */}
-      <div
-        className={`rounded-2xl border overflow-hidden glass-panel ${
-          isDark ? 'bg-[#0f1422]/80 border-white/[0.08]' : 'bg-white/90 border-slate-200 shadow-md'
-        }`}
-      >
-        <div className="divide-y divide-white/[0.05] max-h-[520px] overflow-y-auto">
-          {filtered.length === 0 ? (
-            <div className="p-16 text-center text-slate-400 text-xs font-mono">
-              {loading ? 'NAČÍTÁM DATABÁZI HER...' : 'NEBYLY NALEZENY ŽÁDNÉ HRY ODPOVÍDAJÍCÍ FILTRU.'}
-            </div>
-          ) : (
-            filtered.map((item) => {
-              const exeLower = item.exe_name.toLowerCase();
-              const isAdded = config.apps.some(
-                (a) => a.exe_name.toLowerCase() === exeLower
-              );
+      {/* Games Catalog List */}
+      {loading ? (
+        <div className="p-12 text-center border border-[#f55a6b]/20 bg-[#120d0e] text-[#5accf5] text-xs">
+          &gt; Načítám katalog her...
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="p-12 text-center border border-[#f55a6b]/20 bg-[#120d0e] text-[#8a7f81] text-xs">
+          &gt; Žádná hra neodpovídá zadanému filtru.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {filtered.map((item) => {
+            const tracked = isGameTracked(item.exe_name);
 
-              return (
-                <div
-                  key={`${item.name}-${item.exe_name}`}
-                  className={`p-3.5 flex items-center justify-between gap-4 transition-colors ${
-                    isDark ? 'hover:bg-white/[0.03]' : 'hover:bg-slate-50/80'
-                  }`}
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2.5 flex-wrap">
-                      <h4 className="text-sm font-extrabold truncate text-slate-100">{item.name}</h4>
-                      {getTierBadge(item.support_tier)}
-                    </div>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-xs text-slate-400 font-mono">
-                        {item.exe_name}
-                      </span>
-                      {item.notes && (
-                        <>
-                          <span className="text-slate-600">•</span>
-                          <span className="text-xs text-slate-400 truncate max-w-[340px]">
-                            {item.notes}
-                          </span>
-                        </>
-                      )}
-                    </div>
+            return (
+              <div
+                key={item.exe_name}
+                className={`p-3 border transition-all flex items-center justify-between gap-4 relative ${
+                  tracked
+                    ? 'bg-[#180e10] border-[#f55a6b]/50'
+                    : 'bg-[#120d0e] border-[#f55a6b]/20 hover:border-[#f55a6b]/60'
+                }`}
+              >
+                <div className="absolute inset-0 scanlines-overlay opacity-10 pointer-events-none" />
+
+                <div className="space-y-1 min-w-0 relative z-10">
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <span className="font-bold text-sm text-white truncate">
+                      <GlitchText text={item.name} scrambleOnHover={true} />
+                    </span>
+                    {getTierBadge(item.support_tier)}
                   </div>
 
-                  <div className="shrink-0">
-                    {isAdded ? (
-                      <div className="flex items-center gap-2">
-                        <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 neon-glow-emerald">
-                          <Check className="w-4 h-4" /> SLEDOVÁNO
-                        </span>
-                        <button
-                          onClick={() => handleRemoveGame(item.exe_name)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/15 cursor-pointer transition-colors"
-                          title="Odebrat z mých her"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ) : (
-                      /* Restored High-Energy Neon Button */
-                      <button
-                        onClick={() => handleAddGame(item)}
-                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 hover:text-white font-bold text-xs shadow-md neon-glow-cyan cursor-pointer transition-all duration-150 hover:scale-105 active:scale-95"
-                      >
-                        <Plus className="w-4 h-4 fill-current" />
-                        <span>PŘIDAT DO MÝCH HER</span>
-                      </button>
+                  <div className="flex items-center gap-2 text-xs text-[#8a7f81]">
+                    <span className="text-[#5accf5] font-mono">[{item.exe_name}]</span>
+                    {item.notes && (
+                      <>
+                        <span>•</span>
+                        <span className="truncate max-w-[400px]">{item.notes}</span>
+                      </>
                     )}
                   </div>
                 </div>
-              );
-            })
-          )}
+
+                <div className="shrink-0 relative z-10">
+                  {tracked ? (
+                    <GlitchButton
+                      label="ODEBRAT"
+                      variant="outline"
+                      size="sm"
+                      icon={<Check className="w-3.5 h-3.5 text-emerald-400" />}
+                      onClick={() => handleRemoveGame(item.exe_name)}
+                    />
+                  ) : (
+                    <GlitchButton
+                      label="+ PŘIDAT DO MÝCH HER"
+                      variant="primary"
+                      size="sm"
+                      icon={<Plus className="w-3.5 h-3.5 fill-current" />}
+                      onClick={() => handleAddGame(item)}
+                    />
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
-      </div>
+      )}
     </div>
   );
 };

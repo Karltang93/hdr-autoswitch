@@ -1,25 +1,93 @@
 import { useState, useEffect } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
-import { MonitorInfo, AppConfig, HdrStatePayload, ActivityLogEntry } from './types';
+import {
+  MonitorInfo,
+  AppConfig,
+  HdrStatePayload,
+  ActivityLogEntry,
+  RecentGameSession,
+} from './types';
 import { Dashboard } from './components/Dashboard';
 import { AppsManager } from './components/AppsManager';
 import { CatalogBrowser } from './components/CatalogBrowser';
 import { RunningProcesses } from './components/RunningProcesses';
 import { Settings } from './components/Settings';
 import { HdrLogo } from './components/HdrLogo';
-import {
-  Gamepad2,
-  Sliders,
-  AppWindow,
-  Sun,
-  Moon,
-  Tv,
-  Compass,
-} from 'lucide-react';
+import { GlitchNavItem } from './components/GlitchNavItem';
+import { Sun, Moon } from 'lucide-react';
 import './App.css';
 
 type Tab = 'dashboard' | 'apps' | 'catalog' | 'processes' | 'settings';
+
+const DEFAULT_RECENT_GAMES: RecentGameSession[] = [
+  {
+    exe: 'bodycam.exe',
+    name: 'Bodycam',
+    steam_id: '2406770',
+    launcher: 'Steam',
+    hdr_type: 'native',
+    hdr_tier_label: 'Nativní HDR10',
+    last_switched_at: '14:27',
+    hook_status: 'switched_off',
+    hook_message: 'WinEventHook: HDR zapnuto -> SDR obnoveno',
+  },
+  {
+    exe: 'acs.exe',
+    name: 'Assetto Corsa',
+    steam_id: '244210',
+    launcher: 'Steam',
+    hdr_type: 'mod',
+    hdr_tier_label: 'HDR Mod / Pure',
+    last_switched_at: '13:45',
+    hook_status: 'switched_off',
+    hook_message: 'WinEventHook: HDR zapnuto -> SDR obnoveno',
+  },
+  {
+    exe: 'bf2042.exe',
+    name: 'Battlefield 6',
+    steam_id: '1517290',
+    launcher: 'Steam',
+    hdr_type: 'native',
+    hdr_tier_label: 'Nativní HDR10',
+    last_switched_at: '12:10',
+    hook_status: 'switched_off',
+    hook_message: 'WinEventHook: HDR zapnuto -> SDR obnoveno',
+  },
+  {
+    exe: 'beamng.drive.x64.exe',
+    name: 'BeamNG.drive',
+    steam_id: '284160',
+    launcher: 'Steam',
+    hdr_type: 'autohdr',
+    hdr_tier_label: 'Windows Auto HDR',
+    last_switched_at: '11:05',
+    hook_status: 'switched_off',
+    hook_message: 'WinEventHook: HDR zapnuto -> SDR obnoveno',
+  },
+  {
+    exe: 'enshrouded.exe',
+    name: 'Enshrouded',
+    steam_id: '1203620',
+    launcher: 'Steam',
+    hdr_type: 'native',
+    hdr_tier_label: 'Nativní HDR10',
+    last_switched_at: 'Včera',
+    hook_status: 'switched_off',
+    hook_message: 'WinEventHook: HDR zapnuto -> SDR obnoveno',
+  },
+  {
+    exe: 'forzahorizon5.exe',
+    name: 'Forza Horizon 6',
+    steam_id: '1551360',
+    launcher: 'Steam',
+    hdr_type: 'native',
+    hdr_tier_label: 'Nativní HDR10',
+    last_switched_at: 'Včera',
+    hook_status: 'switched_off',
+    hook_message: 'WinEventHook: HDR zapnuto -> SDR obnoveno',
+  },
+];
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
@@ -43,17 +111,30 @@ export default function App() {
     switched_by_app: false,
   });
 
+  const [recentGames, setRecentGames] = useState<RecentGameSession[]>(() => {
+    try {
+      const saved = localStorage.getItem('hdr_recent_games');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.error('Error loading recent games:', e);
+    }
+    return DEFAULT_RECENT_GAMES;
+  });
+
   const [activityLogs, setActivityLogs] = useState<ActivityLogEntry[]>([
     {
       id: '1',
       timestamp: new Date().toLocaleTimeString(),
-      message: 'Služba WinEventHook byla úspěšně spuštěna na pozadí.',
+      message: 'WinEventHook služba inicializována. Zero CPU režim aktivní.',
       type: 'system',
     },
     {
       id: '2',
       timestamp: new Date().toLocaleTimeString(),
-      message: 'Detekce her a systémových oken je aktivní.',
+      message: 'Sledování popředí oken běží — bleskový přechod HDR10 připraven.',
       type: 'info',
     },
   ]);
@@ -109,15 +190,78 @@ export default function App() {
       setStatus(newStatus);
       refreshMonitors();
 
+      const currentTime = new Date().toLocaleTimeString('cs-CZ', {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+
       if (newStatus.is_hdr_active) {
         addLog(
           newStatus.current_app_name
-            ? `HDR aktivováno pro hru: ${newStatus.current_app_name}`
+            ? `WinEventHook zachytil okno: ${newStatus.current_app_name} -> HDR aktivováno`
             : 'HDR aktivováno ručně.',
           'hdr_on'
         );
+
+        // Update Recent Games telemetry
+        if (newStatus.current_exe) {
+          setRecentGames((prev) => {
+            const existingIndex = prev.findIndex(
+              (g) => g.exe.toLowerCase() === newStatus.current_exe!.toLowerCase()
+            );
+
+            const updatedSession: RecentGameSession =
+              existingIndex >= 0
+                ? {
+                    ...prev[existingIndex],
+                    name: newStatus.current_app_name || prev[existingIndex].name,
+                    last_switched_at: currentTime,
+                    hook_status: 'active',
+                    hook_message: 'WinEventHook zachytil okno -> HDR zapnuto',
+                  }
+                : {
+                    exe: newStatus.current_exe!,
+                    name: newStatus.current_app_name || newStatus.current_exe!,
+                    hdr_type: 'native',
+                    hdr_tier_label: 'Nativní HDR10',
+                    last_switched_at: currentTime,
+                    hook_status: 'active',
+                    hook_message: 'WinEventHook zachytil okno -> HDR zapnuto',
+                  };
+
+            const filtered = prev.filter(
+              (g) => g.exe.toLowerCase() !== newStatus.current_exe!.toLowerCase()
+            );
+            const newList = [updatedSession, ...filtered].slice(0, 10);
+            try {
+              localStorage.setItem('hdr_recent_games', JSON.stringify(newList));
+            } catch (e) {
+              console.error(e);
+            }
+            return newList;
+          });
+        }
       } else {
-        addLog('HDR vypnuto (návrat do SDR).', 'hdr_off');
+        addLog('WinEventHook: Návrat do SDR (okno opuštěno).', 'hdr_off');
+
+        // Mark active game as switched_off
+        setRecentGames((prev) => {
+          const newList = prev.map((g, idx) =>
+            idx === 0 && g.hook_status === 'active'
+              ? {
+                  ...g,
+                  hook_status: 'switched_off' as const,
+                  hook_message: `Hook zafungoval: Návrat do SDR (${currentTime})`,
+                }
+              : g
+          );
+          try {
+            localStorage.setItem('hdr_recent_games', JSON.stringify(newList));
+          } catch (e) {
+            console.error(e);
+          }
+          return newList;
+        });
       }
     });
 
@@ -128,105 +272,102 @@ export default function App() {
 
   return (
     <div
-      className={`min-h-screen flex flex-col transition-colors duration-200 ${
-        isDark ? 'bg-gaming-dark text-slate-100' : 'bg-gaming-light text-slate-900'
+      className={`min-h-screen flex flex-col transition-colors duration-200 font-mono ${
+        isDark ? 'bg-retro-dark text-[#e5e0e1]' : 'bg-retro-light text-slate-900'
       }`}
     >
-      {/* Top Header Bar - Clean Modern Studio Gaming Aesthetic */}
+      {/* Top Header Bar - CodePen Retro Glitch Aesthetic */}
       <header
-        className={`sticky top-0 z-30 px-6 py-3.5 border-b glass-panel transition-colors ${
+        className={`sticky top-0 z-30 px-6 py-2.5 border-b transition-colors ${
           isDark
-            ? 'bg-[#0a0d15]/85 border-white/[0.08]'
-            : 'bg-white/90 border-slate-200/80 shadow-xs'
+            ? 'bg-[#0f0b0b]/95 border-[#f55a6b]/30'
+            : 'bg-white/95 border-[#f55a6b]/30 shadow-xs'
         }`}
       >
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          {/* Brand Logo & Name */}
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+          {/* Brand Logo & Name with Solid Glitch Title Bar */}
           <div className="flex items-center gap-3">
-            <HdrLogo size={36} active={status.is_hdr_active} />
+            <div className="p-1 border border-[#f55a6b]/40 bg-[#180e10]">
+              <HdrLogo size={28} active={status.is_hdr_active} />
+            </div>
 
-            <div className="flex items-center gap-3">
-              <span className="font-extrabold text-base tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
-                HDR Auto-Switch
-              </span>
+            <div className="flex items-center gap-2.5">
+              <h1 className="glitch-title-bar px-2 py-0.5 text-xs font-bold tracking-wider inline-block">
+                HDR AUTO-SWITCH
+              </h1>
 
-              {/* Status Pill Badge with Neon Glow */}
+              {/* Status Pill Badge */}
               <div
-                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold tracking-wide transition-all ${
+                className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-[11px] font-bold tracking-wider border uppercase transition-all ${
                   status.is_hdr_active
-                    ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 neon-glow-rose'
-                    : isDark
-                    ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20'
-                    : 'bg-slate-100 text-slate-700 border border-slate-200 shadow-xs'
+                    ? 'bg-[#f55a6b] text-[#0f0b0b] border-[#f55a6b] neon-glow-coral'
+                    : 'bg-[#180e10] text-[#5accf5] border-[#5accf5]/50'
                 }`}
               >
                 <span
-                  className={`w-2 h-2 rounded-full ${
+                  className={`w-1.5 h-1.5 ${
                     status.is_hdr_active
-                      ? 'bg-rose-400 animate-status-pulse'
-                      : 'bg-cyan-400'
+                      ? 'bg-[#0f0b0b] animate-status-pulse'
+                      : 'bg-[#5accf5]'
                   }`}
                 />
-                <span>{status.is_hdr_active ? 'HDR Aktivní' : 'SDR Standby'}</span>
+                <span>{status.is_hdr_active ? 'HDR AKTIVNÍ' : 'SDR STANDBY'}</span>
               </div>
             </div>
           </div>
 
-          {/* Segmented Navigation Bar */}
-          <nav
-            className={`flex items-center gap-1 p-1 rounded-xl border ${
-              isDark
-                ? 'bg-white/[0.03] border-white/[0.06]'
-                : 'bg-slate-100 border-slate-200'
-            }`}
-          >
-            {[
-              { id: 'dashboard', label: 'Přehled', icon: Tv },
-              {
-                id: 'apps',
-                label: `Moje hry (${config.apps.length})`,
-                icon: Gamepad2,
-              },
-              { id: 'catalog', label: 'Databáze her', icon: Compass },
-              { id: 'processes', label: 'Běžící okna', icon: AppWindow },
-              { id: 'settings', label: 'Nastavení', icon: Sliders },
-            ].map((tab) => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id as Tab)}
-                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all duration-150 ${
-                    isActive
-                      ? isDark
-                        ? 'bg-white/10 text-white shadow-sm border border-white/15'
-                        : 'bg-white text-slate-900 shadow-xs border border-slate-300'
-                      : isDark
-                      ? 'text-slate-400 hover:text-white hover:bg-white/[0.04] border border-transparent'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60 border border-transparent'
-                  }`}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
+          {/* Glitch Navigation Bar (GSAP SVG Displacement from CodePen) */}
+          <nav className="flex items-center gap-2">
+            <GlitchNavItem
+              label="PŘEHLED"
+              isActive={activeTab === 'dashboard'}
+              onClick={() => setActiveTab('dashboard')}
+              width={125}
+              height={36}
+            />
+            <GlitchNavItem
+              label="MOJE HRY"
+              count={config.apps.length}
+              isActive={activeTab === 'apps'}
+              onClick={() => setActiveTab('apps')}
+              width={145}
+              height={36}
+            />
+            <GlitchNavItem
+              label="DATABÁZE HER"
+              isActive={activeTab === 'catalog'}
+              onClick={() => setActiveTab('catalog')}
+              width={140}
+              height={36}
+            />
+            <GlitchNavItem
+              label="BĚŽÍCÍ OKNA"
+              isActive={activeTab === 'processes'}
+              onClick={() => setActiveTab('processes')}
+              width={135}
+              height={36}
+            />
+            <GlitchNavItem
+              label="NASTAVENÍ"
+              isActive={activeTab === 'settings'}
+              onClick={() => setActiveTab('settings')}
+              width={125}
+              height={36}
+            />
           </nav>
 
-          {/* Right Controls: Theme Switch */}
+          {/* Right Controls: Theme Switch with Retro Box */}
           <div className="flex items-center gap-2">
             <button
               onClick={() => setIsDark(!isDark)}
-              className={`p-2 rounded-xl border transition-all cursor-pointer ${
+              className={`p-1.5 border transition-all cursor-pointer ${
                 isDark
-                  ? 'border-white/[0.08] bg-white/[0.03] text-amber-400 hover:bg-white/[0.08] hover:border-amber-400/40'
-                  : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100 shadow-xs'
+                  ? 'border-[#f55a6b]/30 bg-[#180e10] text-[#5accf5] hover:border-[#f55a6b] hover:shadow-[0_0_10px_rgba(245,90,107,0.4)]'
+                  : 'border-[#f55a6b]/40 bg-white text-[#f55a6b] hover:bg-slate-50'
               }`}
               title={isDark ? 'Přepnout na světlý režim' : 'Přepnout na tmavý režim'}
             >
-              {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              {isDark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
             </button>
           </div>
         </div>
@@ -240,10 +381,16 @@ export default function App() {
             monitors={monitors}
             config={config}
             activityLogs={activityLogs}
+            recentGames={recentGames}
             onRefreshMonitors={refreshMonitors}
             onManualToggle={(enable) => {
               setStatus((prev) => ({ ...prev, is_hdr_active: enable }));
-              addLog(enable ? 'HDR zapnuto ručně přes ovládací panel.' : 'HDR vypnuto ručně.', enable ? 'hdr_on' : 'hdr_off');
+              addLog(
+                enable
+                  ? 'HDR zapnuto ručně přes ovládací panel.'
+                  : 'HDR vypnuto ručně.',
+                enable ? 'hdr_on' : 'hdr_off'
+              );
             }}
             onNavigateToApps={() => setActiveTab('apps')}
             onUpdateConfig={setConfig}
@@ -254,22 +401,16 @@ export default function App() {
         {activeTab === 'apps' && (
           <AppsManager
             config={config}
-            onUpdateConfig={(newConf) => {
-              setConfig(newConf);
-              addLog('Konfigurace sledovaných her byla aktualizována.', 'info');
-            }}
-            onNavigateToCatalog={() => setActiveTab('catalog')}
+            onUpdateConfig={setConfig}
             isDark={isDark}
+            onNavigateToCatalog={() => setActiveTab('catalog')}
           />
         )}
 
         {activeTab === 'catalog' && (
           <CatalogBrowser
             config={config}
-            onUpdateConfig={(newConf) => {
-              setConfig(newConf);
-              addLog('Změna v seznamu sledovaných her z katalogu.', 'info');
-            }}
+            onUpdateConfig={setConfig}
             isDark={isDark}
           />
         )}
@@ -277,10 +418,7 @@ export default function App() {
         {activeTab === 'processes' && (
           <RunningProcesses
             config={config}
-            onUpdateConfig={(newConf) => {
-              setConfig(newConf);
-              addLog('Aplikace přidána do sledování z běžících procesů.', 'game');
-            }}
+            onUpdateConfig={setConfig}
             isDark={isDark}
           />
         )}
@@ -294,43 +432,6 @@ export default function App() {
           />
         )}
       </main>
-
-      {/* Status Bar Footer */}
-      <footer
-        className={`px-6 py-2.5 border-t text-xs font-mono transition-colors glass-panel ${
-          isDark
-            ? 'bg-[#0a0d15]/85 border-white/[0.06] text-slate-400'
-            : 'bg-white/80 border-slate-200 text-slate-600'
-        }`}
-      >
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <span className="relative flex h-2 w-2">
-              <span
-                className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                  status.is_hdr_active ? 'bg-rose-400' : 'bg-cyan-400'
-                }`}
-              />
-              <span
-                className={`relative inline-flex rounded-full h-2 w-2 ${
-                  status.is_hdr_active ? 'bg-rose-500' : 'bg-cyan-500'
-                }`}
-              />
-            </span>
-            <span className="font-medium text-xs">
-              {status.is_hdr_active
-                ? `HDR Aktivní • ${status.current_app_name || 'Ruční přepnutí'}`
-                : 'SDR Standby • WinEventHook sleduje aktivní okna'}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-4 text-xs text-slate-500">
-            <span>{config.apps.filter((a) => a.enabled).length} sledovaných her</span>
-            <span>•</span>
-            <span>Zero CPU EventHook</span>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }
