@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { MonitorInfo, AppConfig, HdrStatePayload } from './types';
 import { Dashboard } from './components/Dashboard';
 import { AppsManager } from './components/AppsManager';
+import { CatalogBrowser } from './components/CatalogBrowser';
 import { RunningProcesses } from './components/RunningProcesses';
 import { Settings } from './components/Settings';
 import {
@@ -14,10 +15,11 @@ import {
   Sun,
   Moon,
   Tv,
+  Compass,
 } from 'lucide-react';
 import './App.css';
 
-type Tab = 'dashboard' | 'apps' | 'processes' | 'settings';
+type Tab = 'dashboard' | 'apps' | 'catalog' | 'processes' | 'settings';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
@@ -149,7 +151,12 @@ export default function App() {
           <nav className="flex items-center gap-1">
             {[
               { id: 'dashboard', label: 'Přehled', icon: Tv },
-              { id: 'apps', label: 'Hry a Aplikace', icon: Gamepad2 },
+              {
+                id: 'apps',
+                label: `Moje hry (${config.apps.length})`,
+                icon: Gamepad2,
+              },
+              { id: 'catalog', label: 'Databáze her', icon: Compass },
               { id: 'processes', label: 'Běžící okna', icon: AppWindow },
               { id: 'settings', label: 'Nastavení', icon: Sliders },
             ].map((tab) => {
@@ -213,6 +220,15 @@ export default function App() {
           <AppsManager
             config={config}
             onUpdateConfig={setConfig}
+            onNavigateToCatalog={() => setActiveTab('catalog')}
+            isDark={isDark}
+          />
+        )}
+
+        {activeTab === 'catalog' && (
+          <CatalogBrowser
+            config={config}
+            onUpdateConfig={setConfig}
             isDark={isDark}
           />
         )}
@@ -260,9 +276,11 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-4 text-[11px]">
+            <span>Sledováno {config.apps.filter((a) => a.enabled).length} her</span>
+            <span>•</span>
             <span>Minimalizováno v liště (System Tray)</span>
             <span>•</span>
-            <span>0.0% CPU (Event-driven)</span>
+            <span>0.0% CPU</span>
           </div>
         </div>
       </footer>

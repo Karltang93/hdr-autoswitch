@@ -3,9 +3,11 @@ mod database;
 mod display;
 mod monitor_hook;
 mod process;
+mod scanner;
 mod tray;
 
 use config::{AppConfig, ConfigManager, HdrApp};
+use database::CatalogEntry;
 use display::MonitorInfo;
 use monitor_hook::{HdrStatePayload, MonitorService};
 use process::RunningProcessInfo;
@@ -53,6 +55,33 @@ fn save_config(state: State<'_, AppState>, config: AppConfig) -> Result<(), Stri
 }
 
 #[tauri::command]
+fn get_catalog() -> Vec<CatalogEntry> {
+    database::get_full_catalog()
+}
+
+#[tauri::command]
+fn scan_installed_games() -> Vec<HdrApp> {
+    scanner::scan_installed_games()
+}
+
+#[tauri::command]
+fn import_detected_games(state: State<'_, AppState>, detected: Vec<HdrApp>) -> Result<usize, String> {
+    let mut conf = state.config_mgr.get_config();
+    let mut count = 0;
+
+    for item in detected {
+        let exe = item.exe_name.to_lowercase();
+        if !conf.apps.iter().any(|a| a.exe_name.to_lowercase() == exe) {
+            conf.apps.push(item);
+            count += 1;
+        }
+    }
+
+    state.config_mgr.update_config(conf)?;
+    Ok(count)
+}
+
+#[tauri::command]
 fn get_running_processes() -> Vec<RunningProcessInfo> {
     process::get_running_processes()
 }
@@ -90,24 +119,12 @@ fn toggle_app(state: State<'_, AppState>, exe_name: String, enabled: bool) -> Re
 }
 
 #[tauri::command]
-async fn sync_database(state: State<'_, AppState>) -> Result<usize, String> {
-    let online_apps = database::fetch_online_database().await.unwrap_or_else(|_| {
-        database::get_default_catalog()
+async fn sync_database(_state: State<'_, AppState>) -> Result<usize, String> {
+    let online_entries = database::fetch_online_database().await.unwrap_or_else(|_| {
+        database::get_full_catalog()
     });
 
-    let mut conf = state.config_mgr.get_config();
-    let mut added_count = 0;
-
-    for item in online_apps {
-        let exe = item.exe_name.to_lowercase();
-        if !conf.apps.iter().any(|a| a.exe_name.to_lowercase() == exe) {
-            conf.apps.push(item);
-            added_count += 1;
-        }
-    }
-
-    state.config_mgr.update_config(conf)?;
-    Ok(added_count)
+    Ok(online_entries.len())
 }
 
 #[tauri::command]
@@ -133,11 +150,22 @@ pub fn run() {
         .setup(|app| {
             let config_mgr = Arc::new(ConfigManager::new());
 
-            // First time initialization: populate with default catalog if apps list is empty
+            // Migration / clean initialization:
+            // If apps list has the entire catalog (over 80 entries) or is empty,
+            // populate only with the user's actually installed games detected on disk + media players!
             {
                 let mut conf = config_mgr.get_config();
-                if conf.apps.is_empty() {
-                    conf.apps = database::get_default_catalog();
+                if conf.apps.is_empty() || conf.apps.len() > 80 {
+                    let detected = scanner::scan_installed_games();
+                    if !detected.is_empty() {
+                        conf.apps = detected;
+                    } else {
+                        // Keep common media players as sensible defaults
+                        conf.apps = database::get_default_catalog()
+                            .into_iter()
+                            .filter(|a| a.hdr_type == config::HdrType::Media)
+                            .collect();
+                    }
                     let _ = config_mgr.update_config(conf);
                 }
             }
@@ -170,6 +198,9 @@ pub fn run() {
             toggle_all_hdr,
             get_config,
             save_config,
+            get_catalog,
+            scan_installed_games,
+            import_detected_games,
             get_running_processes,
             add_custom_app,
             remove_app,

@@ -1,11 +1,28 @@
 export type HdrType = 'native' | 'autohdr' | 'media' | 'custom';
 
+export type SupportTier =
+  | 'native'
+  | 'limited'
+  | 'always_on'
+  | 'manual_fix'
+  | 'autohdr'
+  | 'media'
+  | 'custom';
+
 export interface HdrApp {
   name: string;
   exe_name: string;
   enabled: boolean;
   hdr_type: HdrType;
   path?: string;
+}
+
+export interface CatalogEntry {
+  name: string;
+  exe_name: string;
+  hdr_type: HdrType;
+  support_tier: SupportTier;
+  notes?: string;
 }
 
 export interface MonitorInfo {
