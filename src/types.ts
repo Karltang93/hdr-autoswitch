@@ -16,6 +16,15 @@ export interface HdrApp {
   hdr_type: HdrType;
   path?: string;
   alternate_exes?: string[];
+  steam_id?: string;
+  launcher?: string;
+}
+
+export interface ActivityLogEntry {
+  id: string;
+  timestamp: string;
+  message: string;
+  type: 'info' | 'hdr_on' | 'hdr_off' | 'game' | 'system';
 }
 
 export interface CatalogEntry {

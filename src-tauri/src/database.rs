@@ -93,6 +93,8 @@ pub fn get_default_catalog() -> Vec<HdrApp> {
             hdr_type: entry.hdr_type,
             path: None,
             alternate_exes: Vec::new(),
+            steam_id: None,
+            launcher: None,
         })
         .collect()
 }

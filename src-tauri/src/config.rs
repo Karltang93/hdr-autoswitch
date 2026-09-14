@@ -22,6 +22,10 @@ pub struct HdrApp {
     pub path: Option<String>,
     #[serde(default)]
     pub alternate_exes: Vec<String>,
+    #[serde(default)]
+    pub steam_id: Option<String>,
+    #[serde(default)]
+    pub launcher: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -96,7 +100,40 @@ impl ConfigManager {
 
         if config_path.exists() {
             if let Ok(content) = fs::read_to_string(&config_path) {
-                if let Ok(loaded) = serde_json::from_str::<AppConfig>(&content) {
+                if let Ok(mut loaded) = serde_json::from_str::<AppConfig>(&content) {
+                    for app in &mut loaded.apps {
+                        if app.steam_id.is_none() {
+                            let lower = app.name.to_lowercase();
+                            let sid = match lower.as_str() {
+                                s if s.contains("bodycam") => Some("2406770"),
+                                s if s.contains("assetto corsa") => Some("244210"),
+                                s if s.contains("beamng") => Some("284160"),
+                                s if s.contains("enshrouded") => Some("1203620"),
+                                s if s.contains("forza horizon") => Some("1551360"),
+                                s if s.contains("vostok") => Some("1963620"),
+                                s if s.contains("starfield") => Some("1716740"),
+                                s if s.contains("teardown") => Some("1167630"),
+                                s if s.contains("the finals") => Some("2073850"),
+                                s if s.contains("indiana jones") => Some("2677660"),
+                                s if s.contains("battlefield") => Some("1517290"),
+                                s if s.contains("cyberpunk") => Some("1091500"),
+                                s if s.contains("witcher") => Some("292030"),
+                                s if s.contains("elden ring") => Some("1245620"),
+                                s if s.contains("baldur") => Some("1086940"),
+                                s if s.contains("helldivers") => Some("553850"),
+                                s if s.contains("wukong") => Some("2358720"),
+                                s if s.contains("god of war") => Some("1593500"),
+                                s if s.contains("red dead") => Some("1174180"),
+                                _ => None,
+                            };
+                            if let Some(id) = sid {
+                                app.steam_id = Some(id.to_string());
+                                if app.launcher.is_none() {
+                                    app.launcher = Some("Steam".to_string());
+                                }
+                            }
+                        }
+                    }
                     config = loaded;
                 }
             }

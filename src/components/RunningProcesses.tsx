@@ -64,52 +64,61 @@ export const RunningProcesses: React.FC<RunningProcessesProps> = ({
   );
 
   return (
-    <div className="space-y-4">
-      {/* Top Search & Refresh Bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-        <div className="relative flex-1">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Hledat mezi běžícími okny a aplikacemi..."
-            className={`w-full pl-9 pr-4 py-2 text-xs md:text-sm rounded-xl border transition-all ${
-              isDark
-                ? 'bg-[#0c0f18]/80 border-white/[0.08] focus:border-sky-500/50 text-white placeholder-slate-500'
-                : 'bg-white border-slate-200 focus:border-sky-500 text-slate-900 placeholder-slate-400 shadow-sm'
-            }`}
-          />
+    <div className="space-y-5">
+      {/* Top Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-black tracking-tight text-white flex items-center gap-2">
+            <span>Běžící okna a procesy</span>
+            <span className="text-xs font-mono font-normal px-2.5 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+              {processes.length} aktivních
+            </span>
+          </h2>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Aktuálně spuštěná okna na ploše. Kliknutím na tlačítko zařadíte libovolnou hru ihned do sledování.
+          </p>
         </div>
 
         <button
           onClick={fetchProcesses}
           disabled={loading}
-          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl border text-xs font-medium cursor-pointer transition-all ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-xs font-bold cursor-pointer transition-all ${
             isDark
-              ? 'border-white/[0.08] hover:bg-white/[0.04] text-slate-300'
-              : 'border-slate-200 hover:bg-slate-100 text-slate-700 shadow-sm'
+              ? 'border-white/10 hover:border-cyan-500/40 hover:bg-white/[0.04] text-slate-200 shadow-sm'
+              : 'border-slate-200 hover:bg-slate-100 text-slate-700 shadow-xs'
           } disabled:opacity-50`}
         >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-sky-400' : 'text-slate-400'}`} />
-          <span>Obnovit okna</span>
+          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-cyan-400' : 'text-cyan-400'}`} />
+          <span>{loading ? 'Skenuji...' : 'Obnovit okna'}</span>
         </button>
       </div>
 
-      <p className="text-xs text-slate-400">
-        Kliknutím na tlačítko <strong>Přidat do HDR</strong> začne aplikace toto okno automaticky sledovat.
-      </p>
+      {/* Search Field */}
+      <div className="relative">
+        <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Hledat mezi běžícími aplikacemi v reálném čase..."
+          className={`w-full pl-9 pr-4 py-2.5 text-xs md:text-sm rounded-xl border transition-all ${
+            isDark
+              ? 'bg-[#0e1322]/80 border-white/[0.08] focus:border-cyan-500/50 text-white placeholder-slate-500'
+              : 'bg-white border-slate-200 focus:border-cyan-500 text-slate-900 placeholder-slate-400 shadow-xs'
+          }`}
+        />
+      </div>
 
       {/* Running Processes List */}
       <div
         className={`rounded-2xl border overflow-hidden glass-panel ${
-          isDark ? 'bg-[#0c0f18]/80 border-white/[0.07]' : 'bg-white/80 border-slate-200 shadow-sm'
+          isDark ? 'bg-[#0f1422]/80 border-white/[0.08]' : 'bg-white/90 border-slate-200 shadow-md'
         }`}
       >
-        <div className="divide-y divide-white/[0.04] max-h-[500px] overflow-y-auto">
+        <div className="divide-y divide-white/[0.05] max-h-[520px] overflow-y-auto">
           {filtered.length === 0 ? (
-            <div className="p-10 text-center text-slate-400 text-xs">
-              {loading ? 'Skenuji běžící okna...' : 'Nenalezeny žádné procesy odpovídající hledání.'}
+            <div className="p-16 text-center text-slate-400 text-xs font-mono">
+              {loading ? 'SKENUJI BĚŽÍCÍ PROCESY...' : 'NENALEZENY ŽÁDNÉ PROCESY.'}
             </div>
           ) : (
             filtered.map((proc) => {
@@ -125,13 +134,13 @@ export const RunningProcesses: React.FC<RunningProcessesProps> = ({
                 <div
                   key={`${proc.pid}-${proc.exe_name}`}
                   className={`p-3.5 flex items-center justify-between gap-4 transition-colors ${
-                    isDark ? 'hover:bg-white/[0.02]' : 'hover:bg-slate-50/70'
+                    isDark ? 'hover:bg-white/[0.03]' : 'hover:bg-slate-50/80'
                   }`}
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <div
-                      className={`p-2 rounded-xl border shrink-0 ${
-                        isDark ? 'bg-white/[0.03] border-white/[0.06] text-sky-400' : 'bg-slate-100 border-slate-200 text-sky-600'
+                      className={`p-2.5 rounded-xl border shrink-0 ${
+                        isDark ? 'bg-white/[0.04] border-white/10 text-cyan-400' : 'bg-slate-100 border-slate-200 text-cyan-600'
                       }`}
                     >
                       <AppWindow className="w-4 h-4" />
@@ -139,7 +148,7 @@ export const RunningProcesses: React.FC<RunningProcessesProps> = ({
 
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="text-sm font-semibold truncate text-slate-100">{proc.name}</h4>
+                        <h4 className="text-sm font-extrabold truncate text-slate-100">{proc.name}</h4>
                         <span className="text-xs text-slate-400 font-mono">
                           {proc.exe_name}
                         </span>
@@ -157,22 +166,22 @@ export const RunningProcesses: React.FC<RunningProcessesProps> = ({
 
                   <div className="shrink-0">
                     {isBlacklisted ? (
-                      <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg bg-slate-800 text-slate-400 border border-white/[0.05]">
-                        <ShieldBan className="w-3 h-3 text-slate-500" />
+                      <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl bg-slate-800 text-slate-400 border border-white/5">
+                        <ShieldBan className="w-3.5 h-3.5 text-slate-500" />
                         Vyloučeno
                       </span>
                     ) : isAlreadyAdded ? (
-                      <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 font-medium">
-                        <Check className="w-3.5 h-3.5" /> Sledováno
+                      <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 neon-glow-emerald">
+                        <Check className="w-4 h-4" /> SLEDOVÁNO
                       </span>
                     ) : (
                       <button
                         onClick={() => handleAddProcess(proc)}
                         disabled={addingExe === proc.exe_name}
-                        className="flex items-center gap-1 px-3 py-1 rounded-lg border border-white/[0.08] hover:border-sky-400/40 hover:bg-sky-500/10 text-slate-300 hover:text-sky-200 text-xs font-medium cursor-pointer transition-all duration-150"
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 hover:text-white font-bold text-xs shadow-md neon-glow-cyan cursor-pointer transition-all duration-150 hover:scale-105 active:scale-95"
                       >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>Přidat do HDR</span>
+                        <Plus className="w-4 h-4 fill-current" />
+                        <span>PŘIDAT DO HDR</span>
                       </button>
                     )}
                   </div>

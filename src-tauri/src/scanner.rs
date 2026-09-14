@@ -91,6 +91,11 @@ fn scan_steam_manifests(catalog: &[database::CatalogEntry], map: &mut HashMap<St
             let file_name = entry.file_name().to_string_lossy().to_string();
 
             if file_name.starts_with("appmanifest_") && file_name.ends_with(".acf") {
+                let steam_appid = file_name
+                    .trim_start_matches("appmanifest_")
+                    .trim_end_matches(".acf")
+                    .to_string();
+
                 if let Ok(content) = fs::read_to_string(&path) {
                     let mut game_name = String::new();
                     let mut install_dir_name = String::new();
@@ -113,7 +118,7 @@ fn scan_steam_manifests(catalog: &[database::CatalogEntry], map: &mut HashMap<St
                     if !install_dir_name.is_empty() {
                         let full_game_dir = steamapps.join("common").join(&install_dir_name);
                         if full_game_dir.exists() {
-                            match_and_insert_game(catalog, &game_name, &full_game_dir, map);
+                            match_and_insert_game(catalog, &game_name, &full_game_dir, map, Some("Steam"), Some(&steam_appid));
                         }
                     }
                 }
@@ -166,7 +171,7 @@ fn scan_epic_manifests(catalog: &[database::CatalogEntry], map: &mut HashMap<Str
                         }
 
                         if let Some(cat) = found_cat {
-                            insert_or_merge_game(cat, display_name, &game_dir, launch_exe, map);
+                            insert_or_merge_game(cat, display_name, &game_dir, launch_exe, map, Some("Epic Games"), None);
                         }
                     }
                 }
@@ -235,7 +240,7 @@ fn scan_registry_uninstall_hive(
                     if !clean_dir.is_empty() {
                         let p = PathBuf::from(clean_dir);
                         if p.exists() && p.is_dir() {
-                            match_and_insert_game(catalog, &display_name, &p, map);
+                            match_and_insert_game(catalog, &display_name, &p, map, Some("Windows"), None);
                         }
                     }
                 }
@@ -265,7 +270,7 @@ fn scan_xbox_games(catalog: &[database::CatalogEntry], map: &mut HashMap<String,
             let p = entry.path();
             if p.is_dir() {
                 let name = entry.file_name().to_string_lossy().to_string();
-                match_and_insert_game(catalog, &name, &p, map);
+                match_and_insert_game(catalog, &name, &p, map, Some("Xbox"), None);
             }
         }
     }
@@ -294,6 +299,8 @@ fn scan_media_players(map: &mut HashMap<String, HdrApp>) {
                         hdr_type: HdrType::Media,
                         path: Some(p.to_string()),
                         alternate_exes: Vec::new(),
+                        steam_id: None,
+                        launcher: Some("Média".to_string()),
                     },
                 );
                 break;
@@ -310,6 +317,8 @@ fn match_and_insert_game(
     hint_name: &str,
     game_dir: &Path,
     map: &mut HashMap<String, HdrApp>,
+    launcher: Option<&str>,
+    steam_id: Option<&str>,
 ) {
     let clean_hint = clean_string(hint_name);
 
@@ -380,6 +389,12 @@ fn match_and_insert_game(
         let key = cat.name.clone();
 
         if let Some(existing) = map.get_mut(&key) {
+            if existing.steam_id.is_none() && steam_id.is_some() {
+                existing.steam_id = steam_id.map(|s| s.to_string());
+            }
+            if existing.launcher.is_none() && launcher.is_some() {
+                existing.launcher = launcher.map(|s| s.to_string());
+            }
             for alt in alternate_exes {
                 if !existing.alternate_exes.contains(&alt) && existing.exe_name.to_lowercase() != alt {
                     existing.alternate_exes.push(alt);
@@ -395,6 +410,8 @@ fn match_and_insert_game(
                     hdr_type: cat.hdr_type.clone(),
                     path: Some(main_exe_path),
                     alternate_exes,
+                    steam_id: steam_id.map(|s| s.to_string()),
+                    launcher: launcher.map(|s| s.to_string()),
                 },
             );
         }
@@ -407,6 +424,8 @@ fn insert_or_merge_game(
     game_dir: &Path,
     launch_exe: &str,
     map: &mut HashMap<String, HdrApp>,
+    launcher: Option<&str>,
+    steam_id: Option<&str>,
 ) {
     let key = cat.name.clone();
     let main_exe = if !launch_exe.is_empty() {
@@ -433,6 +452,12 @@ fn insert_or_merge_game(
     };
 
     if let Some(existing) = map.get_mut(&key) {
+        if existing.steam_id.is_none() && steam_id.is_some() {
+            existing.steam_id = steam_id.map(|s| s.to_string());
+        }
+        if existing.launcher.is_none() && launcher.is_some() {
+            existing.launcher = launcher.map(|s| s.to_string());
+        }
         for alt in alternates {
             if !existing.alternate_exes.contains(&alt) && existing.exe_name != alt {
                 existing.alternate_exes.push(alt);
@@ -448,6 +473,8 @@ fn insert_or_merge_game(
                 hdr_type: cat.hdr_type.clone(),
                 path: Some(path_str),
                 alternate_exes: alternates,
+                steam_id: steam_id.map(|s| s.to_string()),
+                launcher: launcher.map(|s| s.to_string()),
             },
         );
     }
