@@ -15,6 +15,7 @@ export interface HdrApp {
   enabled: boolean;
   hdr_type: HdrType;
   path?: string;
+  alternate_exes?: string[];
 }
 
 export interface CatalogEntry {

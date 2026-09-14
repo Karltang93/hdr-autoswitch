@@ -20,6 +20,8 @@ pub struct HdrApp {
     pub hdr_type: HdrType,
     #[serde(default)]
     pub path: Option<String>,
+    #[serde(default)]
+    pub alternate_exes: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -134,10 +136,14 @@ impl ConfigManager {
             return false;
         }
 
-        // Check if in active apps
-        conf.apps
-            .iter()
-            .any(|a| a.enabled && a.exe_name.to_lowercase() == exe_lower)
+        // Check if in active apps (primary exe or alternate exes)
+        conf.apps.iter().any(|a| {
+            a.enabled
+                && (a.exe_name.to_lowercase() == exe_lower
+                    || a.alternate_exes
+                        .iter()
+                        .any(|alt| alt.to_lowercase() == exe_lower))
+        })
     }
 
     pub fn find_app(&self, exe: &str) -> Option<HdrApp> {
@@ -145,7 +151,12 @@ impl ConfigManager {
         let conf = self.config.lock().unwrap();
         conf.apps
             .iter()
-            .find(|a| a.exe_name.to_lowercase() == exe_lower)
+            .find(|a| {
+                a.exe_name.to_lowercase() == exe_lower
+                    || a.alternate_exes
+                        .iter()
+                        .any(|alt| alt.to_lowercase() == exe_lower)
+            })
             .cloned()
     }
 }

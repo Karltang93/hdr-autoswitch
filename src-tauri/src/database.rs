@@ -12,7 +12,11 @@ pub struct CatalogEntry {
 
 pub fn get_full_catalog() -> Vec<CatalogEntry> {
     let raw = vec![
-        // Native support (Green check)
+        ("Forza Horizon 6", "forzahorizon6.exe", HdrType::Native, "native", "Nativní podpora HDR"),
+        ("Battlefield 6", "bf6.exe", HdrType::Native, "native", "Nativní podpora HDR"),
+        ("The Finals", "discovery.exe", HdrType::Native, "native", "Nativní Unreal Engine 5 HDR"),
+        ("Enshrouded", "enshrouded.exe", HdrType::Native, "native", "Nativní HDR podpora"),
+        ("Assetto Corsa", "acs.exe", HdrType::Native, "manual_fix", "HDR podpora přes Custom Shaders Patch"),
         ("Cyberpunk 2077", "cyberpunk2077.exe", HdrType::Native, "native", "Plná nativní HDR podpora"),
         ("Elden Ring", "eldenring.exe", HdrType::Native, "native", "Nativní podpora HDR10"),
         ("Alan Wake 2", "alanwake2.exe", HdrType::Native, "native", "Špičková nativní HDR kalibrace"),
@@ -137,7 +141,10 @@ pub fn get_full_catalog() -> Vec<CatalogEntry> {
         ("Wolfenstein II: The New Colossus", "newcolossus_x64vk.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR ověřeno"),
         ("Hellblade: Senua's Sacrifice", "hellblade-win64-shipping.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR ověřeno"),
         ("Ready Or Not", "readyornot-win64-shipping.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR"),
-        ("Bodycam", "bodycam-win64-shipping.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR"),
+        ("Bodycam", "bodycam.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR"),
+        ("BeamNG.drive", "beamng.drive.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR ověřeno"),
+        ("Teardown", "teardown.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR ověřeno"),
+        ("Road to Vostok", "rtv.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR"),
         ("Deep Rock Galactic", "fsd-win64-shipping.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR"),
         ("Rust", "rustclient.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR"),
         ("Once Human", "oncehuman.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR"),
@@ -174,6 +181,7 @@ pub fn get_default_catalog() -> Vec<HdrApp> {
             enabled: true,
             hdr_type: entry.hdr_type,
             path: None,
+            alternate_exes: Vec::new(),
         })
         .collect()
 }
