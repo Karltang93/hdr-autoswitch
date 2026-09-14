@@ -15,7 +15,8 @@ import { RunningProcesses } from './components/RunningProcesses';
 import { Settings } from './components/Settings';
 import { HdrLogo } from './components/HdrLogo';
 import { GlitchNavItem } from './components/GlitchNavItem';
-import { Sun, Moon } from 'lucide-react';
+import { Sun, Moon, Globe } from 'lucide-react';
+import { I18nContext, Language, dictionaries, detectDefaultLanguage } from './i18n';
 import './App.css';
 
 type Tab = 'dashboard' | 'apps' | 'catalog' | 'processes' | 'settings';
@@ -92,6 +93,14 @@ const DEFAULT_RECENT_GAMES: RecentGameSession[] = [
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [isDark, setIsDark] = useState(true);
+  const [lang, setLang] = useState<Language>(detectDefaultLanguage);
+
+  const handleSetLang = (newLang: Language) => {
+    setLang(newLang);
+    localStorage.setItem('hdr_lang', newLang);
+  };
+
+  const t = dictionaries[lang];
 
   const [monitors, setMonitors] = useState<MonitorInfo[]>([]);
   const [config, setConfig] = useState<AppConfig>({
@@ -271,107 +280,122 @@ export default function App() {
   }, []);
 
   return (
-    <div
-      className={`min-h-screen flex flex-col transition-colors duration-200 font-mono ${
-        isDark ? 'bg-retro-dark text-[#e5e0e1]' : 'bg-retro-light text-slate-900'
-      }`}
-    >
-      {/* Top Header Bar - CodePen Retro Glitch Aesthetic */}
-      <header
-        className={`sticky top-0 z-30 px-6 py-2.5 border-b transition-colors ${
-          isDark
-            ? 'bg-[#0f0b0b]/95 border-[#f55a6b]/30'
-            : 'bg-white/95 border-[#f55a6b]/30 shadow-xs'
+    <I18nContext.Provider value={{ lang, setLang: handleSetLang, t }}>
+      <div
+        className={`min-h-screen flex flex-col transition-colors duration-200 font-mono ${
+          isDark ? 'bg-retro-dark text-[#e5e0e1]' : 'bg-retro-light text-slate-900'
         }`}
       >
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-          {/* Brand Logo & Name with Solid Glitch Title Bar */}
-          <div className="flex items-center gap-3">
-            <div className="p-1 border border-[#f55a6b]/40 bg-[#180e10]">
-              <HdrLogo size={28} active={status.is_hdr_active} />
-            </div>
+        {/* Top Header Bar - CodePen Retro Glitch Aesthetic */}
+        <header
+          className={`sticky top-0 z-30 px-6 py-2.5 border-b transition-colors ${
+            isDark
+              ? 'bg-[#0f0b0b]/95 border-[#f55a6b]/30'
+              : 'bg-white/95 border-[#f55a6b]/30 shadow-xs'
+          }`}
+        >
+          <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+            {/* Brand Logo & Name with Solid Glitch Title Bar */}
+            <div className="flex items-center gap-3">
+              <div className="p-1 border border-[#f55a6b]/40 bg-[#180e10]">
+                <HdrLogo size={28} active={status.is_hdr_active} />
+              </div>
 
-            <div className="flex items-center gap-2.5">
-              <h1 className="glitch-title-bar px-2 py-0.5 text-xs font-bold tracking-wider inline-block">
-                HDR AUTO-SWITCH
-              </h1>
+              <div className="flex items-center gap-2.5">
+                <h1 className="glitch-title-bar px-2 py-0.5 text-xs font-bold tracking-wider inline-block">
+                  {t.appTitle}
+                </h1>
 
-              {/* Status Pill Badge */}
-              <div
-                className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-[11px] font-bold tracking-wider border uppercase transition-all ${
-                  status.is_hdr_active
-                    ? 'bg-[#f55a6b] text-[#0f0b0b] border-[#f55a6b] neon-glow-coral'
-                    : 'bg-[#180e10] text-[#5accf5] border-[#5accf5]/50'
-                }`}
-              >
-                <span
-                  className={`w-1.5 h-1.5 ${
+                {/* Status Pill Badge */}
+                <div
+                  className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-[11px] font-bold tracking-wider border uppercase transition-all ${
                     status.is_hdr_active
-                      ? 'bg-[#0f0b0b] animate-status-pulse'
-                      : 'bg-[#5accf5]'
+                      ? 'bg-[#f55a6b] text-[#0f0b0b] border-[#f55a6b] neon-glow-coral'
+                      : 'bg-[#180e10] text-[#5accf5] border-[#5accf5]/50'
                   }`}
-                />
-                <span>{status.is_hdr_active ? 'HDR AKTIVNÍ' : 'SDR STANDBY'}</span>
+                >
+                  <span
+                    className={`w-1.5 h-1.5 ${
+                      status.is_hdr_active
+                        ? 'bg-[#0f0b0b] animate-status-pulse'
+                        : 'bg-[#5accf5]'
+                    }`}
+                  />
+                  <span>{status.is_hdr_active ? t.hdrActive : t.sdrStandby}</span>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Glitch Navigation Bar (GSAP SVG Displacement from CodePen) */}
-          <nav className="flex items-center gap-2">
-            <GlitchNavItem
-              label="PŘEHLED"
-              isActive={activeTab === 'dashboard'}
-              onClick={() => setActiveTab('dashboard')}
-              width={125}
-              height={36}
-            />
-            <GlitchNavItem
-              label="MOJE HRY"
-              count={config.apps.length}
-              isActive={activeTab === 'apps'}
-              onClick={() => setActiveTab('apps')}
-              width={145}
-              height={36}
-            />
-            <GlitchNavItem
-              label="DATABÁZE HER"
-              isActive={activeTab === 'catalog'}
-              onClick={() => setActiveTab('catalog')}
-              width={140}
-              height={36}
-            />
-            <GlitchNavItem
-              label="BĚŽÍCÍ OKNA"
-              isActive={activeTab === 'processes'}
-              onClick={() => setActiveTab('processes')}
-              width={135}
-              height={36}
-            />
-            <GlitchNavItem
-              label="NASTAVENÍ"
-              isActive={activeTab === 'settings'}
-              onClick={() => setActiveTab('settings')}
-              width={125}
-              height={36}
-            />
-          </nav>
+            {/* Glitch Navigation Bar (GSAP SVG Displacement from CodePen) */}
+            <nav className="flex items-center gap-2">
+              <GlitchNavItem
+                label={t.navOverview}
+                isActive={activeTab === 'dashboard'}
+                onClick={() => setActiveTab('dashboard')}
+                width={lang === 'en' ? 125 : 125}
+                height={36}
+              />
+              <GlitchNavItem
+                label={t.navApps}
+                count={config.apps.length}
+                isActive={activeTab === 'apps'}
+                onClick={() => setActiveTab('apps')}
+                width={lang === 'en' ? 140 : 145}
+                height={36}
+              />
+              <GlitchNavItem
+                label={t.navCatalog}
+                isActive={activeTab === 'catalog'}
+                onClick={() => setActiveTab('catalog')}
+                width={lang === 'en' ? 140 : 140}
+                height={36}
+              />
+              <GlitchNavItem
+                label={t.navProcesses}
+                isActive={activeTab === 'processes'}
+                onClick={() => setActiveTab('processes')}
+                width={lang === 'en' ? 150 : 135}
+                height={36}
+              />
+              <GlitchNavItem
+                label={t.navSettings}
+                isActive={activeTab === 'settings'}
+                onClick={() => setActiveTab('settings')}
+                width={lang === 'en' ? 125 : 125}
+                height={36}
+              />
+            </nav>
 
-          {/* Right Controls: Theme Switch with Retro Box */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setIsDark(!isDark)}
-              className={`p-1.5 border transition-all cursor-pointer ${
-                isDark
-                  ? 'border-[#f55a6b]/30 bg-[#180e10] text-[#5accf5] hover:border-[#f55a6b] hover:shadow-[0_0_10px_rgba(245,90,107,0.4)]'
-                  : 'border-[#f55a6b]/40 bg-white text-[#f55a6b] hover:bg-slate-50'
-              }`}
-              title={isDark ? 'Přepnout na světlý režim' : 'Přepnout na tmavý režim'}
-            >
-              {isDark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
-            </button>
+            {/* Right Controls: Language & Theme Switch */}
+            <div className="flex items-center gap-2">
+              {/* Language Switch Button */}
+              <button
+                onClick={() => handleSetLang(lang === 'cs' ? 'en' : 'cs')}
+                className={`px-2 py-1 border text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  isDark
+                    ? 'border-[#f55a6b]/30 bg-[#180e10] text-[#5accf5] hover:border-[#f55a6b] hover:shadow-[0_0_10px_rgba(245,90,107,0.3)]'
+                    : 'border-[#f55a6b]/40 bg-white text-[#f55a6b] hover:bg-slate-50'
+                }`}
+                title={t.langToggle}
+              >
+                <Globe className="w-3.5 h-3.5" />
+                <span>{lang.toUpperCase()}</span>
+              </button>
+
+              <button
+                onClick={() => setIsDark(!isDark)}
+                className={`p-1.5 border transition-all cursor-pointer ${
+                  isDark
+                    ? 'border-[#f55a6b]/30 bg-[#180e10] text-[#5accf5] hover:border-[#f55a6b] hover:shadow-[0_0_10px_rgba(245,90,107,0.4)]'
+                    : 'border-[#f55a6b]/40 bg-white text-[#f55a6b] hover:bg-slate-50'
+                }`}
+                title={t.themeToggle}
+              >
+                {isDark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+              </button>
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
 
       {/* Main Content Body */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-6">
@@ -433,5 +457,6 @@ export default function App() {
         )}
       </main>
     </div>
+  </I18nContext.Provider>
   );
 }

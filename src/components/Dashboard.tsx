@@ -14,6 +14,7 @@ import {
 import { HdrLogo } from './HdrLogo';
 import { GlitchButton } from './GlitchButton';
 import { GlitchText } from './GlitchText';
+import { useI18n } from '../i18n';
 
 interface DashboardProps {
   status: HdrStatePayload;
@@ -38,6 +39,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onManualToggle,
   onNavigateToApps,
 }) => {
+  const { t } = useI18n();
   const [toggling, setToggling] = useState(false);
 
   const handleToggle = async () => {
@@ -111,27 +113,23 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       status.is_hdr_active ? 'bg-[#0f0b0b] animate-status-pulse' : 'bg-[#5accf5]'
                     }`}
                   />
-                  {status.is_hdr_active ? 'HDR10 REC.2020 AKTIVNÍ' : 'SDR BT.709 STANDBY'}
+                  {status.is_hdr_active ? t.heroHdrRec2020 : t.heroSdrBt709}
                 </span>
 
                 {status.switched_by_app && (
                   <span className="text-xs px-2 py-0.5 bg-[#5accf5]/15 text-[#5accf5] border border-[#5accf5]/40">
-                    HOOK AKTIVOVÁN
+                    {t.heroHookActive}
                   </span>
                 )}
 
                 <span className="text-xs text-[#8a7f81]">
-                  [{hdrSupportedMonitors.length} HDR DISPLEJ PŘIPRAVEN]
+                  {t.heroDisplaysReady(hdrSupportedMonitors.length)}
                 </span>
               </div>
 
               <h2 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
                 <GlitchText
-                  text={
-                    status.is_hdr_active
-                      ? 'WINDOWS HIGH DYNAMIC RANGE JE AKTIVNÍ'
-                      : 'WINDOWS BĚŽÍ VE STANDARDNÍM SDR REŽIMU'
-                  }
+                  text={status.is_hdr_active ? t.heroHdrActiveTitle : t.heroSdrTitle}
                   scrambleOnHover={true}
                 />
               </h2>
@@ -140,7 +138,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 {status.current_app_name ? (
                   <span className="flex items-center gap-2 text-[#f55a6b]">
                     <Sparkles className="w-4 h-4 text-[#5accf5] shrink-0" />
-                    <span>Aktivní HDR proces:</span>
+                    <span>{t.heroActiveProcess}</span>
                     <strong className="text-white font-bold tracking-wide">
                       {status.current_app_name}
                     </strong>
@@ -149,9 +147,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     )}
                   </span>
                 ) : (
-                  <span>
-                    &gt; WinEventHook sleduje okna — jakmile spustíte hru, displej se bleskově přepne.
-                  </span>
+                  <span>{t.heroSdrSubtext}</span>
                 )}
               </p>
             </div>
@@ -162,10 +158,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <GlitchButton
               label={
                 toggling
-                  ? 'PŘEPÍNÁM...'
+                  ? t.heroSwitching
                   : status.is_hdr_active
-                  ? 'VYPNOUT HDR'
-                  : 'ZAPNOUT HDR RUČNĚ'
+                  ? t.heroTurnOffHdr
+                  : t.heroTurnOnHdr
               }
               variant={status.is_hdr_active ? 'outline' : 'primary'}
               icon={<Zap className="w-4 h-4 fill-current" />}
@@ -183,13 +179,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <div className="flex items-center gap-2">
             <Monitor className="w-4 h-4 text-[#5accf5]" />
             <h3 className="font-bold text-xs uppercase tracking-wider text-[#f55a6b]">
-              PŘIPOJENÉ DISPLEJE
+              {t.displaysTitle}
             </h3>
             <span className="text-xs text-[#8a7f81]">({monitors.length})</span>
           </div>
 
           <GlitchButton
-            label="OBNOVIT"
+            label={t.displaysRefresh}
             variant="outline"
             size="sm"
             icon={<RefreshCw className="w-3 h-3 text-[#5accf5]" />}
@@ -221,12 +217,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       </h4>
                       {m.is_primary && (
                         <span className="text-[10px] px-1.5 py-0.5 bg-[#5accf5]/15 text-[#5accf5] border border-[#5accf5]/40 font-bold">
-                          PRIMÁRNÍ
+                          {t.displaysPrimary}
                         </span>
                       )}
                       {isTarget && (
                         <span className="text-[10px] px-1.5 py-0.5 bg-[#f55a6b]/15 text-[#f55a6b] border border-[#f55a6b]/40 font-bold">
-                          CÍL HDR
+                          {t.displaysTargetHdr}
                         </span>
                       )}
                     </div>
@@ -235,14 +231,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       {m.is_hdr_supported ? (
                         <span className="text-emerald-400 flex items-center gap-1 font-semibold">
                           <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                          HDR10 PODPOROVÁNO
+                          {t.displaysHdrSupported}
                         </span>
                       ) : (
-                        <span className="text-[#8a7f81]">POUZE SDR</span>
+                        <span className="text-[#8a7f81]">{t.displaysSdrOnly}</span>
                       )}
                       <span className="text-[#8a7f81]">•</span>
-                      <span className="text-[#5accf5] text-xs">
-                        TARGET ID: {m.target_id}
+                      <span className="text-[#5accf5] text-xs font-mono">
+                        {t.displaysTargetId}: {m.target_id}
                       </span>
                     </div>
                   </div>
@@ -250,7 +246,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   <div className="flex items-center gap-2">
                     {m.is_hdr_supported && (
                       <GlitchButton
-                        label={m.is_hdr_enabled ? 'HDR ZAPNUTO' : 'SDR'}
+                        label={m.is_hdr_enabled ? t.displaysHdrOn : t.displaysSdr}
                         variant={m.is_hdr_enabled ? 'primary' : 'outline'}
                         size="sm"
                         onClick={() => handleToggleMonitor(m)}
@@ -264,13 +260,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
       </div>
 
-      {/* POSLEDNÍ HRY & HOOK TELEMETRIE (Replaces Sledované hry) */}
+      {/* POSLEDNÍ HRY & HOOK TELEMETRIE */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <History className="w-4 h-4 text-[#f55a6b]" />
             <h3 className="font-bold text-xs uppercase tracking-wider text-[#f55a6b]">
-              POSLEDNÍ SPUŠTĚNÉ HRY &amp; HOOK TELEMETRIE
+              {t.recentTitle}
             </h3>
             <span className="text-xs text-[#8a7f81]">({recentGames.length})</span>
           </div>
@@ -279,7 +275,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             onClick={onNavigateToApps}
             className="text-xs text-[#5accf5] hover:text-[#70d6f7] flex items-center gap-1 font-bold cursor-pointer uppercase transition-colors"
           >
-            <span>Všechny hry v knihovně ({config.apps.length})</span>
+            <span>{t.recentAllLibrary(config.apps.length)}</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -297,20 +293,20 @@ export const Dashboard: React.FC<DashboardProps> = ({
               if (game.hdr_type === 'autohdr') {
                 return (
                   <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-purple-950/80 text-purple-300 border border-purple-500/40">
-                    AUTO HDR
+                    {t.recentTierAutoHdr}
                   </span>
                 );
               }
               if (game.hdr_type === 'mod' || game.hdr_type === 'custom') {
                 return (
                   <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-amber-950/80 text-amber-300 border border-amber-500/40">
-                    HDR MOD/FIX
+                    {t.recentTierMod}
                   </span>
                 );
               }
               return (
                 <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-cyan-950/80 text-[#5accf5] border border-[#5accf5]/50">
-                  NATIVNÍ HDR
+                  {t.recentTierNative}
                 </span>
               );
             };
@@ -375,15 +371,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
                           isHookActive ? 'text-[#5accf5]' : 'text-emerald-300'
                         }`}
                       >
-                        {isHookActive
-                          ? '● HOOK AKTIVNÍ (HDR ON)'
-                          : '✓ HOOK ZAFUNGOVAL'}
+                        {isHookActive ? t.recentHookActive : t.recentHookTriggered}
                       </span>
                     </div>
 
                     <div className="flex items-center justify-between text-[9px] text-[#8a7f81]">
                       <span>{game.last_switched_at}</span>
-                      <span className="text-[#5accf5]">HDR10 OK</span>
+                      <span className="text-[#5accf5]">{t.recentHdrOk}</span>
                     </div>
                   </div>
                 </div>
@@ -398,7 +392,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         <div className="flex items-center gap-2">
           <Terminal className="w-4 h-4 text-[#5accf5]" />
           <h3 className="font-bold text-xs uppercase tracking-wider text-[#f55a6b]">
-            ZÁZNAM AKTIVITY HOOKU
+            {t.activityTitle}
           </h3>
         </div>
 

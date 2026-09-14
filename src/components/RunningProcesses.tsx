@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { RefreshCw, Search, Plus, Check, AppWindow } from 'lucide-react';
 import { GlitchButton } from './GlitchButton';
 import { GlitchText } from './GlitchText';
+import { useI18n } from '../i18n';
 
 interface RunningProcessesProps {
   config: AppConfig;
@@ -15,6 +16,7 @@ export const RunningProcesses: React.FC<RunningProcessesProps> = ({
   config,
   onUpdateConfig,
 }) => {
+  const { t } = useI18n();
   const [processes, setProcesses] = useState<RunningProcessInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
@@ -75,19 +77,19 @@ export const RunningProcesses: React.FC<RunningProcessesProps> = ({
         <div>
           <div className="flex items-center gap-2.5">
             <h2 className="glitch-title-bar px-2.5 py-0.5 text-xs font-bold tracking-wider inline-block">
-              BĚŽÍCÍ OKNA A PROCESY
+              {t.procTitle}
             </h2>
             <span className="text-xs px-2 py-0.5 border border-[#5accf5]/40 text-[#5accf5] bg-[#140e10]">
-              {processes.length} AKTIVNÍCH OKEN
+              {t.procCountActive(processes.length)}
             </span>
           </div>
           <p className="text-xs text-[#8a7f81] mt-1">
-            Aktuálně spuštěná okna na ploše. Kliknutím zařadíte libovolný běžící proces ihned do HDR sledování.
+            {t.procSubtitle}
           </p>
         </div>
 
         <GlitchButton
-          label={loading ? 'SKENUJI...' : 'OBNOVIT OKNA'}
+          label={loading ? t.procRefreshingBtn : t.procRefreshBtn}
           variant="outline"
           size="sm"
           disabled={loading}
@@ -103,7 +105,7 @@ export const RunningProcesses: React.FC<RunningProcessesProps> = ({
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Filtrovat běžící okna podle názvu nebo .exe souboru..."
+          placeholder={t.procSearchPlaceholder}
           className="w-full pl-9 pr-4 py-2 text-xs border border-[#f55a6b]/30 bg-[#120d0e] focus:border-[#f55a6b] text-white placeholder-[#8a7f81] focus:outline-none transition-all"
         />
       </div>
@@ -111,11 +113,11 @@ export const RunningProcesses: React.FC<RunningProcessesProps> = ({
       {/* Process List */}
       {loading ? (
         <div className="p-12 text-center border border-[#f55a6b]/20 bg-[#120d0e] text-[#5accf5] text-xs">
-          &gt; Skenuji běžící okna a procesy...
+          {t.procLoading}
         </div>
       ) : filtered.length === 0 ? (
         <div className="p-12 text-center border border-[#f55a6b]/20 bg-[#120d0e] text-[#8a7f81] text-xs">
-          &gt; Žádný proces neodpovídá hledání.
+          {t.procEmpty}
         </div>
       ) : (
         <div className="space-y-2">
@@ -164,11 +166,11 @@ export const RunningProcesses: React.FC<RunningProcessesProps> = ({
                 <div className="shrink-0 relative z-10">
                   {tracked ? (
                     <span className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold uppercase bg-emerald-950/80 text-emerald-300 border border-emerald-500/40">
-                      <Check className="w-3.5 h-3.5" /> JIŽ SLEDOVÁNO
+                      <Check className="w-3.5 h-3.5" /> {t.procAlreadyTracked}
                     </span>
                   ) : (
                     <GlitchButton
-                      label={isAdding ? 'PŘIDÁVÁM...' : '+ PŘIDAT DO HDR'}
+                      label={isAdding ? t.procAdding : t.procAddToHdr}
                       variant="primary"
                       size="sm"
                       disabled={isAdding}

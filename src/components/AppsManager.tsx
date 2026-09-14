@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { GlitchButton } from './GlitchButton';
 import { GlitchText } from './GlitchText';
+import { useI18n } from '../i18n';
 
 interface AppsManagerProps {
   config: AppConfig;
@@ -31,6 +32,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
   onUpdateConfig,
   onNavigateToCatalog,
 }) => {
+  const { t } = useI18n();
   const [search, setSearch] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedLauncher, setSelectedLauncher] = useState<string>('all');
@@ -92,7 +94,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
       setShowScanModal(true);
     } catch (err) {
       console.error('Failed to scan installed games:', err);
-      setScanMessage('Chyba při prohledávání disků.');
+      setScanMessage(t.scanModalError);
     } finally {
       setIsScanning(false);
     }
@@ -112,7 +114,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
       const refreshed: AppConfig = await invoke('get_config');
       onUpdateConfig(refreshed);
       setShowScanModal(false);
-      setScanMessage(`Úspěšně přidáno ${addedCount} nových her do sledování!`);
+      setScanMessage(t.scanModalSuccess(addedCount));
       setTimeout(() => setScanMessage(null), 4500);
     } catch (err) {
       console.error('Failed to import games:', err);
@@ -166,25 +168,25 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
       case 'native':
         return (
           <span className="inline-flex items-center gap-1 text-[9px] font-mono px-1.5 py-0.5 bg-cyan-950/90 text-[#5accf5] border border-[#5accf5]/50 font-bold uppercase tracking-wider">
-            <ShieldCheck className="w-3 h-3 text-[#5accf5]" /> NATIVNÍ HDR
+            <ShieldCheck className="w-3 h-3 text-[#5accf5]" /> {t.recentTierNative}
           </span>
         );
       case 'autohdr':
         return (
           <span className="inline-flex items-center gap-1 text-[9px] font-mono px-1.5 py-0.5 bg-purple-950/90 text-purple-300 border border-purple-500/50 font-bold uppercase tracking-wider">
-            <Zap className="w-3 h-3 text-purple-400" /> AUTO HDR
+            <Zap className="w-3 h-3 text-purple-400" /> {t.recentTierAutoHdr}
           </span>
         );
       case 'media':
         return (
           <span className="inline-flex items-center gap-1 text-[9px] font-mono px-1.5 py-0.5 bg-blue-950/90 text-blue-300 border border-blue-500/50 font-bold uppercase tracking-wider">
-            MÉDIA
+            {t.catalogTierMedia.toUpperCase()}
           </span>
         );
       default:
         return (
           <span className="inline-flex items-center gap-1 text-[9px] font-mono px-1.5 py-0.5 bg-amber-950/90 text-amber-300 border border-amber-500/50 font-bold uppercase tracking-wider">
-            VLASTNÍ / MOD
+            {t.recentTierMod}
           </span>
         );
     }
@@ -200,21 +202,21 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
         <div>
           <div className="flex items-center gap-2.5">
             <h2 className="glitch-title-bar px-2.5 py-0.5 text-xs font-bold tracking-wider inline-block">
-              MOJE KNIHOVNA HER
+              {t.appsTitle}
             </h2>
             <span className="text-xs px-2 py-0.5 border border-[#5accf5]/40 text-[#5accf5] bg-[#140e10]">
-              {config.apps.length} CELKEM • {activeCount} SLEDOVÁNO
+              {t.appsCountSummary(config.apps.length, activeCount)}
             </span>
           </div>
           <p className="text-xs text-[#8a7f81] mt-1">
-            Hry v tomto seznamu automaticky přepnou displej do HDR režimu při zaměření okna.
+            {t.appsSubtitle}
           </p>
         </div>
 
         {/* Top Action Buttons with CodePen Glitch styling */}
         <div className="flex items-center gap-2.5 flex-wrap">
           <GlitchButton
-            label={isScanning ? 'PROHLEDÁVÁM...' : 'SKENOVAT HRY V PC'}
+            label={isScanning ? t.appsScanningBtn : t.appsScanBtn}
             variant="primary"
             size="sm"
             disabled={isScanning}
@@ -223,7 +225,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
           />
 
           <GlitchButton
-            label="PŘIDAT RUČNĚ"
+            label={t.appsAddManualBtn}
             variant="outline"
             size="sm"
             icon={<Plus className="w-3.5 h-3.5 text-[#5accf5]" />}
@@ -231,7 +233,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
           />
 
           <GlitchButton
-            label="KATALOG"
+            label={t.appsCatalogBtn}
             variant="outline"
             size="sm"
             icon={<Compass className="w-3.5 h-3.5 text-[#f55a6b]" />}
@@ -256,7 +258,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Hledat mezi nainstalovanými hrami..."
+            placeholder={t.appsSearchPlaceholder}
             className="w-full pl-9 pr-4 py-2 text-xs border border-[#f55a6b]/30 bg-[#120d0e] focus:border-[#f55a6b] text-white placeholder-[#8a7f81] focus:outline-none transition-all"
           />
         </div>
@@ -270,7 +272,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                 ? 'bg-[#f55a6b] text-[#0f0b0b]'
                 : 'text-[#8a7f81] hover:text-white'
             }`}
-            title="Zobrazení plakátů (Grid)"
+            title="Grid"
           >
             <LayoutGrid className="w-3.5 h-3.5" />
           </button>
@@ -281,7 +283,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                 ? 'bg-[#f55a6b] text-[#0f0b0b]'
                 : 'text-[#8a7f81] hover:text-white'
             }`}
-            title="Zobrazení řádků (Seznam)"
+            title="List"
           >
             <ListIcon className="w-3.5 h-3.5" />
           </button>
@@ -291,10 +293,10 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
       {/* Launcher Filter Tabs */}
       <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
         {[
-          { id: 'all', label: `VŠECHNY (${config.apps.length})` },
-          { id: 'steam', label: `STEAM (${steamCount})` },
-          { id: 'epic games', label: 'EPIC GAMES' },
-          { id: 'windows', label: 'WINDOWS / OSTATNÍ' },
+          { id: 'all', label: t.appsTabAll(config.apps.length) },
+          { id: 'steam', label: t.appsTabSteam(steamCount) },
+          { id: 'epic games', label: t.appsTabEpic },
+          { id: 'windows', label: t.appsTabWindows },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -316,24 +318,22 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
           <Gamepad2 className="w-12 h-12 text-[#8a7f81] mx-auto stroke-1" />
           <div className="space-y-1">
             <h3 className="text-sm font-bold text-white">
-              {search
-                ? '&gt; Žádná hra neodpovídá hledání.'
-                : '&gt; Zatím zde nemáte žádné sledované hry.'}
+              {search ? t.appsNoGamesSearchTitle : t.appsNoGamesTitle}
             </h3>
             <p className="text-xs text-[#8a7f81] max-w-md mx-auto">
-              Spusťte skenování disků pro automatické nalezení her nebo si vyberte z databáze PCGamingWiki.
+              {t.appsNoGamesSubtitle}
             </p>
           </div>
           {!search && (
             <div className="flex items-center justify-center gap-3 pt-2">
               <GlitchButton
-                label="SKENOVAT DISKY"
+                label={t.appsScanDisksBtn}
                 variant="primary"
                 size="sm"
                 onClick={handleStartScan}
               />
               <GlitchButton
-                label="PROCHÁZET KATALOG"
+                label={t.appsBrowseCatalogBtn}
                 variant="outline"
                 size="sm"
                 onClick={onNavigateToCatalog}
@@ -408,14 +408,14 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                           : 'bg-[#120d0e] text-[#8a7f81] border-[#8a7f81]/30 hover:border-white'
                       }`}
                     >
-                      {app.enabled ? 'SLEDOVÁNO' : 'POZASTAVENO'}
+                      {app.enabled ? t.appsStatusTracked : t.appsStatusPaused}
                     </button>
 
                     {/* Delete button */}
                     <button
                       onClick={() => handleDeleteApp(app.exe_name)}
                       className="p-1 text-[#8a7f81] hover:text-[#f55a6b] cursor-pointer transition-colors"
-                      title="Odebrat z knihovny"
+                      title={t.appsRemoveFromLibrary}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -478,13 +478,13 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                         : 'bg-[#120d0e] text-[#8a7f81] border-[#8a7f81]/30'
                     }`}
                   >
-                    {app.enabled ? 'SLEDOVÁNO' : 'POZASTAVENO'}
+                    {app.enabled ? t.appsStatusTracked : t.appsStatusPaused}
                   </button>
 
                   <button
                     onClick={() => handleDeleteApp(app.exe_name)}
                     className="p-1.5 text-[#8a7f81] hover:text-[#f55a6b] cursor-pointer transition-colors"
-                    title="Odebrat hru"
+                    title={t.appsRemoveFromLibrary}
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -503,7 +503,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
               <div className="flex items-center gap-2">
                 <ScanSearch className="w-5 h-5 text-[#5accf5]" />
                 <h3 className="glitch-title-bar px-2 py-0.5 text-xs font-bold uppercase">
-                  NALEZENÉ HRY V PC ({scannedGames.length})
+                  {t.scanModalTitle(scannedGames.length)}
                 </h3>
               </div>
               <button
@@ -515,7 +515,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
             </div>
 
             <p className="text-xs text-[#8a7f81]">
-              Vyberte hry, které chcete přidat do automatického sledování HDR:
+              {t.scanModalSubtitle}
             </p>
 
             <div className="max-h-80 overflow-y-auto space-y-1.5 border border-[#f55a6b]/20 p-2 bg-[#120d0e]">
@@ -564,13 +564,13 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
 
             <div className="flex items-center justify-end gap-3 pt-2">
               <GlitchButton
-                label="ZRUŠIT"
+                label={t.scanModalCancel}
                 variant="outline"
                 size="sm"
                 onClick={() => setShowScanModal(false)}
               />
               <GlitchButton
-                label="PŘIDAT VYBRANÉ"
+                label={t.scanModalAddSelected}
                 variant="primary"
                 size="sm"
                 onClick={handleConfirmImport}
@@ -586,7 +586,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
           <div className="bg-[#0f0b0b] border-2 border-[#f55a6b] max-w-md w-full p-6 space-y-4 relative shadow-[0_0_30px_rgba(245,90,107,0.4)]">
             <div className="flex items-center justify-between border-b border-[#f55a6b]/30 pb-3">
               <h3 className="glitch-title-bar px-2 py-0.5 text-xs font-bold uppercase">
-                PŘIDAT HRU RUČNĚ
+                {t.manualModalTitle}
               </h3>
               <button
                 onClick={() => setShowAddModal(false)}
@@ -598,11 +598,11 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
 
             <form onSubmit={handleAddCustomApp} className="space-y-4">
               <div className="space-y-1">
-                <label className="text-xs uppercase text-[#8a7f81]">NÁZEV HRY</label>
+                <label className="text-xs uppercase text-[#8a7f81]">{t.manualModalName}</label>
                 <input
                   type="text"
                   required
-                  placeholder="např. Cyberpunk 2077"
+                  placeholder="e.g. Cyberpunk 2077"
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                   className="w-full px-3 py-2 text-xs border border-[#f55a6b]/30 bg-[#120d0e] focus:border-[#f55a6b] text-white focus:outline-none"
@@ -610,11 +610,11 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs uppercase text-[#8a7f81]">NÁZEV EXEKUTIVY (.EXE)</label>
+                <label className="text-xs uppercase text-[#8a7f81]">{t.manualModalExe}</label>
                 <input
                   type="text"
                   required
-                  placeholder="např. cyberpunk2077.exe"
+                  placeholder="e.g. cyberpunk2077.exe"
                   value={newExe}
                   onChange={(e) => setNewExe(e.target.value)}
                   className="w-full px-3 py-2 text-xs border border-[#f55a6b]/30 bg-[#120d0e] focus:border-[#f55a6b] text-white focus:outline-none"
@@ -622,30 +622,30 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs uppercase text-[#8a7f81]">TYP HDR PODPORY</label>
+                <label className="text-xs uppercase text-[#8a7f81]">{t.manualModalType}</label>
                 <select
                   value={newType}
                   onChange={(e) => setNewType(e.target.value as HdrType)}
                   className="w-full px-3 py-2 text-xs border border-[#f55a6b]/30 bg-[#120d0e] focus:border-[#f55a6b] text-white focus:outline-none"
                 >
-                  <option value="native">Nativní HDR10</option>
-                  <option value="autohdr">Windows Auto HDR</option>
-                  <option value="custom">Vlastní / Mod</option>
-                  <option value="media">Média / Video přehrávač</option>
+                  <option value="native">{t.catalogTierNative}</option>
+                  <option value="autohdr">{t.catalogTierAutoHdr}</option>
+                  <option value="custom">{t.catalogTierCustom}</option>
+                  <option value="media">{t.catalogTierMedia}</option>
                 </select>
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-3">
                 <GlitchButton
                   type="button"
-                  label="ZRUŠIT"
+                  label={t.manualModalCancel}
                   variant="outline"
                   size="sm"
                   onClick={() => setShowAddModal(false)}
                 />
                 <GlitchButton
                   type="submit"
-                  label="PŘIDAT HRU"
+                  label={t.manualModalSubmit}
                   variant="primary"
                   size="sm"
                 />

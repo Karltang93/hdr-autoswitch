@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { GlitchButton } from './GlitchButton';
 import { GlitchText } from './GlitchText';
+import { useI18n } from '../i18n';
 
 interface CatalogBrowserProps {
   config: AppConfig;
@@ -26,6 +27,7 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
   config,
   onUpdateConfig,
 }) => {
+  const { t } = useI18n();
   const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
@@ -81,11 +83,11 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
     try {
       const count: number = await invoke('sync_database');
       await fetchCatalog();
-      setMessage(`Databáze byla úspěšně synchronizována z webu (${count} titulů).`);
+      setMessage(t.catalogSyncSuccess(count));
       setTimeout(() => setMessage(null), 4000);
     } catch (err) {
       console.error('Sync failed:', err);
-      setMessage('Chyba při stahování databáze z PCGamingWiki.');
+      setMessage(t.catalogSyncError);
       setTimeout(() => setMessage(null), 4000);
     } finally {
       setSyncing(false);
@@ -108,43 +110,43 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
       case 'native':
         return (
           <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 bg-cyan-950/80 text-[#5accf5] border border-[#5accf5]/40 font-bold uppercase tracking-wider">
-            <CheckCircle2 className="w-3 h-3 text-[#5accf5]" /> Nativní HDR
+            <CheckCircle2 className="w-3 h-3 text-[#5accf5]" /> {t.catalogTierNative}
           </span>
         );
       case 'limited':
         return (
           <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 bg-teal-950/80 text-teal-300 border border-teal-500/40 font-bold uppercase tracking-wider">
-            <Sparkles className="w-3 h-3 text-teal-400" /> Omezené
+            <Sparkles className="w-3 h-3 text-teal-400" /> {t.catalogTierLimited}
           </span>
         );
       case 'always_on':
         return (
           <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 bg-purple-950/80 text-purple-300 border border-purple-500/40 font-bold uppercase tracking-wider">
-            <Lock className="w-3 h-3 text-purple-400" /> Always-on
+            <Lock className="w-3 h-3 text-purple-400" /> {t.catalogTierAlwaysOn}
           </span>
         );
       case 'manual_fix':
         return (
           <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 bg-amber-950/80 text-amber-300 border border-amber-500/40 font-bold uppercase tracking-wider">
-            <Wrench className="w-3 h-3 text-amber-400" /> Vyžaduje mod
+            <Wrench className="w-3 h-3 text-amber-400" /> {t.catalogTierMod}
           </span>
         );
       case 'autohdr':
         return (
           <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 bg-rose-950/80 text-[#f55a6b] border border-[#f55a6b]/40 font-bold uppercase tracking-wider">
-            <Zap className="w-3 h-3 text-[#f55a6b]" /> Windows Auto HDR
+            <Zap className="w-3 h-3 text-[#f55a6b]" /> {t.catalogTierAutoHdr}
           </span>
         );
       case 'media':
         return (
           <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 bg-blue-950/80 text-blue-300 border border-blue-500/40 font-bold uppercase tracking-wider">
-            <Film className="w-3 h-3 text-blue-400" /> Média / Video
+            <Film className="w-3 h-3 text-blue-400" /> {t.catalogTierMedia}
           </span>
         );
       default:
         return (
           <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 bg-slate-900 text-slate-300 border border-slate-700 font-bold uppercase tracking-wider">
-            Vlastní
+            {t.catalogTierCustom}
           </span>
         );
     }
@@ -166,19 +168,19 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
         <div>
           <div className="flex items-center gap-2.5">
             <h2 className="glitch-title-bar px-2.5 py-0.5 text-xs font-bold tracking-wider inline-block">
-              DATABÁZE HDR HER
+              {t.catalogTitle}
             </h2>
             <span className="text-xs px-2 py-0.5 border border-[#5accf5]/40 text-[#5accf5] bg-[#140e10]">
-              {catalog.length} TITULŮ V ARCHIVU
+              {t.catalogArchiveCount(catalog.length)}
             </span>
           </div>
           <p className="text-xs text-[#8a7f81] mt-1">
-            Seznam her s nativní HDR podporou i oficiální databáze Windows Auto HDR (PCGamingWiki).
+            {t.catalogSubtitle}
           </p>
         </div>
 
         <GlitchButton
-          label={syncing ? 'SYNCHRONIZUJI...' : 'AKTUALIZOVAT Z WEBU'}
+          label={syncing ? t.catalogSyncingBtn : t.catalogSyncBtn}
           variant="outline"
           size="sm"
           disabled={syncing}
@@ -202,7 +204,7 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Hledat hru podle názvu nebo .exe souboru..."
+            placeholder={t.catalogSearchPlaceholder}
             className="w-full pl-9 pr-4 py-2 text-xs border border-[#f55a6b]/30 bg-[#120d0e] focus:border-[#f55a6b] text-white placeholder-[#8a7f81] focus:outline-none transition-all"
           />
         </div>
@@ -210,12 +212,12 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
         {/* Tier Filter Tabs */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
           {[
-            { id: 'all', label: `VŠECHNY (${countForTier('all')})` },
-            { id: 'native', label: `NATIVNÍ HDR (${countForTier('native')})` },
-            { id: 'autohdr', label: `AUTO HDR (${countForTier('autohdr')})` },
-            { id: 'limited', label: `OMEZENÉ (${countForTier('limited')})` },
-            { id: 'manual_fix', label: `MOD / FIX (${countForTier('manual_fix')})` },
-            { id: 'always_on', label: `ALWAYS-ON (${countForTier('always_on')})` },
+            { id: 'all', label: t.catalogTabAll(countForTier('all')) },
+            { id: 'native', label: t.catalogTabNative(countForTier('native')) },
+            { id: 'autohdr', label: t.catalogTabAutoHdr(countForTier('autohdr')) },
+            { id: 'limited', label: t.catalogTabLimited(countForTier('limited')) },
+            { id: 'manual_fix', label: t.catalogTabMod(countForTier('manual_fix')) },
+            { id: 'always_on', label: t.catalogTabAlwaysOn(countForTier('always_on')) },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -235,11 +237,11 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
       {/* Games Catalog List */}
       {loading ? (
         <div className="p-12 text-center border border-[#f55a6b]/20 bg-[#120d0e] text-[#5accf5] text-xs">
-          &gt; Načítám katalog her...
+          {t.catalogLoading}
         </div>
       ) : filtered.length === 0 ? (
         <div className="p-12 text-center border border-[#f55a6b]/20 bg-[#120d0e] text-[#8a7f81] text-xs">
-          &gt; Žádná hra neodpovídá zadanému filtru.
+          {t.catalogEmpty}
         </div>
       ) : (
         <div className="space-y-2">
@@ -279,7 +281,7 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
                 <div className="shrink-0 relative z-10">
                   {tracked ? (
                     <GlitchButton
-                      label="ODEBRAT"
+                      label={t.catalogRemoveBtn}
                       variant="outline"
                       size="sm"
                       icon={<Check className="w-3.5 h-3.5 text-emerald-400" />}
@@ -287,7 +289,7 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
                     />
                   ) : (
                     <GlitchButton
-                      label="+ PŘIDAT DO MÝCH HER"
+                      label={t.catalogAddBtn}
                       variant="primary"
                       size="sm"
                       icon={<Plus className="w-3.5 h-3.5 fill-current" />}
