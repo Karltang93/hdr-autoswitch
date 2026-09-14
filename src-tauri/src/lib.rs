@@ -70,8 +70,23 @@ fn import_detected_games(state: State<'_, AppState>, detected: Vec<HdrApp>) -> R
     let mut count = 0;
 
     for item in detected {
-        let exe = item.exe_name.to_lowercase();
-        if !conf.apps.iter().any(|a| a.exe_name.to_lowercase() == exe) {
+        let name_lower = item.name.to_lowercase();
+        let exe_lower = item.exe_name.to_lowercase();
+
+        if let Some(existing) = conf.apps.iter_mut().find(|a| {
+            a.name.to_lowercase() == name_lower
+                || a.exe_name.to_lowercase() == exe_lower
+                || a.alternate_exes.contains(&exe_lower)
+        }) {
+            for alt in item.alternate_exes {
+                if !existing.alternate_exes.contains(&alt) && existing.exe_name.to_lowercase() != alt {
+                    existing.alternate_exes.push(alt);
+                }
+            }
+            if existing.path.is_none() {
+                existing.path = item.path;
+            }
+        } else {
             conf.apps.push(item);
             count += 1;
         }
@@ -150,24 +165,33 @@ pub fn run() {
         .setup(|app| {
             let config_mgr = Arc::new(ConfigManager::new());
 
-            // Migration / clean initialization:
-            // If apps list has the entire catalog (over 80 entries) or is empty,
-            // populate only with the user's actually installed games detected on disk + media players!
+            // Automatic cleanup & deduplication of existing apps in config:
             {
                 let mut conf = config_mgr.get_config();
-                if conf.apps.is_empty() || conf.apps.len() > 80 {
-                    let detected = scanner::scan_installed_games();
-                    if !detected.is_empty() {
-                        conf.apps = detected;
+                let mut deduplicated: Vec<HdrApp> = Vec::new();
+                for app in conf.apps {
+                    let name_lower = app.name.to_lowercase();
+                    let exe_lower = app.exe_name.to_lowercase();
+
+                    if let Some(existing) = deduplicated.iter_mut().find(|a| {
+                        a.name.to_lowercase() == name_lower
+                            || a.exe_name.to_lowercase() == exe_lower
+                            || a.alternate_exes.contains(&exe_lower)
+                    }) {
+                        if !existing.alternate_exes.contains(&exe_lower) && existing.exe_name.to_lowercase() != exe_lower {
+                            existing.alternate_exes.push(exe_lower);
+                        }
+                        for alt in app.alternate_exes {
+                            if !existing.alternate_exes.contains(&alt) && existing.exe_name.to_lowercase() != alt {
+                                existing.alternate_exes.push(alt);
+                            }
+                        }
                     } else {
-                        // Keep common media players as sensible defaults
-                        conf.apps = database::get_default_catalog()
-                            .into_iter()
-                            .filter(|a| a.hdr_type == config::HdrType::Media)
-                            .collect();
+                        deduplicated.push(app);
                     }
-                    let _ = config_mgr.update_config(conf);
                 }
+                conf.apps = deduplicated;
+                let _ = config_mgr.update_config(conf);
             }
 
             let monitor_service = MonitorService::new(config_mgr.clone(), app.handle().clone());
