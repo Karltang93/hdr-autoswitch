@@ -99,6 +99,64 @@ pub fn get_default_catalog() -> Vec<HdrApp> {
         .collect()
 }
 
+pub fn find_in_catalog(exe_name: &str) -> Option<CatalogEntry> {
+    let catalog = get_full_catalog();
+    let exe_clean = exe_name.to_lowercase();
+    let exe_stem = exe_clean.trim_end_matches(".exe");
+
+    // 1. Direct match with entry.exe_name
+    if let Some(entry) = catalog.iter().find(|c| c.exe_name.eq_ignore_ascii_case(&exe_clean)) {
+        return Some(entry.clone());
+    }
+
+    // 2. Direct match with clean stem against entry.name (e.g. "forzahorizon5" == clean_key("Forza Horizon 5"))
+    let clean_exe_alphanumeric: String = exe_stem.chars().filter(|c| c.is_alphanumeric()).collect();
+    if clean_exe_alphanumeric.len() >= 3 {
+        if let Some(entry) = catalog.iter().find(|c| {
+            let cat_clean = clean_key(&c.name);
+            cat_clean == clean_exe_alphanumeric
+        }) {
+            return Some(entry.clone());
+        }
+    }
+
+    // 3. Unreal Engine & shipping prefixes/suffixes: "game-win64-shipping", "game_dx12", "game_vk"
+    let stripped_stem = exe_stem
+        .replace("-win64-shipping", "")
+        .replace("_win64_shipping", "")
+        .replace("-shipping", "")
+        .replace("_dx12", "")
+        .replace("_dx11", "")
+        .replace("_vk", "");
+    let clean_stripped: String = stripped_stem.chars().filter(|c| c.is_alphanumeric()).collect();
+    if clean_stripped.len() >= 3 && clean_stripped != clean_exe_alphanumeric {
+        if let Some(entry) = catalog.iter().find(|c| {
+            let cat_exe_clean = c.exe_name.to_lowercase();
+            let cat_stem = cat_exe_clean.trim_end_matches(".exe");
+            let cat_clean = clean_key(&c.name);
+            cat_stem == stripped_stem || cat_clean == clean_stripped
+        }) {
+            return Some(entry.clone());
+        }
+    }
+
+    // 4. Substring match if name is reasonably unique (length >= 5)
+    if clean_exe_alphanumeric.len() >= 5 {
+        if let Some(entry) = catalog.iter().find(|c| {
+            let cat_clean = clean_key(&c.name);
+            if cat_clean.len() >= 5 {
+                clean_exe_alphanumeric.contains(&cat_clean) || cat_clean.contains(&clean_exe_alphanumeric)
+            } else {
+                false
+            }
+        }) {
+            return Some(entry.clone());
+        }
+    }
+
+    None
+}
+
 pub async fn fetch_online_database() -> Result<Vec<CatalogEntry>, String> {
     let current_catalog = get_full_catalog();
     let mut catalog_map: HashMap<String, CatalogEntry> = current_catalog

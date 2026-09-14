@@ -12,7 +12,7 @@ use display::MonitorInfo;
 use monitor_hook::{HdrStatePayload, MonitorService};
 use process::RunningProcessInfo;
 use std::sync::Arc;
-use tauri::{Manager, State, WindowEvent};
+use tauri::{Emitter, Manager, State, WindowEvent};
 
 struct AppState {
     config_mgr: Arc<ConfigManager>,
@@ -202,11 +202,79 @@ pub fn run() {
                 eprintln!("Tray setup error: {}", e);
             }
 
-            // Ensure custom diamond logo icon for main window
+            // Ensure custom diamond logo icon for main window and start minimized if requested
             if let Some(window) = app.get_webview_window("main") {
                 let icon = tauri::include_image!("icons/128x128.png");
                 let _ = window.set_icon(icon);
+
+                let is_minimized_arg = std::env::args().any(|a| a == "--minimized");
+                if is_minimized_arg || config_mgr.get_config().start_minimized {
+                    let _ = window.hide();
+                }
             }
+
+            // Background periodic sync & auto-scan (Set & Forget background automation)
+            let config_mgr_bg = config_mgr.clone();
+            let app_handle_bg = app.handle().clone();
+            std::thread::spawn(move || {
+                // Sleep 15 seconds after launch to avoid competing with boot or game startup
+                std::thread::sleep(std::time::Duration::from_secs(15));
+
+                let conf = config_mgr_bg.get_config();
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs();
+
+                let should_sync = conf.auto_sync_database && match conf.last_sync_timestamp {
+                    Some(last) => now.saturating_sub(last) > 7 * 86400, // 7 days
+                    None => true,
+                };
+
+                if should_sync {
+                    tauri::async_runtime::spawn(async move {
+                        let _ = database::fetch_online_database().await;
+                    });
+                    let mut updated_conf = config_mgr_bg.get_config();
+                    updated_conf.last_sync_timestamp = Some(now);
+                    let _ = config_mgr_bg.update_config(updated_conf);
+                }
+
+                // Also run a quiet background scan for installed games to enrich steam IDs & alternate exes
+                let detected = scanner::scan_installed_games();
+                if !detected.is_empty() {
+                    let mut conf = config_mgr_bg.get_config();
+                    let mut modified = false;
+                    for item in detected {
+                        let name_lower = item.name.to_lowercase();
+                        let exe_lower = item.exe_name.to_lowercase();
+                        if let Some(existing) = conf.apps.iter_mut().find(|a| {
+                            a.name.to_lowercase() == name_lower
+                                || a.exe_name.to_lowercase() == exe_lower
+                                || a.alternate_exes.contains(&exe_lower)
+                        }) {
+                            for alt in item.alternate_exes {
+                                if !existing.alternate_exes.contains(&alt) && existing.exe_name.to_lowercase() != alt {
+                                    existing.alternate_exes.push(alt);
+                                    modified = true;
+                                }
+                            }
+                            if existing.steam_id.is_none() && item.steam_id.is_some() {
+                                existing.steam_id = item.steam_id;
+                                modified = true;
+                            }
+                            if existing.launcher.is_none() && item.launcher.is_some() {
+                                existing.launcher = item.launcher;
+                                modified = true;
+                            }
+                        }
+                    }
+                    if modified {
+                        let _ = config_mgr_bg.update_config(conf);
+                        let _ = app_handle_bg.emit("apps-updated", ());
+                    }
+                }
+            });
 
             app.manage(AppState {
                 config_mgr,

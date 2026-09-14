@@ -135,8 +135,27 @@ impl MonitorService {
             *active = Some(exe_lower.clone());
         }
 
-        let is_hdr = self.config_mgr.is_hdr_app(&exe_lower);
+        let mut is_hdr = self.config_mgr.is_hdr_app(&exe_lower);
         let conf = self.config_mgr.get_config();
+
+        // Automatic enrollment of newly launched HDR games from catalog:
+        if !is_hdr && conf.auto_detect_new_games && !conf.blacklist.iter().any(|b| b.to_lowercase() == exe_lower) {
+            if let Some(entry) = crate::database::find_in_catalog(&exe_lower) {
+                let new_app = crate::config::HdrApp {
+                    name: entry.name.clone(),
+                    exe_name: exe_lower.clone(),
+                    enabled: true,
+                    hdr_type: entry.hdr_type.clone(),
+                    path: None,
+                    alternate_exes: Vec::new(),
+                    steam_id: None,
+                    launcher: None,
+                };
+                let _ = self.config_mgr.add_app(new_app);
+                let _ = self.app_handle.emit("apps-updated", ());
+                is_hdr = true;
+            }
+        }
 
         if is_hdr {
             // Cancel any pending turn-off debounce timer

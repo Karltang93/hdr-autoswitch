@@ -155,6 +155,12 @@ export interface Translations {
   settingsSystemGroup: string;
   settingsAutostartTitle: string;
   settingsAutostartDesc: string;
+  settingsStartMinimizedTitle: string;
+  settingsStartMinimizedDesc: string;
+  settingsAutoDetectTitle: string;
+  settingsAutoDetectDesc: string;
+  settingsAutoSyncTitle: string;
+  settingsAutoSyncDesc: string;
   settingsNotifTitle: string;
   settingsNotifDesc: string;
   settingsLanguageTitle: string;
@@ -308,7 +314,13 @@ const cs: Translations = {
   settingsDebounceDesc: 'Zabraňuje nepříjemnému problikávání monitoru při rychlém přepínání oken (např. kontrola Discordu či prohlížeče).',
   settingsSystemGroup: 'SYSTÉMOVÁ INTEGRACE',
   settingsAutostartTitle: 'SPOUŠTĚT AUTOMATICKY SE SYSTÉMEM',
-  settingsAutostartDesc: 'Aplikace se tiše spustí na pozadí do systémové lišty (tray) po startu Windows.',
+  settingsAutostartDesc: 'Aplikace se tiše spustí na pozadí po startu Windows.',
+  settingsStartMinimizedTitle: 'SPUSTIT MINIMALIZOVANĚ DO TRAY',
+  settingsStartMinimizedDesc: 'Aplikace po spuštění zůstane skrytá v oznamovací oblasti lišty a neotevírá okno.',
+  settingsAutoDetectTitle: 'AUTOMATICKÁ DETEKCE NOVÝCH HDR HER',
+  settingsAutoDetectDesc: 'Při spuštění jakékoliv HDR hry z 949+ katalogu ji automaticky zařadí do sledování a zapne HDR bez nutnosti ručního přidávání.',
+  settingsAutoSyncTitle: 'AUTOMATICKÁ SYNCHRONIZACE DATABÁZE (PCGAMINGWIKI)',
+  settingsAutoSyncDesc: 'Jednou týdně na pozadí tiše aktualizuje katalog her z PCGamingWiki a prohledá disky pro spárování Steam ID.',
   settingsNotifTitle: 'WINDOWS NOTIFIKACE',
   settingsNotifDesc: 'Zobrazovat decentní systémové oznámení při každém přepnutí HDR režimu.',
   settingsLanguageTitle: 'JAZYK ROZHRANÍ (LANGUAGE)',
@@ -462,7 +474,13 @@ const en: Translations = {
   settingsDebounceDesc: 'Prevents display flicker during rapid window switching (e.g. checking Discord or browser).',
   settingsSystemGroup: 'SYSTEM INTEGRATION',
   settingsAutostartTitle: 'START WITH WINDOWS',
-  settingsAutostartDesc: 'Silently launch minimized into Windows system tray upon system boot.',
+  settingsAutostartDesc: 'Silently launch upon Windows boot.',
+  settingsStartMinimizedTitle: 'START MINIMIZED TO TRAY',
+  settingsStartMinimizedDesc: 'Application starts hidden in the Windows notification tray without opening the window.',
+  settingsAutoDetectTitle: 'AUTO-DETECT & ENROLL NEW HDR GAMES',
+  settingsAutoDetectDesc: 'Automatically detects when you launch any HDR game from the 949+ catalog, adds it to library and activates HDR instantly.',
+  settingsAutoSyncTitle: 'AUTOMATIC DATABASE SYNC (PCGAMINGWIKI)',
+  settingsAutoSyncDesc: 'Periodically synchronizes newly released HDR game titles from PCGamingWiki and matches Steam IDs.',
   settingsNotifTitle: 'WINDOWS NOTIFICATIONS',
   settingsNotifDesc: 'Display subtle native notifications whenever display mode switches.',
   settingsLanguageTitle: 'USER INTERFACE LANGUAGE',

@@ -254,6 +254,72 @@ export const Settings: React.FC<SettingsProps> = ({
 
           <div className="flex items-center justify-between p-3 border border-white/10 bg-black/40">
             <div className="space-y-0.5">
+              <div className="font-bold text-xs text-white">{t.settingsStartMinimizedTitle}</div>
+              <div className="text-[11px] text-[#8a7f81]">
+                {t.settingsStartMinimizedDesc}
+              </div>
+            </div>
+
+            <button
+              onClick={() =>
+                handleSave({ ...config, start_minimized: !config.start_minimized })
+              }
+              className={`px-3 py-1 text-xs font-bold uppercase tracking-wider border cursor-pointer transition-all ${
+                config.start_minimized
+                  ? 'bg-[#f55a6b] text-[#0f0b0b] border-[#f55a6b]'
+                  : 'bg-[#120d0e] text-[#8a7f81] border-[#8a7f81]/30'
+              }`}
+            >
+              {config.start_minimized ? t.settingsStateOn : t.settingsStateOff}
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between p-3 border border-white/10 bg-black/40">
+            <div className="space-y-0.5">
+              <div className="font-bold text-xs text-white">{t.settingsAutoDetectTitle}</div>
+              <div className="text-[11px] text-[#8a7f81]">
+                {t.settingsAutoDetectDesc}
+              </div>
+            </div>
+
+            <button
+              onClick={() =>
+                handleSave({ ...config, auto_detect_new_games: !config.auto_detect_new_games })
+              }
+              className={`px-3 py-1 text-xs font-bold uppercase tracking-wider border cursor-pointer transition-all ${
+                config.auto_detect_new_games
+                  ? 'bg-[#f55a6b] text-[#0f0b0b] border-[#f55a6b]'
+                  : 'bg-[#120d0e] text-[#8a7f81] border-[#8a7f81]/30'
+              }`}
+            >
+              {config.auto_detect_new_games ? t.settingsStateOn : t.settingsStateOff}
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between p-3 border border-white/10 bg-black/40">
+            <div className="space-y-0.5">
+              <div className="font-bold text-xs text-white">{t.settingsAutoSyncTitle}</div>
+              <div className="text-[11px] text-[#8a7f81]">
+                {t.settingsAutoSyncDesc}
+              </div>
+            </div>
+
+            <button
+              onClick={() =>
+                handleSave({ ...config, auto_sync_database: !config.auto_sync_database })
+              }
+              className={`px-3 py-1 text-xs font-bold uppercase tracking-wider border cursor-pointer transition-all ${
+                config.auto_sync_database
+                  ? 'bg-[#f55a6b] text-[#0f0b0b] border-[#f55a6b]'
+                  : 'bg-[#120d0e] text-[#8a7f81] border-[#8a7f81]/30'
+              }`}
+            >
+              {config.auto_sync_database ? t.settingsStateOn : t.settingsStateOff}
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between p-3 border border-white/10 bg-black/40">
+            <div className="space-y-0.5">
               <div className="font-bold text-xs text-white">{t.settingsNotifTitle}</div>
               <div className="text-[11px] text-[#8a7f81]">
                 {t.settingsNotifDesc}

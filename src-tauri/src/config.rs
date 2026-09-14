@@ -35,12 +35,24 @@ pub enum SwitchMethod {
     Shortcut,
 }
 
+fn default_true() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     pub target_monitor: String, // "all" or monitor id
     pub alt_tab_delay_seconds: u64, // e.g. 2 seconds
     pub notifications_enabled: bool,
     pub autostart: bool,
+    #[serde(default)]
+    pub start_minimized: bool,
+    #[serde(default = "default_true")]
+    pub auto_detect_new_games: bool,
+    #[serde(default = "default_true")]
+    pub auto_sync_database: bool,
+    #[serde(default)]
+    pub last_sync_timestamp: Option<u64>,
     pub switch_method: SwitchMethod,
     pub blacklist: Vec<String>, // lowercase exe names to never trigger HDR (e.g. chrome.exe)
     pub apps: Vec<HdrApp>,
@@ -53,6 +65,10 @@ impl Default for AppConfig {
             alt_tab_delay_seconds: 2,
             notifications_enabled: true,
             autostart: false,
+            start_minimized: false,
+            auto_detect_new_games: true,
+            auto_sync_database: true,
+            last_sync_timestamp: None,
             switch_method: SwitchMethod::Native,
             blacklist: vec![
                 "chrome.exe".to_string(),
@@ -195,5 +211,16 @@ impl ConfigManager {
                         .any(|alt| alt.to_lowercase() == exe_lower)
             })
             .cloned()
+    }
+
+    pub fn add_app(&self, app: HdrApp) -> Result<(), String> {
+        {
+            let mut conf = self.config.lock().map_err(|e| e.to_string())?;
+            let exe_lower = app.exe_name.to_lowercase();
+            if !conf.apps.iter().any(|a| a.exe_name.to_lowercase() == exe_lower) {
+                conf.apps.push(app);
+            }
+        }
+        self.save()
     }
 }

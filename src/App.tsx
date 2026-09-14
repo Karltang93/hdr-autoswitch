@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
+import gsap from 'gsap';
 import {
   MonitorInfo,
   AppConfig,
@@ -108,6 +109,9 @@ export default function App() {
     alt_tab_delay_seconds: 2,
     notifications_enabled: true,
     autostart: false,
+    start_minimized: false,
+    auto_detect_new_games: true,
+    auto_sync_database: true,
     switch_method: 'native',
     blacklist: [],
     apps: [],
@@ -274,8 +278,35 @@ export default function App() {
       }
     });
 
+    // Listen for apps updates (e.g. background auto-scan or hook auto-enrollment)
+    const unlistenAppsPromise = listen('apps-updated', () => {
+      refreshConfig();
+    });
+
     return () => {
       unlistenPromise.then((unlisten) => unlisten());
+      unlistenAppsPromise.then((unlisten) => unlisten());
+    };
+  }, []);
+
+  // Zero-overhead GUI Hibernation when minimized or hidden to system tray:
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // App is hidden in system tray or minimized: pause GSAP ticker & animation loops for 0.0% CPU overhead
+        gsap.ticker.sleep();
+      } else {
+        // Window restored / focused from tray: wake up GSAP ticker and refresh state
+        gsap.ticker.wake();
+        refreshMonitors();
+        refreshStatus();
+        refreshConfig();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
 

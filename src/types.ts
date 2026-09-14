@@ -53,6 +53,10 @@ export interface AppConfig {
   alt_tab_delay_seconds: number;
   notifications_enabled: boolean;
   autostart: boolean;
+  start_minimized: boolean;
+  auto_detect_new_games: boolean;
+  auto_sync_database: boolean;
+  last_sync_timestamp?: number;
   switch_method: SwitchMethod;
   blacklist: string[];
   apps: HdrApp[];
