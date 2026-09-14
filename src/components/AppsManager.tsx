@@ -86,7 +86,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
       setShowScanModal(true);
     } catch (err) {
       console.error('Failed to scan installed games:', err);
-      setScanMessage('Chyba při skenování disků.');
+      setScanMessage('Chyba při prohledávání disků.');
     } finally {
       setIsScanning(false);
     }
@@ -106,8 +106,8 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
       const refreshed: AppConfig = await invoke('get_config');
       onUpdateConfig(refreshed);
       setShowScanModal(false);
-      setScanMessage(`Úspěšně přidáno ${addedCount} vybraných her do sledování!`);
-      setTimeout(() => setScanMessage(null), 5000);
+      setScanMessage(`Úspěšně přidáno ${addedCount} her do sledování.`);
+      setTimeout(() => setScanMessage(null), 4000);
     } catch (err) {
       console.error('Failed to import games:', err);
     }
@@ -138,7 +138,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
       setNewExe('');
       setNewType('custom');
     } catch (err) {
-      console.error('Failed to add app:', err);
+      console.error('Failed to add custom app:', err);
     }
   };
 
@@ -149,93 +149,96 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
   );
 
   return (
-    <div className="space-y-5 animate-fadeIn">
-      {/* Actions and Search Header */}
+    <div className="space-y-4">
+      {/* Top Action Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        {/* Search Field */}
         <div className="relative flex-1">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Hledat v mých nainstalovaných hrách..."
+            placeholder="Hledat v mých sledovaných hrách..."
             className={`w-full pl-9 pr-4 py-2 text-xs md:text-sm rounded-xl border transition-all ${
               isDark
-                ? 'bg-[#0b0f19]/80 border-white/[0.08] focus:border-cyan-500/50 text-white placeholder-slate-500'
-                : 'bg-white border-slate-200 focus:border-cyan-500 text-slate-900 placeholder-slate-400'
+                ? 'bg-[#0c0f18]/80 border-white/[0.08] focus:border-sky-500/50 text-white placeholder-slate-500'
+                : 'bg-white border-slate-200 focus:border-sky-500 text-slate-900 placeholder-slate-400 shadow-sm'
             }`}
           />
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+        {/* Buttons Group */}
+        <div className="flex items-center gap-2">
           <button
             onClick={handleStartScan}
             disabled={isScanning}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-mono font-bold shadow-md shadow-cyan-600/20 cursor-pointer transition-all disabled:opacity-50 hover:scale-105"
-            title="Prohledá Steam, Epic Games, EA, Ubisoft i registry"
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-semibold text-xs transition-all shadow-sm cursor-pointer disabled:opacity-50"
           >
-            <ScanSearch className={`w-3.5 h-3.5 ${isScanning ? 'animate-spin text-cyan-200' : ''}`} />
-            {isScanning ? 'SKENUJI PC...' : 'SKENOVAT HRY V PC'}
+            <ScanSearch className={`w-3.5 h-3.5 ${isScanning ? 'animate-spin' : ''}`} />
+            <span>{isScanning ? 'Prohledávám disky...' : 'Skenovat hry v PC'}</span>
           </button>
 
           <button
             onClick={() => setShowAddModal(true)}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-mono font-semibold cursor-pointer transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-medium cursor-pointer transition-colors ${
               isDark
-                ? 'border-white/10 hover:bg-white/5 text-slate-300 hover:border-cyan-500/30'
-                : 'border-slate-300 hover:bg-slate-100 text-slate-700'
+                ? 'border-white/[0.08] hover:bg-white/[0.04] text-slate-300'
+                : 'border-slate-200 hover:bg-slate-100 text-slate-700 shadow-sm'
             }`}
           >
-            <Plus className="w-4 h-4 text-cyan-400" /> PŘIDAT RUČNĚ
+            <Plus className="w-3.5 h-3.5 text-sky-400" />
+            <span>Přidat ručně</span>
           </button>
 
           <button
             onClick={onNavigateToCatalog}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-mono font-semibold cursor-pointer transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-medium cursor-pointer transition-colors ${
               isDark
-                ? 'border-white/10 hover:bg-white/5 text-purple-300 hover:border-purple-500/30'
-                : 'border-slate-300 hover:bg-slate-100 text-purple-700'
+                ? 'border-white/[0.08] hover:bg-white/[0.04] text-slate-300'
+                : 'border-slate-200 hover:bg-slate-100 text-slate-700 shadow-sm'
             }`}
           >
-            <Compass className="w-4 h-4 text-purple-400" /> KATALOG
+            <Compass className="w-3.5 h-3.5 text-purple-400" />
+            <span>Katalog</span>
           </button>
         </div>
       </div>
 
       {scanMessage && (
-        <div className="p-3 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-xs flex items-center gap-2">
-          <Sparkles className="w-4 h-4 shrink-0" />
+        <div className="p-3 rounded-xl bg-sky-500/10 border border-sky-500/20 text-sky-300 text-xs flex items-center gap-2">
+          <Sparkles className="w-4 h-4 shrink-0 text-sky-400" />
           <span>{scanMessage}</span>
         </div>
       )}
 
-      {/* Installed Apps List */}
+      {/* Installed Games List */}
       <div
-        className={`rounded-2xl border overflow-hidden glass-panel corner-brackets ${
-          isDark ? 'bg-[#090d16]/80 border-white/[0.08]' : 'bg-white/70 border-slate-200'
+        className={`rounded-2xl border overflow-hidden glass-panel ${
+          isDark ? 'bg-[#0c0f18]/80 border-white/[0.07]' : 'bg-white/80 border-slate-200 shadow-sm'
         }`}
       >
-        <div className="divide-y divide-white/5 max-h-[480px] overflow-y-auto">
+        <div className="divide-y divide-white/[0.04] max-h-[500px] overflow-y-auto">
           {filteredApps.length === 0 ? (
             <div className="p-10 text-center space-y-3">
-              <div className="text-slate-500 text-sm font-medium">
+              <div className="text-slate-400 text-sm">
                 {search
-                  ? 'Nenalezena žádná aplikace odpovídající hledání.'
-                  : 'Zatím zde nemáte žádné přidané aplikace.'}
+                  ? 'Nenalezena žádná hra odpovídající hledání.'
+                  : 'Zatím zde nemáte žádné přidané hry.'}
               </div>
               {!search && (
                 <div className="flex items-center justify-center gap-3">
                   <button
                     onClick={handleStartScan}
-                    className="px-4 py-2 rounded-xl text-xs font-semibold bg-cyan-600 hover:bg-cyan-700 text-white cursor-pointer shadow-md"
+                    className="px-4 py-2 rounded-xl text-xs font-semibold bg-sky-500 hover:bg-sky-400 text-slate-950 cursor-pointer shadow-sm"
                   >
-                    🔍 Skenovat hry na disku
+                    🔍 Skenovat hry na discích
                   </button>
                   <button
                     onClick={onNavigateToCatalog}
-                    className="px-4 py-2 rounded-xl text-xs font-semibold border border-white/10 hover:bg-white/5 text-slate-300 cursor-pointer"
+                    className="px-4 py-2 rounded-xl text-xs font-medium border border-white/[0.08] hover:bg-white/[0.04] text-slate-300 cursor-pointer"
                   >
-                    📚 Procházet databázi her
+                    Procházet databázi her
                   </button>
                 </div>
               )}
@@ -245,13 +248,13 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
               <div
                 key={app.exe_name}
                 className={`p-3.5 flex items-center justify-between gap-4 transition-colors ${
-                  isDark ? 'hover:bg-white/[0.02]' : 'hover:bg-slate-50/50'
+                  isDark ? 'hover:bg-white/[0.02]' : 'hover:bg-slate-50/70'
                 }`}
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <button
                     onClick={() => handleToggleApp(app.exe_name, !app.enabled)}
-                    className="cursor-pointer"
+                    className="cursor-pointer shrink-0"
                     title={app.enabled ? 'Sledování aktivní' : 'Sledování pozastaveno'}
                   >
                     {app.enabled ? (
@@ -265,32 +268,34 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                     <div className="flex items-center gap-2 flex-wrap">
                       <h4
                         className={`text-sm font-semibold truncate ${
-                          app.enabled ? '' : 'text-slate-500 line-through'
+                          app.enabled ? 'text-slate-100' : 'text-slate-500 line-through'
                         }`}
                       >
                         {app.name}
                       </h4>
+
                       {app.path && (
                         <span
-                          className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono truncate max-w-[250px]"
+                          className="text-[10px] px-2 py-0.2 rounded-md bg-sky-500/10 text-sky-300 border border-sky-500/20 font-medium truncate max-w-[250px]"
                           title={app.path}
                         >
                           Nainstalováno
                         </span>
                       )}
+
+                      {/* Clean compact badge with tooltip instead of multi-line text dump */}
                       {app.alternate_exes && app.alternate_exes.length > 0 && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20 font-mono">
-                          +{app.alternate_exes.length} procesy
+                        <span
+                          className="text-[10px] px-2 py-0.2 rounded-md bg-purple-500/10 text-purple-300 border border-purple-500/20 font-mono cursor-help"
+                          title={`Alternativní spustitelné soubory:\n${app.alternate_exes.join('\n')}`}
+                        >
+                          +{app.alternate_exes.length} procesů
                         </span>
                       )}
                     </div>
+
                     <div className="flex items-center gap-2 text-xs text-slate-400 font-mono mt-0.5">
                       <span>{app.exe_name}</span>
-                      {app.alternate_exes && app.alternate_exes.length > 0 && (
-                        <span className="text-[11px] text-slate-500">
-                          (alt: {app.alternate_exes.join(', ')})
-                        </span>
-                      )}
                     </div>
                   </div>
                 </div>
@@ -303,7 +308,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                       onChange={(e) => handleToggleApp(app.exe_name, e.target.checked)}
                       className="sr-only peer"
                     />
-                    <div className="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-cyan-500"></div>
+                    <div className="w-9 h-5 bg-slate-700/80 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-sky-500"></div>
                   </label>
 
                   <button
@@ -322,107 +327,100 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
 
       {/* Interactive Scan Review Modal */}
       {showScanModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fadeIn">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn">
           <div
-            className={`w-full max-w-lg rounded-2xl p-6 border glass-panel shadow-2xl flex flex-col max-h-[80vh] corner-brackets ${
+            className={`w-full max-w-lg rounded-2xl p-6 border glass-panel shadow-2xl flex flex-col max-h-[82vh] ${
               isDark
-                ? 'bg-[#0b0f19] border-white/10 text-white'
+                ? 'bg-[#0c0f18] border-white/10 text-white'
                 : 'bg-white border-slate-200 text-slate-900'
             }`}
           >
-            <div className="flex items-center gap-2 mb-1">
-              <ScanSearch className="w-5 h-5 text-cyan-400" />
-              <h3 className="text-lg font-bold">Nalezené HDR hry v počítači</h3>
+            <div className="flex items-center gap-2.5 mb-1">
+              <ScanSearch className="w-5 h-5 text-sky-400" />
+              <h3 className="text-base font-bold">Nalezené HDR hry v počítači</h3>
             </div>
-            <p className="text-xs text-slate-400">
-              Prohledali jsme Steam, Epic Games, EA, Ubisoft i systémové registry. Vyberte hry, které chcete automaticky sledovat pro přepínání HDR.
+            <p className="text-xs text-slate-400 mb-3">
+              Nalezli jsme následující nainstalované hry s podporou HDR. Vyberte, které chcete automaticky sledovat.
             </p>
 
-            <div className="my-4 divide-y divide-white/5 overflow-y-auto flex-1 pr-1">
+            <div className="my-2 divide-y divide-white/[0.04] overflow-y-auto flex-1 pr-1 border rounded-xl border-white/[0.06] p-1">
               {scannedGames.length === 0 ? (
                 <div className="py-8 text-center text-slate-500 text-sm">
-                  Nebyly nalezeny žádné podporované hry na discích.
+                  Nebyly nalezeny žádné nové podporované hry na discích.
                 </div>
               ) : (
                 scannedGames.map((game) => {
                   const isChecked = !!selectedToImport[game.exe_name];
                   const alreadyInApps = config.apps.some(
                     (a) =>
-                      a.name.toLowerCase() === game.name.toLowerCase() ||
-                      a.exe_name.toLowerCase() === game.exe_name.toLowerCase()
+                      a.exe_name.toLowerCase() === game.exe_name.toLowerCase() ||
+                      a.name.toLowerCase() === game.name.toLowerCase()
                   );
 
                   return (
-                    <div
+                    <label
                       key={game.exe_name}
-                      onClick={() =>
-                        setSelectedToImport((prev) => ({
-                          ...prev,
-                          [game.exe_name]: !prev[game.exe_name],
-                        }))
-                      }
-                      className={`p-3 flex items-center justify-between gap-3 cursor-pointer rounded-xl transition-colors ${
-                        isDark ? 'hover:bg-white/5' : 'hover:bg-slate-100'
+                      className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors ${
+                        alreadyInApps
+                          ? 'opacity-60 bg-white/[0.01]'
+                          : isDark
+                          ? 'hover:bg-white/[0.03]'
+                          : 'hover:bg-slate-50'
                       }`}
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <input
                           type="checkbox"
                           checked={isChecked}
-                          onChange={() => {}}
-                          className="w-4 h-4 rounded text-cyan-600 focus:ring-cyan-500 cursor-pointer"
+                          disabled={alreadyInApps}
+                          onChange={(e) =>
+                            setSelectedToImport({
+                              ...selectedToImport,
+                              [game.exe_name]: e.target.checked,
+                            })
+                          }
+                          className="w-4 h-4 rounded text-sky-500 border-slate-600 focus:ring-sky-500 focus:ring-offset-0 cursor-pointer"
                         />
                         <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-sm truncate">
-                              {game.name}
-                            </span>
+                          <div className="font-semibold text-xs truncate flex items-center gap-2">
+                            <span>{game.name}</span>
                             {alreadyInApps && (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
-                                Již v mých hrách
+                              <span className="text-[10px] text-emerald-400">
+                                (již přidáno)
                               </span>
                             )}
                           </div>
-                          <p className="text-xs text-slate-400 font-mono truncate">
+                          <div className="text-[11px] text-slate-400 font-mono">
                             {game.exe_name}
-                          </p>
+                          </div>
                         </div>
                       </div>
-
-                      <Gamepad2 className="w-4 h-4 text-slate-500 shrink-0" />
-                    </div>
+                    </label>
                   );
                 })
               )}
             </div>
 
-            <div className="flex items-center justify-between pt-3 border-t border-white/10">
-              <div className="text-xs text-slate-400">
+            <div className="flex items-center justify-between mt-4 pt-3 border-t border-white/[0.06]">
+              <span className="text-xs text-slate-400">
                 Vybráno:{' '}
-                <strong className="text-cyan-400">
+                <strong className="text-sky-400">
                   {Object.values(selectedToImport).filter(Boolean).length}
-                </strong>{' '}
-                her
-              </div>
+                </strong>
+              </span>
 
               <div className="flex items-center gap-2">
                 <button
-                  type="button"
                   onClick={() => setShowScanModal(false)}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-semibold cursor-pointer border ${
-                    isDark
-                      ? 'border-white/10 hover:bg-white/5 text-slate-300'
-                      : 'border-slate-300 hover:bg-slate-100 text-slate-700'
-                  }`}
+                  className="px-3.5 py-1.5 rounded-xl border border-white/[0.08] hover:bg-white/[0.04] text-slate-300 text-xs cursor-pointer"
                 >
-                  Zavřít
+                  Zrušit
                 </button>
                 <button
-                  type="button"
                   onClick={handleConfirmImport}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-cyan-600 hover:bg-cyan-700 text-white shadow-md shadow-cyan-600/20 cursor-pointer"
+                  className="px-4 py-1.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-semibold text-xs cursor-pointer shadow-sm"
                 >
-                  Přidat vybrané hry
+                  Přidat do mých her
                 </button>
               </div>
             </div>
@@ -430,25 +428,26 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
         </div>
       )}
 
-      {/* Add Custom App Modal */}
+      {/* Manual Add Custom App Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-          <div
-            className={`w-full max-w-md rounded-2xl p-6 border glass-panel shadow-2xl corner-brackets ${
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn">
+          <form
+            onSubmit={handleAddCustomApp}
+            className={`w-full max-w-md rounded-2xl p-6 border glass-panel shadow-2xl space-y-4 ${
               isDark
-                ? 'bg-[#0b0f19] border-white/10 text-white'
+                ? 'bg-[#0c0f18] border-white/10 text-white'
                 : 'bg-white border-slate-200 text-slate-900'
             }`}
           >
-            <h3 className="text-lg font-bold">Přidat vlastní HDR aplikaci</h3>
-            <p className="text-xs text-slate-400 mt-1">
-              Zadejte název hry a název spustitelného souboru (.exe).
-            </p>
+            <div className="flex items-center gap-2">
+              <Gamepad2 className="w-5 h-5 text-sky-400" />
+              <h3 className="text-base font-bold">Přidat hru nebo aplikaci ručně</h3>
+            </div>
 
-            <form onSubmit={handleAddCustomApp} className="mt-4 space-y-4">
+            <div className="space-y-3">
               <div>
-                <label className="text-xs font-semibold block mb-1">
-                  Název hry / aplikace:
+                <label className="block text-xs font-medium text-slate-400 mb-1">
+                  Název aplikace / hry
                 </label>
                 <input
                   type="text"
@@ -456,17 +455,17 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                   placeholder="např. Cyberpunk 2077"
-                  className={`w-full px-3 py-2 text-sm rounded-xl border ${
+                  className={`w-full px-3 py-2 text-xs rounded-xl border ${
                     isDark
-                      ? 'bg-slate-800 border-white/10 text-white'
-                      : 'bg-slate-50 border-slate-300 text-slate-900'
+                      ? 'bg-white/[0.03] border-white/10 text-white'
+                      : 'bg-white border-slate-300 text-slate-900'
                   }`}
                 />
               </div>
 
               <div>
-                <label className="text-xs font-semibold block mb-1">
-                  Název .exe souboru:
+                <label className="block text-xs font-medium text-slate-400 mb-1">
+                  Název spustitelného souboru (.exe)
                 </label>
                 <input
                   type="text"
@@ -474,53 +473,50 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                   value={newExe}
                   onChange={(e) => setNewExe(e.target.value)}
                   placeholder="např. Cyberpunk2077.exe"
-                  className={`w-full px-3 py-2 text-sm rounded-xl font-mono border ${
+                  className={`w-full px-3 py-2 text-xs rounded-xl border font-mono ${
                     isDark
-                      ? 'bg-slate-800 border-white/10 text-white'
-                      : 'bg-slate-50 border-slate-300 text-slate-900'
+                      ? 'bg-white/[0.03] border-white/10 text-white'
+                      : 'bg-white border-slate-300 text-slate-900'
                   }`}
                 />
               </div>
 
               <div>
-                <label className="text-xs font-semibold block mb-1">Typ HDR:</label>
+                <label className="block text-xs font-medium text-slate-400 mb-1">
+                  Typ HDR
+                </label>
                 <select
                   value={newType}
                   onChange={(e) => setNewType(e.target.value as HdrType)}
-                  className={`w-full px-3 py-2 text-sm rounded-xl border ${
+                  className={`w-full px-3 py-2 text-xs rounded-xl border ${
                     isDark
-                      ? 'bg-slate-800 border-white/10 text-white'
-                      : 'bg-slate-50 border-slate-300 text-slate-900'
+                      ? 'bg-slate-900 border-white/10 text-white'
+                      : 'bg-white border-slate-300 text-slate-900'
                   }`}
                 >
                   <option value="native">Nativní HDR</option>
                   <option value="autohdr">Windows Auto HDR</option>
-                  <option value="media">Přehrávač videa</option>
-                  <option value="custom">Vlastní pravidlo</option>
+                  <option value="custom">Vlastní konfigurace</option>
                 </select>
               </div>
+            </div>
 
-              <div className="flex items-center justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className={`px-4 py-2 rounded-xl text-xs font-semibold cursor-pointer border ${
-                    isDark
-                      ? 'border-white/10 hover:bg-white/5 text-slate-300'
-                      : 'border-slate-300 hover:bg-slate-100 text-slate-700'
-                  }`}
-                >
-                  Zrušit
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-cyan-600 hover:bg-cyan-700 text-white shadow-md shadow-cyan-600/20 cursor-pointer"
-                >
-                  Uložit aplikaci
-                </button>
-              </div>
-            </form>
-          </div>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowAddModal(false)}
+                className="px-3.5 py-1.5 rounded-xl border border-white/[0.08] hover:bg-white/[0.04] text-slate-300 text-xs cursor-pointer"
+              >
+                Zrušit
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-1.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-semibold text-xs cursor-pointer shadow-sm"
+              >
+                Uložit hru
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </div>

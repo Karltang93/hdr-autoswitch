@@ -202,6 +202,12 @@ pub fn run() {
                 eprintln!("Tray setup error: {}", e);
             }
 
+            // Ensure custom diamond logo icon for main window
+            if let Some(window) = app.get_webview_window("main") {
+                let icon = tauri::include_image!("icons/128x128.png");
+                let _ = window.set_icon(icon);
+            }
+
             app.manage(AppState {
                 config_mgr,
                 monitor_service,
