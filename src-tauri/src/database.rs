@@ -30,12 +30,29 @@ pub fn get_full_catalog() -> Vec<CatalogEntry> {
         }
     }
 
+    let embedded: Vec<CatalogEntry> = serde_json::from_str(EMBEDDED_CATALOG_JSON).unwrap_or_default();
+
     // Try reading cache on disk
     let cache_file = get_cache_path();
     if cache_file.exists() {
         if let Ok(content) = fs::read_to_string(&cache_file) {
-            if let Ok(entries) = serde_json::from_str::<Vec<CatalogEntry>>(&content) {
+            if let Ok(mut entries) = serde_json::from_str::<Vec<CatalogEntry>>(&content) {
                 if !entries.is_empty() {
+                    // Verify if cache has autohdr entries. If cache has 0 autohdr entries (e.g. from an older sync), merge them from embedded!
+                    let has_autohdr = entries.iter().any(|e| e.support_tier == "autohdr");
+                    if !has_autohdr {
+                        let mut map: HashMap<String, CatalogEntry> = entries
+                            .into_iter()
+                            .map(|e| (clean_key(&e.name), e))
+                            .collect();
+                        for emb in &embedded {
+                            map.entry(clean_key(&emb.name)).or_insert_with(|| emb.clone());
+                        }
+                        entries = map.into_values().collect();
+                        entries.sort_by(|a, b| a.name.cmp(&b.name));
+                        save_to_cache(&entries);
+                    }
+
                     if let Ok(mut write_guard) = CACHED_CATALOG.write() {
                         *write_guard = Some(entries.clone());
                     }
@@ -46,11 +63,10 @@ pub fn get_full_catalog() -> Vec<CatalogEntry> {
     }
 
     // Fallback to embedded catalog
-    let entries: Vec<CatalogEntry> = serde_json::from_str(EMBEDDED_CATALOG_JSON).unwrap_or_default();
     if let Ok(mut write_guard) = CACHED_CATALOG.write() {
-        *write_guard = Some(entries.clone());
+        *write_guard = Some(embedded.clone());
     }
-    entries
+    embedded
 }
 
 pub fn save_to_cache(entries: &[CatalogEntry]) {
@@ -93,7 +109,7 @@ pub async fn fetch_online_database() -> Result<Vec<CatalogEntry>, String> {
         .build()
         .map_err(|e| e.to_string())?;
 
-    // 1. Try PCGamingWiki MediaWiki Cargo Query directly
+    // 1. Try PCGamingWiki MediaWiki Cargo Query for HDR games
     let mut pcgw_fetched = Vec::new();
     for offset in [0, 500] {
         let cargo_query = format!(
@@ -158,8 +174,37 @@ pub async fn fetch_online_database() -> Result<Vec<CatalogEntry>, String> {
                     }
                 });
         }
-    } else {
-        // Fallback: Try GitHub repository raw JSON
+    }
+
+    // 2. Fetch PCGamingWiki Windows Auto HDR games page
+    let autohdr_params = [
+        ("action", "parse"),
+        ("page", "List_of_games_that_support_Auto_HDR"),
+        ("prop", "wikitext"),
+        ("format", "json"),
+    ];
+
+    if let Ok(res) = client
+        .post("https://www.pcgamingwiki.com/w/api.php")
+        .header(
+            "User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        )
+        .form(&autohdr_params)
+        .send()
+        .await
+    {
+        if res.status().is_success() {
+            if let Ok(json_data) = res.json::<serde_json::Value>().await {
+                if let Some(wikitext) = json_data.pointer("/parse/wikitext/*").and_then(|v| v.as_str()) {
+                    parse_pcgw_autohdr_wikitext(wikitext, &mut catalog_map);
+                }
+            }
+        }
+    }
+
+    // 3. Fallback: If both failed, try GitHub repository raw JSON
+    if catalog_map.len() < 200 {
         let gh_url = "https://raw.githubusercontent.com/Soptik1290/hdr-autoswitch/main/database/hdr_games.json";
         if let Ok(res) = client
             .get(gh_url)
@@ -220,5 +265,41 @@ fn parse_pcgw_table_html(html: &str, out: &mut Vec<(String, String)>) {
             }
         }
         rest = after_name;
+    }
+}
+
+fn parse_pcgw_autohdr_wikitext(wikitext: &str, map: &mut HashMap<String, CatalogEntry>) {
+    for line in wikitext.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('|') && trimmed.contains("[[") && trimmed.contains("]]") {
+            if let Some(start_bracket) = trimmed.find("[[") {
+                if let Some(end_bracket) = trimmed[start_bracket..].find("]]") {
+                    let inside = &trimmed[start_bracket + 2..start_bracket + end_bracket];
+                    let game_name = if let Some(pipe_pos) = inside.find('|') {
+                        &inside[pipe_pos + 1..]
+                    } else {
+                        inside
+                    }
+                    .trim();
+
+                    if !game_name.is_empty() && !game_name.starts_with("File:") {
+                        let key = clean_key(game_name);
+                        let clean_exe = game_name
+                            .to_lowercase()
+                            .chars()
+                            .filter(|c| c.is_alphanumeric())
+                            .collect::<String>();
+
+                        map.entry(key).or_insert_with(|| CatalogEntry {
+                            name: game_name.to_string(),
+                            exe_name: format!("{}.exe", clean_exe),
+                            hdr_type: HdrType::AutoHdr,
+                            support_tier: "autohdr".to_string(),
+                            notes: Some("Podporuje Microsoft Windows Auto HDR".to_string()),
+                        });
+                    }
+                }
+            }
+        }
     }
 }

@@ -93,8 +93,8 @@ export const Settings: React.FC<SettingsProps> = ({
 
       {/* Target Monitor */}
       <div
-        className={`p-5 rounded-2xl border glass-panel space-y-3 ${
-          isDark ? 'bg-slate-900/60 border-white/10' : 'bg-white/70 border-slate-200'
+        className={`p-5 rounded-2xl border glass-panel corner-brackets space-y-3 ${
+          isDark ? 'bg-[#0b0f19]/80 border-white/[0.08]' : 'bg-white/70 border-slate-200'
         }`}
       >
         <div className="flex items-center gap-2">
@@ -129,8 +129,8 @@ export const Settings: React.FC<SettingsProps> = ({
 
       {/* Alt+Tab Delay Debounce */}
       <div
-        className={`p-5 rounded-2xl border glass-panel space-y-3 ${
-          isDark ? 'bg-slate-900/60 border-white/10' : 'bg-white/70 border-slate-200'
+        className={`p-5 rounded-2xl border glass-panel corner-brackets space-y-3 ${
+          isDark ? 'bg-[#0b0f19]/80 border-white/[0.08]' : 'bg-white/70 border-slate-200'
         }`}
       >
         <div className="flex items-center gap-2">
@@ -159,10 +159,10 @@ export const Settings: React.FC<SettingsProps> = ({
               }
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer border transition-all ${
                 config.alt_tab_delay_seconds === item.val
-                  ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/40'
+                  ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/40 font-mono shadow-[0_0_10px_rgba(6,182,212,0.2)]'
                   : isDark
-                  ? 'border-white/10 hover:bg-white/5 text-slate-400'
-                  : 'border-slate-200 hover:bg-slate-100 text-slate-700'
+                  ? 'border-white/10 hover:bg-white/5 text-slate-400 font-mono'
+                  : 'border-slate-200 hover:bg-slate-100 text-slate-700 font-mono'
               }`}
             >
               {item.label}
@@ -173,8 +173,8 @@ export const Settings: React.FC<SettingsProps> = ({
 
       {/* Toggles: Autostart & Notifications */}
       <div
-        className={`p-5 rounded-2xl border glass-panel space-y-4 ${
-          isDark ? 'bg-slate-900/60 border-white/10' : 'bg-white/70 border-slate-200'
+        className={`p-5 rounded-2xl border glass-panel corner-brackets space-y-4 ${
+          isDark ? 'bg-[#0b0f19]/80 border-white/[0.08]' : 'bg-white/70 border-slate-200'
         }`}
       >
         <div className="flex items-center justify-between">
@@ -226,8 +226,8 @@ export const Settings: React.FC<SettingsProps> = ({
 
       {/* Switch Method */}
       <div
-        className={`p-5 rounded-2xl border glass-panel space-y-3 ${
-          isDark ? 'bg-slate-900/60 border-white/10' : 'bg-white/70 border-slate-200'
+        className={`p-5 rounded-2xl border glass-panel corner-brackets space-y-3 ${
+          isDark ? 'bg-[#0b0f19]/80 border-white/[0.08]' : 'bg-white/70 border-slate-200'
         }`}
       >
         <div className="flex items-center gap-2">
@@ -253,8 +253,8 @@ export const Settings: React.FC<SettingsProps> = ({
           >
             <div className="font-semibold text-xs flex items-center justify-between">
               <span>Nativní Win32 API</span>
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400">
-                Doporučeno
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400">
+                RECOMMENDED
               </span>
             </div>
             <p className="text-[11px] text-slate-400 mt-1">
@@ -282,8 +282,8 @@ export const Settings: React.FC<SettingsProps> = ({
 
       {/* Blacklist / Exclusions */}
       <div
-        className={`p-5 rounded-2xl border glass-panel space-y-3 ${
-          isDark ? 'bg-slate-900/60 border-white/10' : 'bg-white/70 border-slate-200'
+        className={`p-5 rounded-2xl border glass-panel corner-brackets space-y-3 ${
+          isDark ? 'bg-[#0b0f19]/80 border-white/[0.08]' : 'bg-white/70 border-slate-200'
         }`}
       >
         <div className="flex items-center gap-2">

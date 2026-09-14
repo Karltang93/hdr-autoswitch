@@ -159,9 +159,9 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Hledat v mých nainstalovaných hrách..."
-            className={`w-full pl-9 pr-4 py-2 text-sm rounded-xl border transition-all ${
+            className={`w-full pl-9 pr-4 py-2 text-xs md:text-sm rounded-xl border transition-all ${
               isDark
-                ? 'bg-slate-900/60 border-white/10 focus:border-cyan-500 text-white placeholder-slate-500'
+                ? 'bg-[#0b0f19]/80 border-white/[0.08] focus:border-cyan-500/50 text-white placeholder-slate-500'
                 : 'bg-white border-slate-200 focus:border-cyan-500 text-slate-900 placeholder-slate-400'
             }`}
           />
@@ -171,33 +171,33 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
           <button
             onClick={handleStartScan}
             disabled={isScanning}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-semibold shadow-md shadow-cyan-600/20 cursor-pointer transition-all disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-mono font-bold shadow-md shadow-cyan-600/20 cursor-pointer transition-all disabled:opacity-50 hover:scale-105"
             title="Prohledá Steam, Epic Games, EA, Ubisoft i registry"
           >
-            <ScanSearch className={`w-3.5 h-3.5 ${isScanning ? 'animate-spin' : ''}`} />
-            {isScanning ? 'Skenuji PC...' : 'Skenovat nainstalované hry'}
+            <ScanSearch className={`w-3.5 h-3.5 ${isScanning ? 'animate-spin text-cyan-200' : ''}`} />
+            {isScanning ? 'SKENUJI PC...' : 'SKENOVAT HRY V PC'}
           </button>
 
           <button
             onClick={() => setShowAddModal(true)}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-semibold cursor-pointer transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-mono font-semibold cursor-pointer transition-all ${
               isDark
-                ? 'border-white/10 hover:bg-white/5 text-slate-300'
+                ? 'border-white/10 hover:bg-white/5 text-slate-300 hover:border-cyan-500/30'
                 : 'border-slate-300 hover:bg-slate-100 text-slate-700'
             }`}
           >
-            <Plus className="w-4 h-4" /> Přidat ručně
+            <Plus className="w-4 h-4 text-cyan-400" /> PŘIDAT RUČNĚ
           </button>
 
           <button
             onClick={onNavigateToCatalog}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-semibold cursor-pointer transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-mono font-semibold cursor-pointer transition-all ${
               isDark
-                ? 'border-white/10 hover:bg-white/5 text-purple-400'
+                ? 'border-white/10 hover:bg-white/5 text-purple-300 hover:border-purple-500/30'
                 : 'border-slate-300 hover:bg-slate-100 text-purple-700'
             }`}
           >
-            <Compass className="w-4 h-4" /> Databáze her
+            <Compass className="w-4 h-4 text-purple-400" /> KATALOG
           </button>
         </div>
       </div>
@@ -211,8 +211,8 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
 
       {/* Installed Apps List */}
       <div
-        className={`rounded-2xl border overflow-hidden glass-panel ${
-          isDark ? 'bg-slate-900/60 border-white/10' : 'bg-white/70 border-slate-200'
+        className={`rounded-2xl border overflow-hidden glass-panel corner-brackets ${
+          isDark ? 'bg-[#090d16]/80 border-white/[0.08]' : 'bg-white/70 border-slate-200'
         }`}
       >
         <div className="divide-y divide-white/5 max-h-[480px] overflow-y-auto">
@@ -324,9 +324,9 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
       {showScanModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fadeIn">
           <div
-            className={`w-full max-w-lg rounded-2xl p-6 border glass-panel shadow-2xl flex flex-col max-h-[80vh] ${
+            className={`w-full max-w-lg rounded-2xl p-6 border glass-panel shadow-2xl flex flex-col max-h-[80vh] corner-brackets ${
               isDark
-                ? 'bg-slate-900 border-white/10 text-white'
+                ? 'bg-[#0b0f19] border-white/10 text-white'
                 : 'bg-white border-slate-200 text-slate-900'
             }`}
           >
@@ -434,9 +434,9 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
           <div
-            className={`w-full max-w-md rounded-2xl p-6 border glass-panel shadow-2xl ${
+            className={`w-full max-w-md rounded-2xl p-6 border glass-panel shadow-2xl corner-brackets ${
               isDark
-                ? 'bg-slate-900 border-white/10 text-white'
+                ? 'bg-[#0b0f19] border-white/10 text-white'
                 : 'bg-white border-slate-200 text-slate-900'
             }`}
           >
