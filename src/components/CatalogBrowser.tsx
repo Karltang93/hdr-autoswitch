@@ -186,12 +186,12 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
       <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
         {[
           { id: 'all', label: `Vše (${catalog.length})` },
-          { id: 'native', label: 'Nativní podpora' },
-          { id: 'limited', label: 'Omezená podpora' },
-          { id: 'always_on', label: 'Vždy zapnuto' },
-          { id: 'manual_fix', label: 'Vyžaduje úpravu' },
-          { id: 'autohdr', label: 'Auto HDR' },
-          { id: 'media', label: 'Média' },
+          { id: 'native', label: `Nativní HDR (${catalog.filter((c) => c.support_tier === 'native').length})` },
+          { id: 'limited', label: `Omezené (${catalog.filter((c) => c.support_tier === 'limited').length})` },
+          { id: 'always_on', label: `Vždy zapnuto (${catalog.filter((c) => c.support_tier === 'always_on').length})` },
+          { id: 'manual_fix', label: `Vyžaduje fix (${catalog.filter((c) => c.support_tier === 'manual_fix').length})` },
+          { id: 'autohdr', label: `Auto HDR (${catalog.filter((c) => c.support_tier === 'autohdr').length})` },
+          { id: 'media', label: `Média (${catalog.filter((c) => c.support_tier === 'media').length})` },
         ].map((tier) => (
           <button
             key={tier.id}
@@ -229,7 +229,7 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
 
               return (
                 <div
-                  key={item.exe_name}
+                  key={`${item.name}-${item.exe_name}`}
                   className={`p-3.5 flex items-center justify-between gap-4 transition-colors ${
                     isDark ? 'hover:bg-white/[0.02]' : 'hover:bg-slate-50/50'
                   }`}

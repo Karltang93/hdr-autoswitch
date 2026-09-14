@@ -1,5 +1,9 @@
 use crate::config::{HdrApp, HdrType};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::fs;
+use std::path::PathBuf;
+use std::sync::RwLock;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CatalogEntry {
@@ -10,166 +14,56 @@ pub struct CatalogEntry {
     pub notes: Option<String>,
 }
 
+static EMBEDDED_CATALOG_JSON: &str = include_str!("../catalog.json");
+
+static CACHED_CATALOG: RwLock<Option<Vec<CatalogEntry>>> = RwLock::new(None);
+
+fn get_cache_path() -> PathBuf {
+    let app_data = std::env::var("APPDATA").unwrap_or_else(|_| ".".to_string());
+    PathBuf::from(app_data).join("HDRAutoSwitch").join("catalog_cache.json")
+}
+
 pub fn get_full_catalog() -> Vec<CatalogEntry> {
-    let raw = vec![
-        ("Forza Horizon 6", "forzahorizon6.exe", HdrType::Native, "native", "Nativní podpora HDR"),
-        ("Battlefield 6", "bf6.exe", HdrType::Native, "native", "Nativní podpora HDR"),
-        ("Dead Island 2", "deadisland.exe", HdrType::Native, "native", "Nativní podpora HDR"),
-        ("Indiana Jones and the Great Circle", "indianajones.exe", HdrType::Native, "native", "Nativní podpora HDR"),
-        ("The Finals", "discovery.exe", HdrType::Native, "native", "Nativní Unreal Engine 5 HDR"),
-        ("Enshrouded", "enshrouded.exe", HdrType::Native, "native", "Nativní HDR podpora"),
-        ("Cyberpunk 2077", "cyberpunk2077.exe", HdrType::Native, "native", "Plná nativní HDR podpora"),
-        ("Elden Ring", "eldenring.exe", HdrType::Native, "native", "Nativní podpora HDR10"),
-        ("Alan Wake 2", "alanwake2.exe", HdrType::Native, "native", "Špičková nativní HDR kalibrace"),
-        ("Baldur's Gate 3", "bg3.exe", HdrType::Native, "native", "Nativní HDR (Vulkan & DX11)"),
-        ("Baldur's Gate 3 (DX11)", "bg3_dx11.exe", HdrType::Native, "native", "Nativní HDR"),
-        ("Black Myth: Wukong", "b1-win64-shipping.exe", HdrType::Native, "native", "Nativní Unreal Engine 5 HDR"),
-        ("God of War", "gow.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("God of War Ragnarok", "gowr.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Horizon Zero Dawn", "horizonzerodawn.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Horizon Forbidden West", "horizonforbiddenwest.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Red Dead Redemption 2", "rdr2.exe", HdrType::Native, "native", "Nativní Game & Cinematic HDR"),
-        ("The Witcher 3: Wild Hunt", "witcher3.exe", HdrType::Native, "native", "Next-gen nativní HDR update"),
-        ("Ghost of Tsushima", "ghostoftsushima.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("DOOM Eternal", "doometernalx64tk-vk.exe", HdrType::Native, "native", "Nativní idTech 7 HDR"),
-        ("DOOM Eternal (D3D12)", "doometernalx64.exe", HdrType::Native, "native", "Nativní HDR"),
-        ("Starfield", "starfield.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Microsoft Flight Simulator", "flightsimulator.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Forza Horizon 5", "forzahorizon5.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Forza Motorsport", "forzamotorsport.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Dead Space Remake", "deadspace.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Resident Evil 4 Remake", "re4.exe", HdrType::Native, "native", "RE Engine nativní HDR"),
-        ("Resident Evil Village", "re8.exe", HdrType::Native, "native", "RE Engine nativní HDR"),
-        ("Resident Evil 7", "re7.exe", HdrType::Native, "native", "RE Engine nativní HDR"),
-        ("Resident Evil 2 Remake", "re2.exe", HdrType::Native, "native", "RE Engine nativní HDR"),
-        ("Resident Evil 3 Remake", "re3.exe", HdrType::Native, "native", "RE Engine nativní HDR"),
-        ("Call of Duty HQ", "cod.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Destiny 2", "destiny2.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Death Stranding", "ds.exe", HdrType::Native, "native", "Nativní Decima Engine HDR"),
-        ("Final Fantasy VII Remake", "ff7remake_.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Marvel's Spider-Man Remastered", "spider-man.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Marvel's Spider-Man: Miles Morales", "milesmorales.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("The Last of Us Part I", "tloi.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Returnal", "returnal-win64-shipping.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Lies of P", "lop-win64-shipping.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Helldivers 2", "helldivers2.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Avatar: Frontiers of Pandora", "afop.exe", HdrType::Native, "native", "Snowdrop Engine nativní HDR"),
-        ("Diablo IV", "diablo iv.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Star Wars Jedi: Survivor", "jedisurvivor.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Star Wars Jedi: Fallen Order", "starwarsjedifallenorder.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Assassin's Creed Mirage", "acmirage.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Assassin's Creed Valhalla", "acvalhalla.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Assassin's Creed Odyssey", "acodyssey.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Assassin's Creed Origins", "aco.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Hogwarts Legacy", "hogwartslegacy.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Shadow of the Tomb Raider", "sottr.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Rise of the Tomb Raider", "rottr.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Control", "control_dx12.exe", HdrType::Native, "native", "Nativní HDR v DX12"),
-        ("Metro Exodus Enhanced Edition", "metroexodus.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Senua's Saga: Hellblade II", "hellblade2-win64-shipping.exe", HdrType::Native, "native", "Unreal Engine 5 nativní HDR"),
-        ("Lords of the Fallen", "lotf2-win64-shipping.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Monster Hunter: World", "monsterhunterworld.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Ratchet & Clank: Rift Apart", "riftapart.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Dragon's Dogma 2", "dd2.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Hitman World of Assassination", "hitman3.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("No Man's Sky", "nms.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Apex Legends", "r5apex.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Halo Infinite", "haloinfinite.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Remnant II", "remnant2-win64-shipping.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Space Marine 2", "warhammer 40000 space marine 2 - retail.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("S.T.A.L.K.E.R. 2 Heart of Chornobyl", "stalker2-win64-shipping.exe", HdrType::Native, "native", "Nativní Unreal Engine 5 HDR"),
-        ("Armored Core VI", "armoredcore6.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Deathloop", "deathloop.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Ghostwire: Tokyo", "ghostwire-tokyo.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Hi-Fi RUSH", "hifirush.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Kena: Bridge of Spirits", "kena-win64-shipping.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("A Plague Tale: Requiem", "aplaguetalerequiem_x64.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("A Plague Tale: Innocence", "aplaguetaleinnocence_x64.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Days Gone", "daysgone.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Uncharted: Legacy of Thieves", "u4.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Uncharted: The Lost Legacy", "tll.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Gears 5", "gears5.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Sea of Thieves", "sotgame.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Far Cry 6", "farcry6.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Watch Dogs: Legion", "watchdogslegion.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("The Callisto Protocol", "thecallistoprotocol-win64-shipping.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Borderlands 3", "borderlands3.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Tiny Tina's Wonderlands", "wonderlands.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Battlefield 2042", "bf2042.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Battlefield V", "bfv.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Battlefield 1", "bf1.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Dying Light 2", "dyinglightgame_x64_rwdi.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("The First Descendant", "m1-win64-shipping.exe", HdrType::Native, "native", "Nativní Unreal Engine 5 HDR"),
-        ("Need for Speed Heat", "needforspeedheat.exe", HdrType::Native, "native", "Nativní podpora"),
-        ("Need for Speed Unbound", "needforspeedunbound.exe", HdrType::Native, "native", "Nativní podpora"),
+    if let Ok(read_guard) = CACHED_CATALOG.read() {
+        if let Some(ref cat) = *read_guard {
+            return cat.clone();
+        }
+    }
 
-        // Limited native support (Green check with asterisk)
-        ("Sekiro: Shadows Die Twice", "sekiro.exe", HdrType::Native, "limited", "Omezená podpora (vyžaduje fullscreen v nativním rozlišení)"),
-        ("Deus Ex: Mankind Divided", "dxmd.exe", HdrType::Native, "limited", "Vyžaduje DX11 režim pro stabilní HDR"),
+    // Try reading cache on disk
+    let cache_file = get_cache_path();
+    if cache_file.exists() {
+        if let Ok(content) = fs::read_to_string(&cache_file) {
+            if let Ok(entries) = serde_json::from_str::<Vec<CatalogEntry>>(&content) {
+                if !entries.is_empty() {
+                    if let Ok(mut write_guard) = CACHED_CATALOG.write() {
+                        *write_guard = Some(entries.clone());
+                    }
+                    return entries;
+                }
+            }
+        }
+    }
 
-        // Always on (Olive lock)
-        ("Star Wars: Squadrons", "starwarssquadrons.exe", HdrType::Native, "always_on", "HDR je ve hře trvale zapnuto pokud je v OS aktivní"),
+    // Fallback to embedded catalog
+    let entries: Vec<CatalogEntry> = serde_json::from_str(EMBEDDED_CATALOG_JSON).unwrap_or_default();
+    if let Ok(mut write_guard) = CACHED_CATALOG.write() {
+        *write_guard = Some(entries.clone());
+    }
+    entries
+}
 
-        // Requires manual fix (Blue wrench)
-        ("NieR:Automata", "nierautomata.exe", HdrType::Native, "manual_fix", "Doporučen mód Special K (HDR retrofit)"),
-
-        // Windows Auto HDR Supported Games (from PCGamingWiki Auto HDR list)
-        ("The Elder Scrolls V: Skyrim SE", "skyrimse.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR ověřeno"),
-        ("Fallout 4", "fallout4.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR ověřeno"),
-        ("Dark Souls III", "darksoulsiii.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR ověřeno"),
-        ("Dark Souls Remastered", "darksoulsremastered.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR ověřeno"),
-        ("Grand Theft Auto V", "gta5.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR ověřeno"),
-        ("Batman: Arkham Knight", "batmanak.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR ověřeno"),
-        ("BioShock Infinite", "bioshockinfinite.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR ověřeno"),
-        ("Dishonored 2", "dishonored2.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR ověřeno"),
-        ("Dishonored: Death of the Outsider", "dishonoreddot_x64.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR ověřeno"),
-        ("Prey", "prey.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR ověřeno"),
-        ("Titanfall 2", "titanfall2.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR ověřeno"),
-        ("Subnautica", "subnautica.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR ověřeno"),
-        ("Subnautica: Below Zero", "subnauticabelowzero.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR ověřeno"),
-        ("Metal Gear Solid V: The Phantom Pain", "mgsvtpp.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR ověřeno"),
-        ("Far Cry 5", "farcry5.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR ověřeno"),
-        ("Kingdom Come: Deliverance", "kingdomcome.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR ověřeno"),
-        ("Mass Effect 1 (LE)", "masseffect1.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR"),
-        ("Mass Effect 2 (LE)", "masseffect2.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR"),
-        ("Mass Effect 3 (LE)", "masseffect3.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR"),
-        ("Yakuza 0", "yakuza0.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR ověřeno"),
-        ("Yakuza Kiwami 2", "yakuzakiwami2.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR ověřeno"),
-        ("Yakuza: Like a Dragon", "yakuzalikeadragon.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR ověřeno"),
-        ("Like a Dragon: Infinite Wealth", "likeadragoninfinitewealth.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR ověřeno"),
-        ("Persona 5 Royal", "p5r.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR ověřeno"),
-        ("Persona 3 Reload", "p3r.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR ověřeno"),
-        ("Wolfenstein II: The New Colossus", "newcolossus_x64vk.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR ověřeno"),
-        ("Hellblade: Senua's Sacrifice", "hellblade-win64-shipping.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR ověřeno"),
-        ("Ready Or Not", "readyornot-win64-shipping.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR"),
-        ("Bodycam", "bodycam.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR"),
-        ("BeamNG.drive", "beamng.drive.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR ověřeno"),
-        ("Road to Vostok", "rtv.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR"),
-        ("Deep Rock Galactic", "fsd-win64-shipping.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR"),
-        ("Rust", "rustclient.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR"),
-        ("Once Human", "oncehuman.exe", HdrType::AutoHdr, "autohdr", "Windows 11 Auto HDR"),
-
-        // Media Players
-        ("mpv Media Player", "mpv.exe", HdrType::Media, "media", "Open-source přehrávač s podporou HDR passthrough"),
-        ("MPC-HC (x64)", "mpc-hc64.exe", HdrType::Media, "media", "Přehrávač médií s podporou madVR / HDR"),
-        ("MPC-HC (x86)", "mpc-hc.exe", HdrType::Media, "media", "Přehrávač médií s podporou madVR / HDR"),
-        ("MPC-BE (x64)", "mpc-be64.exe", HdrType::Media, "media", "Přehrávač médií s podporou HDR"),
-        ("MPC-BE (x86)", "mpc-be.exe", HdrType::Media, "media", "Přehrávač médií s podporou HDR"),
-        ("PotPlayer (x64)", "potplayer64.exe", HdrType::Media, "media", "Přehrávač médií s podporou HDR"),
-        ("PotPlayer (x86)", "potplayer.exe", HdrType::Media, "media", "Přehrávač médií s podporou HDR"),
-        ("VLC Media Player", "vlc.exe", HdrType::Media, "media", "Přehrávač s podporou 10-bit HDR výstupu"),
-        ("Kodi Media Center", "kodi.exe", HdrType::Media, "media", "Media center s podporou HDR10 passthrough"),
-    ];
-
-    raw.into_iter()
-        .map(|(name, exe_name, hdr_type, support_tier, notes)| CatalogEntry {
-            name: name.to_string(),
-            exe_name: exe_name.to_lowercase(),
-            hdr_type,
-            support_tier: support_tier.to_string(),
-            notes: Some(notes.to_string()),
-        })
-        .collect()
+pub fn save_to_cache(entries: &[CatalogEntry]) {
+    let cache_file = get_cache_path();
+    if let Some(parent) = cache_file.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    if let Ok(json) = serde_json::to_string_pretty(entries) {
+        let _ = fs::write(&cache_file, json);
+    }
+    if let Ok(mut write_guard) = CACHED_CATALOG.write() {
+        *write_guard = Some(entries.to_vec());
+    }
 }
 
 #[allow(dead_code)]
@@ -188,28 +82,143 @@ pub fn get_default_catalog() -> Vec<HdrApp> {
 }
 
 pub async fn fetch_online_database() -> Result<Vec<CatalogEntry>, String> {
-    let url = "https://raw.githubusercontent.com/Soptik1290/hdr-autoswitch/main/database/hdr_games.json";
+    let current_catalog = get_full_catalog();
+    let mut catalog_map: HashMap<String, CatalogEntry> = current_catalog
+        .into_iter()
+        .map(|entry| (clean_key(&entry.name), entry))
+        .collect();
 
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(8))
+        .timeout(std::time::Duration::from_secs(12))
         .build()
         .map_err(|e| e.to_string())?;
 
-    let res = client
-        .get(url)
-        .header("User-Agent", "HDR-AutoSwitch-App")
-        .send()
-        .await
-        .map_err(|e| format!("Chyba při stahování online databáze: {}", e))?;
+    // 1. Try PCGamingWiki MediaWiki Cargo Query directly
+    let mut pcgw_fetched = Vec::new();
+    for offset in [0, 500] {
+        let cargo_query = format!(
+            "{{{{#cargo_query:tables=Game,Video|join on=Game._pageID=Video._pageID|where=Video.HDR='true' OR Video.HDR='hackable' OR Video.HDR='always on' OR Video.HDR='limited'|fields=Game._pageName=Name,Video.HDR=Supported|limit=500|offset={}|format=table}}}}",
+            offset
+        );
 
-    if !res.status().is_success() {
-        return Err(format!("Server vrátil stavový kód: {}", res.status()));
+        let params = [
+            ("action", "parse"),
+            ("text", &cargo_query),
+            ("contentmodel", "wikitext"),
+            ("format", "json"),
+        ];
+
+        if let Ok(res) = client
+            .post("https://www.pcgamingwiki.com/w/api.php")
+            .header(
+                "User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            )
+            .form(&params)
+            .send()
+            .await
+        {
+            if res.status().is_success() {
+                if let Ok(json_data) = res.json::<serde_json::Value>().await {
+                    if let Some(html) = json_data.pointer("/parse/text/*").and_then(|v| v.as_str()) {
+                        parse_pcgw_table_html(html, &mut pcgw_fetched);
+                    }
+                }
+            }
+        }
     }
 
-    let entries: Vec<CatalogEntry> = res
-        .json()
-        .await
-        .map_err(|e| format!("Chyba při zpracování JSON: {}", e))?;
+    if !pcgw_fetched.is_empty() {
+        for (name, supported) in pcgw_fetched {
+            let key = clean_key(&name);
+            let (tier, hdr_type, notes) = match supported.as_str() {
+                "hackable" => ("manual_fix", HdrType::Custom, "Vyžaduje úpravu / mod / Special K (PCGamingWiki)"),
+                "limited" => ("limited", HdrType::Native, "Omezená nativní podpora HDR (PCGamingWiki)"),
+                "always on" => ("always_on", HdrType::Native, "Trvale aktivní v enginu (PCGamingWiki)"),
+                _ => ("native", HdrType::Native, "Nativní HDR podpora (PCGamingWiki)"),
+            };
 
-    Ok(entries)
+            catalog_map
+                .entry(key)
+                .and_modify(|existing| {
+                    existing.support_tier = tier.to_string();
+                })
+                .or_insert_with(|| {
+                    let clean_exe = name
+                        .to_lowercase()
+                        .chars()
+                        .filter(|c| c.is_alphanumeric())
+                        .collect::<String>();
+                    CatalogEntry {
+                        name,
+                        exe_name: format!("{}.exe", clean_exe),
+                        hdr_type,
+                        support_tier: tier.to_string(),
+                        notes: Some(notes.to_string()),
+                    }
+                });
+        }
+    } else {
+        // Fallback: Try GitHub repository raw JSON
+        let gh_url = "https://raw.githubusercontent.com/Soptik1290/hdr-autoswitch/main/database/hdr_games.json";
+        if let Ok(res) = client
+            .get(gh_url)
+            .header("User-Agent", "HDR-AutoSwitch-App")
+            .send()
+            .await
+        {
+            if res.status().is_success() {
+                if let Ok(entries) = res.json::<Vec<CatalogEntry>>().await {
+                    for entry in entries {
+                        catalog_map.insert(clean_key(&entry.name), entry);
+                    }
+                }
+            }
+        }
+    }
+
+    let mut result: Vec<CatalogEntry> = catalog_map.into_values().collect();
+    result.sort_by(|a, b| a.name.cmp(&b.name));
+    save_to_cache(&result);
+
+    Ok(result)
+}
+
+fn clean_key(s: &str) -> String {
+    s.to_lowercase()
+        .chars()
+        .filter(|c| c.is_alphanumeric())
+        .collect()
+}
+
+fn parse_pcgw_table_html(html: &str, out: &mut Vec<(String, String)>) {
+    let name_tag = "<td class=\"field_Name\">";
+    let supp_tag = "<td class=\"field_Supported\">";
+
+    let mut rest = html;
+    while let Some(name_pos) = rest.find(name_tag) {
+        let after_name = &rest[name_pos + name_tag.len()..];
+        if let Some(a_end) = after_name.find("</a>") {
+            let before_a_end = &after_name[..a_end];
+            let game_name = if let Some(last_gt) = before_a_end.rfind('>') {
+                &before_a_end[last_gt + 1..]
+            } else {
+                before_a_end
+            }
+            .trim();
+
+            if let Some(supp_pos) = after_name.find(supp_tag) {
+                let after_supp = &after_name[supp_pos + supp_tag.len()..];
+                if let Some(td_end) = after_supp.find("</td>") {
+                    let supported_val = after_supp[..td_end].trim();
+                    if !game_name.is_empty() {
+                        out.push((game_name.to_string(), supported_val.to_string()));
+                    }
+                    rest = &after_supp[td_end..];
+                    continue;
+                }
+            }
+        }
+        rest = after_name;
+    }
 }
