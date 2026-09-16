@@ -148,6 +148,12 @@ export interface Translations {
   settingsSwitchMethod: string;
   settingsMethodNative: string;
   settingsMethodShortcut: string;
+  settingsSwitchingPolicyTitle: string;
+  settingsSwitchingPolicyDesc: string;
+  settingsPolicyExitOnly: string;
+  settingsPolicyExitOnlyDesc: string;
+  settingsPolicyAltTab: string;
+  settingsPolicyAltTabDesc: string;
   settingsDebounceGroup: string;
   settingsDebounceLabel: string;
   settingsDebounceSeconds: (sec: number) => string;
@@ -308,10 +314,16 @@ const cs: Translations = {
   settingsSwitchMethod: 'METODA PŘEPÍNÁNÍ HDR',
   settingsMethodNative: 'Nativní Windows DisplayConfig API (Doporučeno)',
   settingsMethodShortcut: 'Virtuální Win + Alt + B zkratka',
+  settingsSwitchingPolicyTitle: 'REŽIM VYPNUTÍ HDR (CHROVÁNÍ PŘI ALT+TAB)',
+  settingsSwitchingPolicyDesc: 'Zvolte, jak má aplikace nakládat s vypínáním HDR:',
+  settingsPolicyExitOnly: 'Vypnout až po ukončení hry (Doporučeno)',
+  settingsPolicyExitOnlyDesc: 'Při Alt+Tab (např. kontrola Discordu či webu) zůstává HDR aktivní. Eliminuje zčernání monitoru, zpoždění a rozbití barev/swapchainu v běžících hrách. Po vypnutí hry se SDR obnoví okamžitě bez čekání.',
+  settingsPolicyAltTab: 'Vypínat i při Alt+Tab (s prodlevou)',
+  settingsPolicyAltTabDesc: 'Vrátí monitor do SDR po opuštění okna hry po uplynutí níže nastavených sekund. (Při úplném zavření hry se vypne okamžitě).',
   settingsDebounceGroup: 'PRODLEVA PŘI ALT+TAB (DEBOUNCE)',
-  settingsDebounceLabel: 'Čas před návratem do SDR po opuštění hry:',
+  settingsDebounceLabel: 'Čas před návratem do SDR po opuštění okna hry:',
   settingsDebounceSeconds: (sec) => `${sec} SEKUND`,
-  settingsDebounceDesc: 'Zabraňuje nepříjemnému problikávání monitoru při rychlém přepínání oken (např. kontrola Discordu či prohlížeče).',
+  settingsDebounceDesc: 'Zabraňuje problikávání monitoru při rychlém přepínání oken. Uplatní se pouze pokud je zapnut režim Alt+Tab.',
   settingsSystemGroup: 'SYSTÉMOVÁ INTEGRACE',
   settingsAutostartTitle: 'SPOUŠTĚT AUTOMATICKY SE SYSTÉMEM',
   settingsAutostartDesc: 'Aplikace se tiše spustí na pozadí po startu Windows.',
@@ -468,10 +480,16 @@ const en: Translations = {
   settingsSwitchMethod: 'HDR SWITCHING METHOD',
   settingsMethodNative: 'Native Windows DisplayConfig API (Recommended)',
   settingsMethodShortcut: 'Simulated Win + Alt + B Keyboard Shortcut',
+  settingsSwitchingPolicyTitle: 'HDR DEACTIVATION POLICY (ALT+TAB BEHAVIOR)',
+  settingsSwitchingPolicyDesc: 'Choose when the application should restore SDR mode on your displays:',
+  settingsPolicyExitOnly: 'Only when the game exits (Recommended)',
+  settingsPolicyExitOnlyDesc: 'Keeps HDR active during Alt+Tab (checking Discord, web browser, etc.). Completely eliminates monitor blackouts, renegotiation lag, and DirectX swapchain desync. Switches back to SDR immediately when the game closes.',
+  settingsPolicyAltTab: 'Deactivate on Alt+Tab (with debounce delay)',
+  settingsPolicyAltTabDesc: 'Restores SDR mode after the debounce delay below when you switch focus away from the game. (When the game completely closes, SDR is restored immediately).',
   settingsDebounceGroup: 'ALT+TAB DEBOUNCE DELAY',
-  settingsDebounceLabel: 'Delay before returning to SDR after leaving game:',
+  settingsDebounceLabel: 'Delay before returning to SDR after leaving game window:',
   settingsDebounceSeconds: (sec) => `${sec} SECONDS`,
-  settingsDebounceDesc: 'Prevents display flicker during rapid window switching (e.g. checking Discord or browser).',
+  settingsDebounceDesc: 'Prevents display flicker during rapid window switching. Only applies when Alt+Tab mode is selected.',
   settingsSystemGroup: 'SYSTEM INTEGRATION',
   settingsAutostartTitle: 'START WITH WINDOWS',
   settingsAutostartDesc: 'Silently launch upon Windows boot.',

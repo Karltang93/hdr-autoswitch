@@ -91,6 +91,24 @@ const DEFAULT_RECENT_GAMES: RecentGameSession[] = [
   },
 ];
 
+const IGNORED_SYSTEM_EXES = new Set([
+  'snippingtool.exe',
+  'screenclippinghost.exe',
+  'explorer.exe',
+  'chrome.exe',
+  'msedge.exe',
+  'firefox.exe',
+  'applicationframehost.exe',
+  'gamingservicesui.exe',
+  'searchhost.exe',
+  'shellexperiencehost.exe',
+  'startmenuexperiencehost.exe',
+  'taskmgr.exe',
+  'systemsettings.exe',
+  'hdr-autoswitch.exe',
+  'tauri-app.exe',
+]);
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [isDark, setIsDark] = useState(true);
@@ -107,6 +125,7 @@ export default function App() {
   const [config, setConfig] = useState<AppConfig>({
     target_monitor: 'all',
     alt_tab_delay_seconds: 2,
+    exit_only_hdr: true,
     notifications_enabled: true,
     autostart: false,
     start_minimized: false,
@@ -129,7 +148,15 @@ export default function App() {
       const saved = localStorage.getItem('hdr_recent_games');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) {
+          const sanitized = parsed.filter(
+            (g: RecentGameSession) => g.exe && !IGNORED_SYSTEM_EXES.has(g.exe.toLowerCase())
+          );
+          if (sanitized.length > 0) {
+            localStorage.setItem('hdr_recent_games', JSON.stringify(sanitized));
+            return sanitized;
+          }
+        }
       }
     } catch (e) {
       console.error('Error loading recent games:', e);
@@ -216,8 +243,12 @@ export default function App() {
           'hdr_on'
         );
 
-        // Update Recent Games telemetry
-        if (newStatus.current_exe) {
+        // Update Recent Games telemetry (only for actual games detected by hook)
+        if (
+          newStatus.switched_by_app &&
+          newStatus.current_exe &&
+          !IGNORED_SYSTEM_EXES.has(newStatus.current_exe.toLowerCase())
+        ) {
           setRecentGames((prev) => {
             const existingIndex = prev.findIndex(
               (g) => g.exe.toLowerCase() === newStatus.current_exe!.toLowerCase()
@@ -243,7 +274,9 @@ export default function App() {
                   };
 
             const filtered = prev.filter(
-              (g) => g.exe.toLowerCase() !== newStatus.current_exe!.toLowerCase()
+              (g) =>
+                g.exe.toLowerCase() !== newStatus.current_exe!.toLowerCase() &&
+                !IGNORED_SYSTEM_EXES.has(g.exe.toLowerCase())
             );
             const newList = [updatedSession, ...filtered].slice(0, 10);
             try {

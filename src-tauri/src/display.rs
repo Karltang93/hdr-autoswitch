@@ -5,6 +5,7 @@ use windows::Win32::Devices::Display::{
     QueryDisplayConfig, DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO,
     DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME,
     DISPLAYCONFIG_DEVICE_INFO_HEADER, DISPLAYCONFIG_DEVICE_INFO_SET_ADVANCED_COLOR_STATE,
+    DISPLAYCONFIG_DEVICE_INFO_TYPE,
     DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO, DISPLAYCONFIG_MODE_INFO, DISPLAYCONFIG_PATH_INFO,
     DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE, DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE_0,
     DISPLAYCONFIG_TARGET_DEVICE_NAME, QDC_ONLY_ACTIVE_PATHS,
@@ -14,6 +15,23 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP,
     VK_B, VK_LWIN, VK_MENU,
 };
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct DisplayConfigGetAdvancedColorInfo2 {
+    header: DISPLAYCONFIG_DEVICE_INFO_HEADER,
+    value: u32,
+    color_encoding: u32,
+    bits_per_color_channel: u32,
+    active_color_mode: u32, // 0 = SDR, 1 = WCG, 2 = HDR
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct DisplayConfigSetHdrState {
+    header: DISPLAYCONFIG_DEVICE_INFO_HEADER,
+    value: u32, // bit 0: enableHdr
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MonitorInfo {
@@ -84,22 +102,46 @@ pub fn get_monitors() -> Vec<MonitorInfo> {
             };
 
             // Query Advanced Color (HDR) status
-            let mut color_info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO {
-                header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
-                    r#type: DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO,
-                    size: mem::size_of::<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO>() as u32,
-                    adapterId: path.targetInfo.adapterId,
-                    id: path.targetInfo.id,
-                },
-                ..Default::default()
-            };
-
             let mut is_hdr_supported = false;
             let mut is_hdr_enabled = false;
 
-            if DisplayConfigGetDeviceInfo(&mut color_info.header) == 0 {
-                is_hdr_supported = color_info.Anonymous.value & 0x1 != 0; // advancedColorSupported
-                is_hdr_enabled = color_info.Anonymous.value & 0x2 != 0;   // advancedColorEnabled
+            // 1. Try Windows 11 24H2+ API (type 15) to accurately distinguish HDR from WCG/ACM:
+            let mut adv2 = DisplayConfigGetAdvancedColorInfo2 {
+                header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
+                    r#type: DISPLAYCONFIG_DEVICE_INFO_TYPE(15),
+                    size: mem::size_of::<DisplayConfigGetAdvancedColorInfo2>() as u32,
+                    adapterId: path.targetInfo.adapterId,
+                    id: path.targetInfo.id,
+                },
+                value: 0,
+                color_encoding: 0,
+                bits_per_color_channel: 0,
+                active_color_mode: 0,
+            };
+
+            if DisplayConfigGetDeviceInfo(&mut adv2.header) == 0 {
+                // Bit 4: highDynamicRangeSupported (0x10)
+                // Bit 0: advancedColorSupported (0x01)
+                is_hdr_supported = (adv2.value & (1 << 4)) != 0 || (adv2.value & 0x1) != 0;
+                // active_color_mode: 2 = DISPLAYCONFIG_ADVANCED_COLOR_MODE_HDR
+                // Bit 5: highDynamicRangeUserEnabled (0x20)
+                is_hdr_enabled = adv2.active_color_mode == 2 || (adv2.value & (1 << 5)) != 0;
+            } else {
+                // 2. Fallback to legacy Advanced Color API (type 9) for Windows 10 & earlier Windows 11:
+                let mut color_info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO {
+                    header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
+                        r#type: DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO,
+                        size: mem::size_of::<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO>() as u32,
+                        adapterId: path.targetInfo.adapterId,
+                        id: path.targetInfo.id,
+                    },
+                    ..Default::default()
+                };
+
+                if DisplayConfigGetDeviceInfo(&mut color_info.header) == 0 {
+                    is_hdr_supported = color_info.Anonymous.value & 0x1 != 0; // advancedColorSupported
+                    is_hdr_enabled = color_info.Anonymous.value & 0x2 != 0;   // advancedColorEnabled
+                }
             }
 
             let monitor_id = format!(
@@ -132,6 +174,23 @@ pub fn set_monitor_hdr(adapter_low: u32, adapter_high: i32, target_id: u32, enab
             HighPart: adapter_high,
         };
 
+        // 1. Try Windows 11 24H2+ dedicated HDR state API (type 16)
+        let mut set_hdr_state = DisplayConfigSetHdrState {
+            header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
+                r#type: DISPLAYCONFIG_DEVICE_INFO_TYPE(16),
+                size: mem::size_of::<DisplayConfigSetHdrState>() as u32,
+                adapterId: adapter_id,
+                id: target_id,
+            },
+            value: if enable { 1 } else { 0 },
+        };
+
+        let res2 = DisplayConfigSetDeviceInfo(&mut set_hdr_state.header);
+        if res2 == 0 {
+            return true;
+        }
+
+        // 2. Fallback to legacy Advanced Color API (type 10)
         let mut set_color_state = DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE {
             header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
                 r#type: DISPLAYCONFIG_DEVICE_INFO_SET_ADVANCED_COLOR_STATE,
@@ -145,7 +204,13 @@ pub fn set_monitor_hdr(adapter_low: u32, adapter_high: i32, target_id: u32, enab
         };
 
         let res = DisplayConfigSetDeviceInfo(&mut set_color_state.header);
-        res == 0
+        if res == 0 {
+            return true;
+        }
+
+        // 3. Fallback: simulate Win+Alt+B if Direct API fails on this system
+        simulate_win_alt_b();
+        true
     }
 }
 

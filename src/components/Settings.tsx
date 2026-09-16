@@ -187,39 +187,95 @@ export const Settings: React.FC<SettingsProps> = ({
         </div>
       </div>
 
-      {/* Debounce Group */}
+      {/* Switching Policy Group (Alt+Tab vs Game Exit) */}
       <div className="p-5 border border-[#f55a6b]/30 bg-[#120d0e] relative space-y-4">
         <div className="absolute inset-0 scanlines-overlay opacity-15 pointer-events-none" />
 
         <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#f55a6b]">
           <Clock className="w-4 h-4 text-[#5accf5]" />
-          <span>{t.settingsDebounceGroup}</span>
+          <span>{t.settingsSwitchingPolicyTitle}</span>
         </div>
+
+        <p className="text-xs text-[#8a7f81] relative z-10">
+          {t.settingsSwitchingPolicyDesc}
+        </p>
 
         <div className="space-y-3 relative z-10">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-[#8a7f81]">{t.settingsDebounceLabel}</span>
-            <span className="font-bold text-[#5accf5] px-2 py-0.5 border border-[#5accf5]/40 bg-black">
-              {t.settingsDebounceSeconds(config.alt_tab_delay_seconds)}
-            </span>
+          {/* Option 1: Exit Only */}
+          <div
+            onClick={() => handleSave({ ...config, exit_only_hdr: true })}
+            className={`p-3.5 border cursor-pointer transition-all ${
+              config.exit_only_hdr
+                ? 'border-[#f55a6b] bg-[#1a0f12] neon-glow-coral'
+                : 'border-white/10 bg-black/40 hover:border-white/20'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div className="font-bold text-xs text-white flex items-center gap-2">
+                <span className={config.exit_only_hdr ? 'text-[#f55a6b]' : 'text-slate-500'}>
+                  {config.exit_only_hdr ? '●' : '○'}
+                </span>
+                <span>{t.settingsPolicyExitOnly}</span>
+              </div>
+              <span className="text-[10px] px-2 py-0.5 border border-emerald-500/40 text-emerald-400 bg-emerald-500/10 font-bold">
+                0% BLIKÁNÍ / 0% LAG
+              </span>
+            </div>
+            <p className="text-[11px] text-[#8a7f81] mt-1.5 pl-4">
+              {t.settingsPolicyExitOnlyDesc}
+            </p>
           </div>
 
-          <input
-            type="range"
-            min="0"
-            max="10"
-            step="1"
-            value={config.alt_tab_delay_seconds}
-            onChange={(e) =>
-              handleSave({ ...config, alt_tab_delay_seconds: parseInt(e.target.value) })
-            }
-            className="w-full accent-[#f55a6b] cursor-pointer"
-          />
-
-          <p className="text-[11px] text-[#8a7f81]">
-            {t.settingsDebounceDesc}
-          </p>
+          {/* Option 2: Alt+Tab Debounce */}
+          <div
+            onClick={() => handleSave({ ...config, exit_only_hdr: false })}
+            className={`p-3.5 border cursor-pointer transition-all ${
+              !config.exit_only_hdr
+                ? 'border-[#f55a6b] bg-[#1a0f12] neon-glow-coral'
+                : 'border-white/10 bg-black/40 hover:border-white/20'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div className="font-bold text-xs text-white flex items-center gap-2">
+                <span className={!config.exit_only_hdr ? 'text-[#f55a6b]' : 'text-slate-500'}>
+                  {!config.exit_only_hdr ? '●' : '○'}
+                </span>
+                <span>{t.settingsPolicyAltTab}</span>
+              </div>
+            </div>
+            <p className="text-[11px] text-[#8a7f81] mt-1.5 pl-4">
+              {t.settingsPolicyAltTabDesc}
+            </p>
+          </div>
         </div>
+
+        {/* Debounce slider (only active if Alt+Tab mode is chosen) */}
+        {!config.exit_only_hdr && (
+          <div className="space-y-3 pt-3 border-t border-white/10 relative z-10">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-[#8a7f81]">{t.settingsDebounceLabel}</span>
+              <span className="font-bold text-[#5accf5] px-2 py-0.5 border border-[#5accf5]/40 bg-black">
+                {t.settingsDebounceSeconds(config.alt_tab_delay_seconds)}
+              </span>
+            </div>
+
+            <input
+              type="range"
+              min="1"
+              max="10"
+              step="1"
+              value={config.alt_tab_delay_seconds}
+              onChange={(e) =>
+                handleSave({ ...config, alt_tab_delay_seconds: parseInt(e.target.value) })
+              }
+              className="w-full accent-[#f55a6b] cursor-pointer"
+            />
+
+            <p className="text-[11px] text-[#8a7f81]">
+              {t.settingsDebounceDesc}
+            </p>
+          </div>
+        )}
       </div>
 
       {/* System Integration Group */}

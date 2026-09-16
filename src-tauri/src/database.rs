@@ -140,20 +140,6 @@ pub fn find_in_catalog(exe_name: &str) -> Option<CatalogEntry> {
         }
     }
 
-    // 4. Substring match if name is reasonably unique (length >= 5)
-    if clean_exe_alphanumeric.len() >= 5 {
-        if let Some(entry) = catalog.iter().find(|c| {
-            let cat_clean = clean_key(&c.name);
-            if cat_clean.len() >= 5 {
-                clean_exe_alphanumeric.contains(&cat_clean) || cat_clean.contains(&clean_exe_alphanumeric)
-            } else {
-                false
-            }
-        }) {
-            return Some(entry.clone());
-        }
-    }
-
     None
 }
 

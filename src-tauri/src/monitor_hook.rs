@@ -11,7 +11,8 @@ use tauri_plugin_notification::NotificationExt;
 use windows::core::PWSTR;
 use windows::Win32::Foundation::HWND;
 use windows::Win32::System::Threading::{
-    OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_FORMAT, PROCESS_QUERY_LIMITED_INFORMATION,
+    GetExitCodeProcess, OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_FORMAT,
+    PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
 };
 use windows::Win32::UI::Accessibility::{SetWinEventHook, UnhookWinEvent, HWINEVENTHOOK};
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -34,6 +35,7 @@ pub struct MonitorService {
     hdr_switched_by_us: Arc<AtomicBool>,
     current_active_exe: Arc<Mutex<Option<String>>>,
     debounce_sender: Arc<Mutex<Option<Sender<()>>>>,
+    active_game_pid: Arc<Mutex<Option<u32>>>,
 }
 
 static GLOBAL_SERVICE: std::sync::OnceLock<Arc<MonitorService>> = std::sync::OnceLock::new();
@@ -46,6 +48,7 @@ impl MonitorService {
             hdr_switched_by_us: Arc::new(AtomicBool::new(false)),
             current_active_exe: Arc::new(Mutex::new(None)),
             debounce_sender: Arc::new(Mutex::new(None)),
+            active_game_pid: Arc::new(Mutex::new(None)),
         });
 
         let _ = GLOBAL_SERVICE.set(service.clone());
@@ -165,35 +168,74 @@ impl MonitorService {
                 }
             }
 
-            // If HDR is not currently active, turn it on!
             let already_active = display::is_any_hdr_active();
             if !already_active {
-                self.turn_on_hdr(&conf, &exe_lower);
+                self.turn_on_hdr(&conf, &exe_lower, pid);
             } else {
-                // If it was already active manually or earlier, emit current state
+                // If it was already active (e.g. user Alt+Tabbed back into the game)
+                self.hdr_switched_by_us.store(true, Ordering::SeqCst);
+                if pid != 0 {
+                    *self.active_game_pid.lock().unwrap() = Some(pid);
+                }
+
                 let app_info = self.config_mgr.find_app(&exe_lower);
+                let app_display_name = app_info.as_ref().map(|a| a.name.clone()).unwrap_or_else(|| exe_lower.clone());
+
                 let _ = self.app_handle.emit(
                     "hdr-status-changed",
                     HdrStatePayload {
                         is_hdr_active: true,
-                        current_app_name: app_info.map(|a| a.name),
+                        current_app_name: Some(app_display_name),
                         current_exe: Some(exe_lower.clone()),
-                        switched_by_app: self.hdr_switched_by_us.load(Ordering::SeqCst),
+                        switched_by_app: true,
                     },
                 );
             }
         } else {
             // Non-HDR app (or desktop, browser, etc.)
-            // If we previously switched HDR on, schedule turn-off with debounce
             if self.hdr_switched_by_us.load(Ordering::SeqCst) && display::is_any_hdr_active() {
-                self.schedule_turn_off(&conf);
+                // Check if the tracked game process is still alive:
+                let is_game_alive = {
+                    let pid_opt = *self.active_game_pid.lock().unwrap();
+                    if let Some(game_pid) = pid_opt {
+                        unsafe {
+                            if let Ok(h_proc) = OpenProcess(
+                                PROCESS_QUERY_LIMITED_INFORMATION,
+                                false,
+                                game_pid,
+                            ) {
+                                let mut exit_code = 0u32;
+                                if GetExitCodeProcess(h_proc, &mut exit_code).is_ok() {
+                                    let _ = windows::Win32::Foundation::CloseHandle(h_proc);
+                                    exit_code == 259 // STILL_ACTIVE
+                                } else {
+                                    let _ = windows::Win32::Foundation::CloseHandle(h_proc);
+                                    false
+                                }
+                            } else {
+                                false
+                            }
+                        }
+                    } else {
+                        false
+                    }
+                };
+
+                if !is_game_alive {
+                    // Game process has closed/terminated -> turn off HDR immediately! Zero debounce delay!
+                    self.turn_off_hdr_now(&conf);
+                } else if !conf.exit_only_hdr {
+                    // Game is still alive, and user configured to switch back to SDR on Alt+Tab:
+                    self.schedule_turn_off(&conf);
+                }
+                // If conf.exit_only_hdr is true and game is still alive: keep HDR active (zero flicker on Alt+Tab)!
             } else {
                 let _ = self.app_handle.emit(
                     "hdr-status-changed",
                     HdrStatePayload {
                         is_hdr_active: display::is_any_hdr_active(),
                         current_app_name: None,
-                        current_exe: Some(exe_lower.clone()),
+                        current_exe: None,
                         switched_by_app: false,
                     },
                 );
@@ -201,7 +243,7 @@ impl MonitorService {
         }
     }
 
-    fn turn_on_hdr(&self, conf: &crate::config::AppConfig, exe: &str) {
+    fn turn_on_hdr(&self, conf: &crate::config::AppConfig, exe: &str, pid: u32) {
         match conf.switch_method {
             SwitchMethod::Native => {
                 if conf.target_monitor == "all" {
@@ -221,6 +263,38 @@ impl MonitorService {
         }
 
         self.hdr_switched_by_us.store(true, Ordering::SeqCst);
+
+        if pid != 0 {
+            *self.active_game_pid.lock().unwrap() = Some(pid);
+
+            // Spawn background process watcher to immediately revert to SDR when the game process terminates
+            let conf_clone = conf.clone();
+            thread::spawn(move || {
+                unsafe {
+                    if let Ok(h_proc) = OpenProcess(
+                        PROCESS_SYNCHRONIZE,
+                        false,
+                        pid,
+                    ) {
+                        let _ = windows::Win32::System::Threading::WaitForSingleObject(
+                            h_proc,
+                            windows::Win32::System::Threading::INFINITE,
+                        );
+                        let _ = windows::Win32::Foundation::CloseHandle(h_proc);
+
+                        // Game process terminated!
+                        if let Some(service) = GLOBAL_SERVICE.get() {
+                            if let Ok(guard) = service.active_game_pid.lock() {
+                                if *guard == Some(pid) {
+                                    drop(guard);
+                                    service.turn_off_hdr_now(&conf_clone);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
 
         let app_info = self.config_mgr.find_app(exe);
         let app_display_name = app_info.as_ref().map(|a| a.name.clone()).unwrap_or_else(|| exe.to_string());
@@ -242,6 +316,56 @@ impl MonitorService {
                 current_app_name: Some(app_display_name),
                 current_exe: Some(exe.to_string()),
                 switched_by_app: true,
+            },
+        );
+    }
+
+    pub fn turn_off_hdr_now(&self, conf: &crate::config::AppConfig) {
+        // Cancel any pending debounce timer
+        if let Ok(mut sender_opt) = self.debounce_sender.lock() {
+            if let Some(sender) = sender_opt.take() {
+                let _ = sender.send(());
+            }
+        }
+
+        match conf.switch_method {
+            SwitchMethod::Native => {
+                if conf.target_monitor == "all" {
+                    display::set_all_hdr(false);
+                } else {
+                    let monitors = display::get_monitors();
+                    if let Some(m) = monitors.iter().find(|m| m.id == conf.target_monitor) {
+                        display::set_monitor_hdr(m.adapter_id_low, m.adapter_id_high, m.target_id, false);
+                    } else {
+                        display::set_all_hdr(false);
+                    }
+                }
+            }
+            SwitchMethod::Shortcut => {
+                display::simulate_win_alt_b();
+            }
+        }
+
+        self.hdr_switched_by_us.store(false, Ordering::SeqCst);
+        *self.active_game_pid.lock().unwrap() = None;
+
+        if conf.notifications_enabled {
+            let _ = self
+                .app_handle
+                .notification()
+                .builder()
+                .title("HDR Auto-Switch")
+                .body("HDR vypnuto (návrat do SDR obsahu)")
+                .show();
+        }
+
+        let _ = self.app_handle.emit(
+            "hdr-status-changed",
+            HdrStatePayload {
+                is_hdr_active: display::is_any_hdr_active(),
+                current_app_name: None,
+                current_exe: None,
+                switched_by_app: false,
             },
         );
     }
@@ -301,6 +425,9 @@ impl MonitorService {
                         }
 
                         switched_flag.store(false, Ordering::SeqCst);
+                        if let Some(service) = GLOBAL_SERVICE.get() {
+                            *service.active_game_pid.lock().unwrap() = None;
+                        }
 
                         if notif_enabled {
                             let _ = app_handle

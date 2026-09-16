@@ -53,6 +53,8 @@ pub struct AppConfig {
     pub auto_sync_database: bool,
     #[serde(default)]
     pub last_sync_timestamp: Option<u64>,
+    #[serde(default = "default_true")]
+    pub exit_only_hdr: bool, // When true, keeps HDR on during Alt+Tab while game is running; switches to SDR immediately on game exit!
     pub switch_method: SwitchMethod,
     pub blacklist: Vec<String>, // lowercase exe names to never trigger HDR (e.g. chrome.exe)
     pub apps: Vec<HdrApp>,
@@ -69,6 +71,7 @@ impl Default for AppConfig {
             auto_detect_new_games: true,
             auto_sync_database: true,
             last_sync_timestamp: None,
+            exit_only_hdr: true,
             switch_method: SwitchMethod::Native,
             blacklist: vec![
                 "chrome.exe".to_string(),
@@ -89,6 +92,19 @@ impl Default for AppConfig {
                 "slack.exe".to_string(),
                 "telegram.exe".to_string(),
                 "whatsapp.exe".to_string(),
+                "snippingtool.exe".to_string(),
+                "screensketch.exe".to_string(),
+                "applicationframehost.exe".to_string(),
+                "gamingservicesui.exe".to_string(),
+                "systemsettings.exe".to_string(),
+                "shellexperiencehost.exe".to_string(),
+                "searchhost.exe".to_string(),
+                "startmenuexperiencehost.exe".to_string(),
+                "lockapp.exe".to_string(),
+                "cmd.exe".to_string(),
+                "powershell.exe".to_string(),
+                "wt.exe".to_string(),
+                "conhost.exe".to_string(),
             ],
             apps: Vec::new(),
         }
@@ -150,6 +166,44 @@ impl ConfigManager {
                             }
                         }
                     }
+
+                    // Automatically purge any blacklisted or system apps that might have been accidentally enrolled:
+                    let is_blacklisted = |exe: &str| -> bool {
+                        let lower = exe.to_lowercase();
+                        matches!(
+                            lower.as_str(),
+                            "snippingtool.exe"
+                                | "screensketch.exe"
+                                | "explorer.exe"
+                                | "chrome.exe"
+                                | "msedge.exe"
+                                | "firefox.exe"
+                                | "brave.exe"
+                                | "opera.exe"
+                                | "vivaldi.exe"
+                                | "discord.exe"
+                                | "spotify.exe"
+                                | "steam.exe"
+                                | "steamwebhelper.exe"
+                                | "epicgameslauncher.exe"
+                                | "applicationframehost.exe"
+                                | "gamingservicesui.exe"
+                                | "systemsettings.exe"
+                                | "shellexperiencehost.exe"
+                                | "searchhost.exe"
+                                | "startmenuexperiencehost.exe"
+                                | "lockapp.exe"
+                                | "taskmgr.exe"
+                                | "cmd.exe"
+                                | "powershell.exe"
+                                | "wt.exe"
+                                | "conhost.exe"
+                                | "code.exe"
+                                | "devenv.exe"
+                        )
+                    };
+                    loaded.apps.retain(|a| !is_blacklisted(&a.exe_name));
+
                     config = loaded;
                 }
             }

@@ -57,6 +57,7 @@ export interface AppConfig {
   auto_detect_new_games: boolean;
   auto_sync_database: boolean;
   last_sync_timestamp?: number;
+  exit_only_hdr: boolean;
   switch_method: SwitchMethod;
   blacklist: string[];
   apps: HdrApp[];
