@@ -150,6 +150,9 @@ fn get_current_status() -> HdrStatePayload {
         current_app_name: None,
         current_exe: None,
         switched_by_app: false,
+        steam_id: None,
+        launcher: None,
+        hdr_type: None,
     }
 }
 

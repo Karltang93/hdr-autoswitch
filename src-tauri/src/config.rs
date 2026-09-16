@@ -12,6 +12,17 @@ pub enum HdrType {
     Custom,
 }
 
+impl HdrType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            HdrType::Native => "native",
+            HdrType::AutoHdr => "autohdr",
+            HdrType::Media => "media",
+            HdrType::Custom => "custom",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HdrApp {
     pub name: String,
@@ -204,6 +215,42 @@ impl ConfigManager {
                     };
                     loaded.apps.retain(|a| !is_blacklisted(&a.exe_name));
 
+                    // Deduplicate apps by name / steam_id / exe and merge alternate_exes
+                    let mut unique_apps: Vec<HdrApp> = Vec::new();
+                    for app in loaded.apps {
+                        let app_name_clean = app.name.to_lowercase().chars().filter(|c| c.is_alphanumeric()).collect::<String>();
+                        if let Some(existing) = unique_apps.iter_mut().find(|a| {
+                            let a_clean = a.name.to_lowercase().chars().filter(|c| c.is_alphanumeric()).collect::<String>();
+                            (a_clean.len() > 2 && a_clean == app_name_clean)
+                                || (a.steam_id.is_some() && a.steam_id == app.steam_id)
+                                || a.exe_name.eq_ignore_ascii_case(&app.exe_name)
+                        }) {
+                            let exe_lower = app.exe_name.to_lowercase();
+                            if existing.exe_name.to_lowercase() != exe_lower
+                                && !existing.alternate_exes.iter().any(|alt| alt.to_lowercase() == exe_lower)
+                            {
+                                existing.alternate_exes.push(app.exe_name);
+                            }
+                            for alt in app.alternate_exes {
+                                let alt_lower = alt.to_lowercase();
+                                if existing.exe_name.to_lowercase() != alt_lower
+                                    && !existing.alternate_exes.iter().any(|e| e.to_lowercase() == alt_lower)
+                                {
+                                    existing.alternate_exes.push(alt);
+                                }
+                            }
+                            if existing.steam_id.is_none() && app.steam_id.is_some() {
+                                existing.steam_id = app.steam_id;
+                            }
+                            if existing.launcher.is_none() && app.launcher.is_some() {
+                                existing.launcher = app.launcher;
+                            }
+                        } else {
+                            unique_apps.push(app);
+                        }
+                    }
+                    loaded.apps = unique_apps;
+
                     config = loaded;
                 }
             }
@@ -256,24 +303,107 @@ impl ConfigManager {
     pub fn find_app(&self, exe: &str) -> Option<HdrApp> {
         let exe_lower = exe.to_lowercase();
         let conf = self.config.lock().unwrap();
-        conf.apps
-            .iter()
-            .find(|a| {
-                a.exe_name.to_lowercase() == exe_lower
-                    || a.alternate_exes
-                        .iter()
-                        .any(|alt| alt.to_lowercase() == exe_lower)
-            })
-            .cloned()
+        // 1. Exact match in exe_name or alternate_exes
+        if let Some(app) = conf.apps.iter().find(|a| {
+            a.exe_name.to_lowercase() == exe_lower
+                || a.alternate_exes
+                    .iter()
+                    .any(|alt| alt.to_lowercase() == exe_lower)
+        }) {
+            return Some(app.clone());
+        }
+
+        // 2. Base stem matching (strip -win64-shipping, etc.)
+        let clean_target = exe_lower
+            .trim_end_matches(".exe")
+            .replace("-win64-shipping", "")
+            .replace("_win64_shipping", "")
+            .replace("-shipping", "")
+            .replace("_shipping", "")
+            .replace("_dx12", "")
+            .replace("_dx11", "")
+            .replace("_vk", "");
+        let clean_target_alphanumeric: String = clean_target.chars().filter(|c| c.is_alphanumeric()).collect();
+
+        if clean_target_alphanumeric.len() >= 3 {
+            if let Some(app) = conf.apps.iter().find(|a| {
+                let a_clean = a.exe_name.to_lowercase()
+                    .trim_end_matches(".exe")
+                    .replace("-win64-shipping", "")
+                    .replace("_win64_shipping", "")
+                    .replace("-shipping", "")
+                    .replace("_shipping", "");
+                let a_alphanumeric: String = a_clean.chars().filter(|c| c.is_alphanumeric()).collect();
+                let a_name_alphanumeric: String = a.name.to_lowercase().chars().filter(|c| c.is_alphanumeric()).collect();
+                a_alphanumeric == clean_target_alphanumeric || a_name_alphanumeric == clean_target_alphanumeric
+            }) {
+                return Some(app.clone());
+            }
+        }
+
+        None
     }
 
-    pub fn add_app(&self, app: HdrApp) -> Result<(), String> {
+    pub fn add_app(&self, mut app: HdrApp) -> Result<(), String> {
         {
             let mut conf = self.config.lock().map_err(|e| e.to_string())?;
             let exe_lower = app.exe_name.to_lowercase();
-            if !conf.apps.iter().any(|a| a.exe_name.to_lowercase() == exe_lower) {
-                conf.apps.push(app);
+            let app_name_clean: String = app.name.to_lowercase().chars().filter(|c| c.is_alphanumeric()).collect();
+
+            // Check if game already exists by name, steam_id, or exe
+            if let Some(existing) = conf.apps.iter_mut().find(|a| {
+                let a_clean: String = a.name.to_lowercase().chars().filter(|c| c.is_alphanumeric()).collect();
+                (a_clean.len() > 2 && a_clean == app_name_clean)
+                    || (a.steam_id.is_some() && a.steam_id == app.steam_id)
+                    || a.exe_name.to_lowercase() == exe_lower
+                    || a.alternate_exes.iter().any(|alt| alt.to_lowercase() == exe_lower)
+            }) {
+                // If it exists, add this exe as an alternate exe if not already present
+                if existing.exe_name.to_lowercase() != exe_lower
+                    && !existing.alternate_exes.iter().any(|alt| alt.to_lowercase() == exe_lower)
+                {
+                    existing.alternate_exes.push(app.exe_name);
+                }
+                if existing.steam_id.is_none() && app.steam_id.is_some() {
+                    existing.steam_id = app.steam_id;
+                }
+                return self.save();
             }
+
+            // If steam_id is missing, check known game titles:
+            if app.steam_id.is_none() {
+                let lower = app.name.to_lowercase();
+                let sid = match lower.as_str() {
+                    s if s.contains("bodycam") => Some("2406770"),
+                    s if s.contains("assetto corsa") => Some("244210"),
+                    s if s.contains("beamng") => Some("284160"),
+                    s if s.contains("enshrouded") => Some("1203620"),
+                    s if s.contains("forza horizon") => Some("1551360"),
+                    s if s.contains("vostok") => Some("1963620"),
+                    s if s.contains("starfield") => Some("1716740"),
+                    s if s.contains("teardown") => Some("1167630"),
+                    s if s.contains("the finals") => Some("2073850"),
+                    s if s.contains("indiana jones") => Some("2677660"),
+                    s if s.contains("battlefield") => Some("1517290"),
+                    s if s.contains("cyberpunk") => Some("1091500"),
+                    s if s.contains("witcher") => Some("292030"),
+                    s if s.contains("elden ring") => Some("1245620"),
+                    s if s.contains("baldur") => Some("1086940"),
+                    s if s.contains("helldivers") => Some("553850"),
+                    s if s.contains("wukong") => Some("2358720"),
+                    s if s.contains("god of war") => Some("1593500"),
+                    s if s.contains("red dead") => Some("1174180"),
+                    _ => None,
+                };
+                if let Some(id) = sid {
+                    app.steam_id = Some(id.to_string());
+                    if app.launcher.is_none() {
+                        app.launcher = Some("Steam".to_string());
+                    }
+                }
+            }
+
+            conf.apps.push(app);
         }
         self.save()
     }

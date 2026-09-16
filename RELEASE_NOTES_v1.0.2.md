@@ -1,6 +1,6 @@
 # HDR Auto-Switch v1.0.2 — Windows 11 24H2 & Smart Alt+Tab Update
 
-> **Full Windows 11 24H2 & OLED display compatibility, instant game exit detection, seamless Alt+Tab behavior without monitor blinking, and false-positive filter overhaul.**
+> **Full Windows 11 24H2 & OLED display compatibility, instant game exit detection, seamless Alt+Tab behavior without monitor blinking, game deduplication engine, and refined wide layout.**
 
 ---
 
@@ -25,7 +25,17 @@
 * Strengthened the game matching engine with strict boundary checks.
 * Automatically purges legacy false-positive entries from `config.json` and recent games telemetry upon startup.
 
-#### 4. ⚙️ Settings & Telemetry UI Updates
+#### 4. 🗂️ Intelligent Game Deduplication & Stem Matching
+* **No more duplicate cards**: Resolved an issue where games with shipping or launcher binaries (e.g. `bodycam.exe` vs `Bodycam-Win64-Shipping.exe`) showed up multiple times in Recent Games and the library.
+* Automatically correlates shipping binaries with parent titles, preserves and merges Steam IDs, artwork covers, and tags.
+* Automatically deduplicates existing saved game sessions on application launch.
+
+#### 5. 📐 Wider Default Window Geometry (1120 × 720)
+* Widened the default window size to 1120px to provide a clean, uncompromised layout on high-resolution displays.
+* Prevents the top navigation bar from clipping the language and theme buttons.
+* Neatly aligns the hero dashboard banner and allows all 6 Recent Games telemetry cards to display comfortably in a unified row.
+
+#### 6. ⚙️ Settings & Telemetry UI Updates
 * Added an interactive **HDR Switching Policy** selector under Settings.
 * Recent Games history now filters out background system utilities and displays live hook event status.
 * Full bilingual support (English & Czech) for all new policy options.
@@ -36,8 +46,8 @@
 
 | Asset | Size | Description |
 | :--- | :--- | :--- |
-| 💿 **[HDR.Auto-Switch_1.0.2_x64-setup.exe](https://github.com/Soptik1290/hdr-autoswitch/releases/download/v1.0.2/HDR.Auto-Switch_1.0.2_x64-setup.exe)** | ~3.3 MB | Recommended NSIS installer with desktop & start menu shortcuts |
-| 📦 **[HDR.Auto-Switch_1.0.2_x64_en-US.msi](https://github.com/Soptik1290/hdr-autoswitch/releases/download/v1.0.2/HDR.Auto-Switch_1.0.2_x64_en-US.msi)** | ~3.3 MB | Windows Installer package (MSI) |
+| 💿 **[HDR Auto-Switch_1.0.2_x64-setup.exe](https://github.com/Soptik1290/hdr-autoswitch/releases/download/v1.0.2/HDR.Auto-Switch_1.0.2_x64-setup.exe)** | ~3.3 MB | Recommended NSIS installer with desktop & start menu shortcuts |
+| 📦 **[HDR Auto-Switch_1.0.2_x64_en-US.msi](https://github.com/Soptik1290/hdr-autoswitch/releases/download/v1.0.2/HDR.Auto-Switch_1.0.2_x64_en-US.msi)** | ~3.3 MB | Windows Installer package (MSI) |
 
 ---
 

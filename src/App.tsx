@@ -109,6 +109,58 @@ const IGNORED_SYSTEM_EXES = new Set([
   'tauri-app.exe',
 ]);
 
+const normalizeKey = (str?: string | null) => {
+  if (!str) return '';
+  return str
+    .toLowerCase()
+    .replace('.exe', '')
+    .replace(/-win64-shipping|_win64_shipping|-shipping|_shipping|_dx12|_dx11|_vk/g, '')
+    .replace(/[^a-z0-9]/g, '');
+};
+
+const isSameGame = (
+  a: { exe?: string | null; name?: string | null; steam_id?: string | null },
+  b: { exe?: string | null; name?: string | null; steam_id?: string | null }
+): boolean => {
+  if (a.steam_id && b.steam_id && a.steam_id === b.steam_id) return true;
+  if (a.exe && b.exe && a.exe.toLowerCase() === b.exe.toLowerCase()) return true;
+
+  const normNameA = normalizeKey(a.name);
+  const normNameB = normalizeKey(b.name);
+  if (normNameA.length > 2 && normNameB.length > 2 && normNameA === normNameB) return true;
+
+  const normExeA = normalizeKey(a.exe);
+  const normExeB = normalizeKey(b.exe);
+  if (normExeA.length > 2 && normExeB.length > 2 && normExeA === normExeB) return true;
+
+  if (normExeA.length > 2 && normNameB.length > 2 && normExeA === normNameB) return true;
+  if (normNameA.length > 2 && normExeB.length > 2 && normNameA === normExeB) return true;
+
+  return false;
+};
+
+function dedupeRecentGameList(list: RecentGameSession[]): RecentGameSession[] {
+  const result: RecentGameSession[] = [];
+  for (const item of list) {
+    if (!item.exe || IGNORED_SYSTEM_EXES.has(item.exe.toLowerCase())) continue;
+    const existingIndex = result.findIndex((r) => isSameGame(r, item));
+    if (existingIndex >= 0) {
+      const existing = result[existingIndex];
+      result[existingIndex] = {
+        ...existing,
+        name: existing.name || item.name,
+        steam_id: existing.steam_id || item.steam_id,
+        launcher: existing.launcher || item.launcher,
+        hdr_tier_label: existing.hdr_tier_label || item.hdr_tier_label,
+        hdr_type: existing.hdr_type || item.hdr_type,
+      };
+    } else {
+      result.push(item);
+    }
+  }
+  return result;
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [isDark, setIsDark] = useState(true);
@@ -141,6 +193,9 @@ export default function App() {
     current_app_name: null,
     current_exe: null,
     switched_by_app: false,
+    steam_id: null,
+    launcher: null,
+    hdr_type: null,
   });
 
   const [recentGames, setRecentGames] = useState<RecentGameSession[]>(() => {
@@ -149,9 +204,7 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          const sanitized = parsed.filter(
-            (g: RecentGameSession) => g.exe && !IGNORED_SYSTEM_EXES.has(g.exe.toLowerCase())
-          );
+          const sanitized = dedupeRecentGameList(parsed);
           if (sanitized.length > 0) {
             localStorage.setItem('hdr_recent_games', JSON.stringify(sanitized));
             return sanitized;
@@ -250,34 +303,55 @@ export default function App() {
           !IGNORED_SYSTEM_EXES.has(newStatus.current_exe.toLowerCase())
         ) {
           setRecentGames((prev) => {
-            const existingIndex = prev.findIndex(
-              (g) => g.exe.toLowerCase() === newStatus.current_exe!.toLowerCase()
-            );
+            const candidate = {
+              exe: newStatus.current_exe,
+              name: newStatus.current_app_name,
+              steam_id: newStatus.steam_id,
+            };
 
-            const updatedSession: RecentGameSession =
-              existingIndex >= 0
-                ? {
-                    ...prev[existingIndex],
-                    name: newStatus.current_app_name || prev[existingIndex].name,
-                    last_switched_at: currentTime,
-                    hook_status: 'active',
-                    hook_message: 'WinEventHook zachytil okno -> HDR zapnuto',
-                  }
-                : {
-                    exe: newStatus.current_exe!,
-                    name: newStatus.current_app_name || newStatus.current_exe!,
-                    hdr_type: 'native',
-                    hdr_tier_label: 'Nativní HDR10',
-                    last_switched_at: currentTime,
-                    hook_status: 'active',
-                    hook_message: 'WinEventHook zachytil okno -> HDR zapnuto',
-                  };
+            const existing = prev.find((g) => isSameGame(g, candidate));
+
+            const resolvedSteamId =
+              newStatus.steam_id ||
+              existing?.steam_id ||
+              undefined;
+
+            const resolvedLauncher =
+              newStatus.launcher ||
+              existing?.launcher ||
+              (resolvedSteamId ? 'Steam' : undefined);
+
+            const resolvedHdrType =
+              newStatus.hdr_type ||
+              existing?.hdr_type ||
+              'native';
+
+            const resolvedTierLabel =
+              existing?.hdr_tier_label ||
+              (resolvedHdrType === 'autohdr'
+                ? 'Windows Auto HDR'
+                : resolvedHdrType === 'mod'
+                ? 'HDR Mod / Fix'
+                : 'Nativní HDR10');
+
+            const updatedSession: RecentGameSession = {
+              exe: newStatus.current_exe!,
+              name: newStatus.current_app_name || existing?.name || newStatus.current_exe!,
+              steam_id: resolvedSteamId,
+              launcher: resolvedLauncher,
+              hdr_type: resolvedHdrType,
+              hdr_tier_label: resolvedTierLabel,
+              last_switched_at: currentTime,
+              hook_status: 'active',
+              hook_message: 'WinEventHook zachytil okno -> HDR zapnuto',
+            };
 
             const filtered = prev.filter(
               (g) =>
-                g.exe.toLowerCase() !== newStatus.current_exe!.toLowerCase() &&
+                !isSameGame(g, updatedSession) &&
                 !IGNORED_SYSTEM_EXES.has(g.exe.toLowerCase())
             );
+
             const newList = [updatedSession, ...filtered].slice(0, 10);
             try {
               localStorage.setItem('hdr_recent_games', JSON.stringify(newList));

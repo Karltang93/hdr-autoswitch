@@ -27,6 +27,9 @@ pub struct HdrStatePayload {
     pub current_app_name: Option<String>,
     pub current_exe: Option<String>,
     pub switched_by_app: bool,
+    pub steam_id: Option<String>,
+    pub launcher: Option<String>,
+    pub hdr_type: Option<String>,
 }
 
 pub struct MonitorService {
@@ -180,6 +183,9 @@ impl MonitorService {
 
                 let app_info = self.config_mgr.find_app(&exe_lower);
                 let app_display_name = app_info.as_ref().map(|a| a.name.clone()).unwrap_or_else(|| exe_lower.clone());
+                let steam_id = app_info.as_ref().and_then(|a| a.steam_id.clone());
+                let launcher = app_info.as_ref().and_then(|a| a.launcher.clone());
+                let hdr_type = app_info.as_ref().map(|a| a.hdr_type.as_str().to_string());
 
                 let _ = self.app_handle.emit(
                     "hdr-status-changed",
@@ -188,6 +194,9 @@ impl MonitorService {
                         current_app_name: Some(app_display_name),
                         current_exe: Some(exe_lower.clone()),
                         switched_by_app: true,
+                        steam_id,
+                        launcher,
+                        hdr_type,
                     },
                 );
             }
@@ -237,6 +246,9 @@ impl MonitorService {
                         current_app_name: None,
                         current_exe: None,
                         switched_by_app: false,
+                        steam_id: None,
+                        launcher: None,
+                        hdr_type: None,
                     },
                 );
             }
@@ -298,6 +310,9 @@ impl MonitorService {
 
         let app_info = self.config_mgr.find_app(exe);
         let app_display_name = app_info.as_ref().map(|a| a.name.clone()).unwrap_or_else(|| exe.to_string());
+        let steam_id = app_info.as_ref().and_then(|a| a.steam_id.clone());
+        let launcher = app_info.as_ref().and_then(|a| a.launcher.clone());
+        let hdr_type = app_info.as_ref().map(|a| a.hdr_type.as_str().to_string());
 
         if conf.notifications_enabled {
             let _ = self
@@ -316,6 +331,9 @@ impl MonitorService {
                 current_app_name: Some(app_display_name),
                 current_exe: Some(exe.to_string()),
                 switched_by_app: true,
+                steam_id,
+                launcher,
+                hdr_type,
             },
         );
     }
@@ -366,6 +384,9 @@ impl MonitorService {
                 current_app_name: None,
                 current_exe: None,
                 switched_by_app: false,
+                steam_id: None,
+                launcher: None,
+                hdr_type: None,
             },
         );
     }
@@ -445,6 +466,9 @@ impl MonitorService {
                                 current_app_name: None,
                                 current_exe: None,
                                 switched_by_app: false,
+                                steam_id: None,
+                                launcher: None,
+                                hdr_type: None,
                             },
                         );
                     }
@@ -482,6 +506,9 @@ impl MonitorService {
                 current_app_name: None,
                 current_exe: None,
                 switched_by_app: false,
+                steam_id: None,
+                launcher: None,
+                hdr_type: None,
             },
         );
     }

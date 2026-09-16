@@ -76,6 +76,9 @@ export interface HdrStatePayload {
   current_app_name?: string | null;
   current_exe?: string | null;
   switched_by_app: boolean;
+  steam_id?: string | null;
+  launcher?: string | null;
+  hdr_type?: string | null;
 }
 
 export interface RecentGameSession {
