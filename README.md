@@ -5,15 +5,16 @@
 ![HDR Auto-Switch Banner](docs/screenshot.png)
 
 **Automatic, zero-overhead HDR display switcher for Windows 10 and 11.**  
-*No more manual `Win + Alt + B` before and after every gaming session.*
+*No more manual `Win + Alt + B` or monitor blackouts before and after every gaming session.*
 
+[![Version](https://img.shields.io/badge/Version-v1.0.4-5accf5?style=for-the-badge)](https://github.com/Soptik1290/hdr-autoswitch/releases/tag/v1.0.4)
 [![Windows](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/Soptik1290/hdr-autoswitch)
 [![Tauri v2](https://img.shields.io/badge/Tauri-v2-FFC131?style=for-the-badge&logo=tauri&logoColor=black)](https://v2.tauri.app/)
 [![Rust](https://img.shields.io/badge/Rust-Backend-orange?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![React 19](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
 
-[**Download Latest Release (.exe Installer)**](https://github.com/Soptik1290/hdr-autoswitch/releases/latest) • [**Report Bug**](https://github.com/Soptik1290/hdr-autoswitch/issues)
+[**Download Latest Release (.exe Installer)**](https://github.com/Soptik1290/hdr-autoswitch/releases/latest) • [**Release Notes**](RELEASE_NOTES_v1.0.4.md) • [**Report Bug**](https://github.com/Soptik1290/hdr-autoswitch/issues)
 
 </div>
 
@@ -23,87 +24,111 @@
 
 Windows HDR looks breathtaking in games and movies, but running desktop apps and web browsers in constant HDR often causes washed-out SDR colors, unnecessary power draw, and panel wear on OLED monitors.
 
-**HDR Auto-Switch** runs quietly in your system tray and monitors window focus using native Windows OS events. The moment you launch or Alt+Tab into an HDR-enabled game, your monitor instantly engages HDR10 / Rec.2020. When you return to the desktop or browser, it gracefully switches back to SDR BT.709.
+**HDR Auto-Switch** runs quietly in your system tray and monitors window focus using native Windows OS events. The moment you launch or switch into an HDR-enabled game, your monitor instantly engages HDR10 / Rec.2020. When you close the game or return to your desktop, it gracefully switches back to SDR BT.709.
 
 ---
 
 ## ✨ Key Features
 
-* ⚡ **True 0.0% CPU Overhead (No Polling):**  
-  Unlike conventional tools that continuously poll running processes via `while True` or `setInterval`, HDR Auto-Switch registers a zero-overhead OS event hook (`SetWinEventHook` with `EVENT_SYSTEM_FOREGROUND`). The CPU remains 99.99% asleep until a window focus event actually occurs.
-* 🖥️ **Native Win32 DisplayConfig API:**  
-  Controls display color profiles directly via the graphics driver pipeline (`QueryDisplayConfig` / `SetDisplayConfig`), operating independently of the Xbox Game Bar and without keyboard simulation.
-* 🛡️ **Alt+Tab Flicker Protection (Debounce):**  
-  Tabbing out of a game for 2 seconds to check Discord or Spotify won't trigger annoying display flickering. Configurable delay from 0 to 10 seconds.
-* 👾 **Retro Cyberpunk UI with GSAP Glitch:**  
-  Crafted with an authentic dark cyberpunk terminal aesthetic featuring monospace typography (`Kode Mono`), CRT scanlines, and GSAP SVG displacement glitch animations.
-* 📚 **Built-in 949+ Game Database:**  
-  Includes curated Native HDR titles (*Cyberpunk 2077, Black Myth: Wukong, Alan Wake 2, Elden Ring, Forza Horizon 5*), all 275+ official Windows Auto HDR titles from PCGamingWiki, media players, and 1-click online sync.
-* 🎨 **Visual Game Library with Steam Artwork:**  
-  Scans your Steam, Epic Games, and Windows installations automatically. Renders high-resolution 600x900 vertical poster artwork with HDR status badges.
-* 🎯 **Per-Monitor Targeting:**  
-  Choose to switch all connected HDR displays simultaneously or bind automatic HDR switching specifically to your primary OLED gaming monitor.
-* 🌐 **Automatic Bilingual Localization:**  
-  Automatically launches in **Czech** if Windows is set to Czech/Slovak, and in **English** everywhere else. Includes an instant 1-click `CZ` / `EN` toggle in the header and settings.
-* 📌 **System Tray & Autostart:**  
-  Closing the window minimizes the app to the system tray. Supports silent launch on Windows startup.
+### ⚡ 1. True 0.0% CPU Overhead (No Polling)
+Unlike conventional tools that continuously poll running processes in background loops (`while True` or `setInterval`), HDR Auto-Switch registers a zero-overhead OS event hook (`SetWinEventHook` with `EVENT_SYSTEM_FOREGROUND`). Your CPU remains 100% asleep until a window focus event actually occurs.
+
+### 🔍 2. Automated Multi-Drive Game Scanner
+* **Deep Multi-Drive Discovery**: Automatically scans all connected storage drives (`C:`, `D:`, `E:`, etc.) via Steam's `libraryfolders.vdf` and `appmanifest_*.acf` manifests, Epic Games Launcher manifests (`%ProgramData%\Epic`), GOG Galaxy, and Windows Registry.
+* **Modern Shipping Binary Resolution**: Traverses directory structures in under **2.5 seconds** to locate actual Unreal Engine 5 & Northlight executables (e.g. `Binaries/Win64/*-Shipping.exe`) while ignoring asset and content folders.
+* **Categorized & Pre-Selected Results**:
+  - **HDR Supported Games (Top)**: Verified HDR titles are grouped at the top and pre-selected (`[x]`) by default.
+  - **SDR Installed Games (Bottom)**: Other installed games are listed in a separate section below (`[ ]` un-checked by default), allowing you to enable tracking for RTX HDR or community mods with one click.
+* **Smart Library State Badges**:
+  - `★ NEW`: Newly discovered HDR games ready to be added.
+  - `✓ IN LIBRARY`: Previously tracked games that are already up to date.
+  - `⚡ UPDATE PATH`: Automatically detects when a game has moved to another drive or folder and updates its path.
+
+### 📂 3. Native File Picker ("Browse...") & Drag & Drop
+* **Native Windows File Picker**: Click **"Browse... / Procházet..."** in the Manual Add modal to select any `.exe` using the standard Windows 64-bit file dialog.
+* **Global Drag & Drop**: Drag any `.exe` file from Windows Explorer directly into the application window. The app automatically inspects the binary, queries the database, and pre-fills the title and HDR support tier.
+
+### 🛡️ 4. Flexible HDR Deactivation Policies
+* **Only when game exits (Recommended)**: Keeps HDR active during Alt+Tab (e.g. checking Discord, Spotify, or a walkthrough in your browser). Completely eliminates monitor renegotiation blackouts, signal delay, and DirectX swapchain desync. Switches back to SDR immediately when the game closes.
+* **Deactivate on Alt+Tab (with Debounce)**: Reverts to SDR when leaving the game window after a configurable delay (0 to 10 seconds).
+
+### 📚 5. 1,200+ Game Database with 1-Click Online Sync
+* Comprehensive catalog including Native HDR titles (*Cyberpunk 2077, Black Myth: Wukong, Silent Hill 2 Remake, Alan Wake 2, Dead Island 2, Assetto Corsa Competizione*), the official Windows Auto HDR whitelist, and popular community mod profiles (Special K, Assetto Corsa CSP + Pure).
+* Built-in 1-click synchronization directly with the PCGamingWiki API.
+
+### 💽 6. Drive Migration & Disk Path Verification
+* Real-time path checking detects if an executable has been moved across drives or uninstalled, marking it with a `[FILE NOT FOUND]` badge and prompting you to run the scanner to refresh the location.
+* Importing moved games automatically updates paths, launchers, and Steam IDs without creating duplicates.
+
+### 🖥️ 7. Native Win32 DisplayConfig API & Per-Monitor Targeting
+* Interacts directly with GPU display drivers via native Windows `QueryDisplayConfig` / `SetDisplayConfig` APIs.
+* Operates independently of Xbox Game Bar and without simulated keyboard shortcuts (`Win + Alt + B` fallback is also available).
+* Choose whether to toggle all connected HDR displays simultaneously or bind switching exclusively to your primary OLED gaming monitor.
+
+### 🌐 8. Bilingual Interface & System Tray
+* Automatically detects system language: launches in **Czech** for Czech/Slovak systems and **English** for all others, with an instant 1-click header toggle (`CZ` / `EN`).
+* Silent autostart on Windows boot and minimization to system tray with zero memory footprint.
+* Spacious, modern **1280 × 720** cyberpunk UI with monospace typography (`Kode Mono`) and optional GSAP CRT scanlines.
 
 ---
 
 ## 📦 Installation & Download
 
 ### Option 1: Pre-built Windows Installer (Recommended)
-Download the latest Windows installer (`HDR-Auto-Switch-Setup.exe` or `.msi`) from the [**Releases Page**](https://github.com/Soptik1290/hdr-autoswitch/releases).
+Download the latest installer (`.exe` setup or `.msi`) from the [**Releases Page**](https://github.com/Soptik1290/hdr-autoswitch/releases/latest).
 
-1. Run `HDR-Auto-Switch-Setup.exe`.
-2. The application will launch with your custom display configuration.
-3. Click **"Scan PC for Games"** on the My Games tab or let it detect games in real time.
+1. Run `HDR Auto-Switch_1.0.4_x64-setup.exe`.
+2. Follow the installer instructions (creates desktop and start menu shortcuts).
+3. The app will detect your connected displays automatically.
+4. Click **"Scan PC for Games"** on the My Games tab to populate your library.
 
 ---
 
 ## 🛠️ Tech Stack & Architecture
 
-| Layer | Technology |
-|---|---|
-| **Framework** | [Tauri v2](https://v2.tauri.app/) (Lightweight, native Windows runtime) |
-| **Backend** | Rust (`windows-rs` Win32 API, `tauri-plugin-autostart`, `tauri-plugin-notification`) |
-| **Frontend** | React 19, TypeScript, Vite, Tailwind CSS v4 |
-| **Motion & FX** | [GSAP](https://gsap.com/) (SVG displacement filters, text scramble, CRT scanlines) |
-| **Icons & Font** | Lucide React & Google Font `Kode Mono` |
+| Layer | Technology | Details |
+|---|---|---|
+| **Runtime** | [Tauri v2](https://v2.tauri.app/) | Lightweight native desktop framework with zero-webview memory mode |
+| **Backend** | Rust 2021 | `windows-rs` (Win32 DisplayConfig & WinEventHook), `rfd` (Native dialogs), `reqwest` |
+| **Frontend** | React 19, TypeScript | Strict type checking, Vite 8, Tailwind CSS v4 |
+| **Animation** | GSAP | SVG displacement filters, text scramble, and CRT scanlines |
+| **Icons & Typography** | Lucide React & `Kode Mono` | High-contrast cyberpunk aesthetic |
 
 ---
 
 ## 💻 Developer Quickstart
 
 ### Prerequisites
-* [Node.js](https://nodejs.org/) (v20+ recommended)
+* [Node.js](https://nodejs.org/) (v20+ LTS recommended)
 * [Rust](https://www.rust-lang.org/) (stable toolchain)
-* Windows 10 (build 17763+) or Windows 11 with HDR display
+* Windows 10 (build 19041+) or Windows 11 with an HDR-capable display
 
-### Setup
+### Development Mode
 ```bash
 # Clone the repository
 git clone https://github.com/Soptik1290/hdr-autoswitch.git
 cd hdr-autoswitch
 
-# Install frontend dependencies
+# Install dependencies
 npm install
 
-# Run in development mode (hot-reloading)
+# Launch in live dev mode with hot reload
 npm run tauri dev
 ```
 
 ### Production Build
-To create the optimized Windows `.exe` installer and portable binary:
+To compile the release binaries and generate Windows NSIS and MSI installers:
 ```bash
 npm run tauri build
 ```
-The output installers will be generated in:
-`src-tauri/target/release/bundle/nsis/` and `src-tauri/target/release/`
+Output files will be generated in:
+- `src-tauri/target/release/bundle/nsis/HDR Auto-Switch_1.0.4_x64-setup.exe`
+- `src-tauri/target/release/bundle/msi/HDR Auto-Switch_1.0.4_x64_en-US.msi`
 
 ---
 
 ## 📄 License
 
 Distributed under the [MIT License](LICENSE).  
-Developed with ❤️ for the PC gaming community.
+Developed with ❤️ for the PC and OLED gaming community.
+
