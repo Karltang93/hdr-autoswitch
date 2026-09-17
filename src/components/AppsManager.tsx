@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { HdrApp, HdrType, AppConfig } from '../types';
+import React, { useState, useEffect } from 'react';
+import { HdrApp, HdrType, AppConfig, PickedGameInfo } from '../types';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import {
   Search,
   Plus,
@@ -15,6 +16,8 @@ import {
   Zap,
   Check,
   X,
+  FolderOpen,
+  UploadCloud,
 } from 'lucide-react';
 import { GlitchButton } from './GlitchButton';
 import { GlitchText } from './GlitchText';
@@ -44,11 +47,14 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
   const [scannedGames, setScannedGames] = useState<HdrApp[]>([]);
   const [selectedToImport, setSelectedToImport] = useState<Record<string, boolean>>({});
 
-  // Manual Add Modal
+  // Manual Add Modal & File Picker
   const [showAddModal, setShowAddModal] = useState(false);
   const [newName, setNewName] = useState('');
   const [newExe, setNewExe] = useState('');
+  const [newPath, setNewPath] = useState('');
   const [newType, setNewType] = useState<HdrType>('native');
+  const [isHdrMatched, setIsHdrMatched] = useState(false);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
 
   const handleToggleApp = async (exeName: string, enabled: boolean) => {
     try {
@@ -88,7 +94,8 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
             a.name.toLowerCase() === item.name.toLowerCase() ||
             a.exe_name.toLowerCase() === item.exe_name.toLowerCase()
         );
-        initialSelected[item.exe_name] = !isAlreadyAdded;
+        // Pre-select HDR supported games automatically. Leave SDR games unselected by default.
+        initialSelected[item.exe_name] = item.enabled && !isAlreadyAdded;
       }
       setSelectedToImport(initialSelected);
       setShowScanModal(true);
@@ -100,8 +107,76 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
     }
   };
 
+  const selectAllHdr = () => {
+    const next: Record<string, boolean> = {};
+    for (const item of scannedGames) {
+      next[item.exe_name] = item.enabled;
+    }
+    setSelectedToImport(next);
+  };
+
+  const selectAll = () => {
+    const next: Record<string, boolean> = {};
+    for (const item of scannedGames) {
+      next[item.exe_name] = true;
+    }
+    setSelectedToImport(next);
+  };
+
+  const deselectAll = () => {
+    setSelectedToImport({});
+  };
+
+  const handleBrowseExe = async () => {
+    try {
+      const picked: PickedGameInfo | null = await invoke('pick_game_exe');
+      if (picked) {
+        setNewName(picked.name);
+        setNewExe(picked.exe_name);
+        setNewPath(picked.path);
+        setNewType(picked.hdr_type.toLowerCase() as HdrType);
+        setIsHdrMatched(picked.is_hdr_supported);
+        setShowAddModal(true);
+      }
+    } catch (err) {
+      console.error('Failed to pick game exe:', err);
+    }
+  };
+
+  useEffect(() => {
+    const unlistenPromise = listen<{ paths?: string[] }>('tauri://drag-drop', async (event) => {
+      const paths = event.payload?.paths;
+      if (paths && paths.length > 0) {
+        const exePath = paths.find((p) => p.toLowerCase().endsWith('.exe'));
+        if (exePath) {
+          try {
+            const picked: PickedGameInfo = await invoke('inspect_exe_path', { path: exePath });
+            setNewName(picked.name);
+            setNewExe(picked.exe_name);
+            setNewPath(picked.path);
+            setNewType(picked.hdr_type.toLowerCase() as HdrType);
+            setIsHdrMatched(picked.is_hdr_supported);
+            setShowAddModal(true);
+          } catch (err) {
+            console.error('Failed to inspect dropped exe:', err);
+          }
+        }
+      }
+    });
+
+    return () => {
+      unlistenPromise.then((un) => un());
+    };
+  }, []);
+
   const handleConfirmImport = async () => {
-    const toImport = scannedGames.filter((g) => selectedToImport[g.exe_name]);
+    const toImport = scannedGames
+      .filter((g) => selectedToImport[g.exe_name])
+      .map((g) => ({
+        ...g,
+        enabled: true, // Imported games that the user selected are enabled
+      }));
+
     if (toImport.length === 0) {
       setShowScanModal(false);
       return;
@@ -133,6 +208,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
       exe_name: cleanExe,
       enabled: true,
       hdr_type: newType,
+      path: newPath || undefined,
     };
 
     try {
@@ -142,6 +218,8 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
       setShowAddModal(false);
       setNewName('');
       setNewExe('');
+      setNewPath('');
+      setIsHdrMatched(false);
       setNewType('native');
     } catch (err) {
       console.error('Failed to add custom app:', err);
@@ -496,105 +574,259 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
       )}
 
       {/* Scan Modal */}
-      {showScanModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-          <div className="bg-[#0f0b0b] border-2 border-[#f55a6b] max-w-xl w-full p-6 space-y-4 relative shadow-[0_0_30px_rgba(245,90,107,0.4)]">
-            <div className="flex items-center justify-between border-b border-[#f55a6b]/30 pb-3">
-              <div className="flex items-center gap-2">
-                <ScanSearch className="w-5 h-5 text-[#5accf5]" />
-                <h3 className="glitch-title-bar px-2 py-0.5 text-xs font-bold uppercase">
-                  {t.scanModalTitle(scannedGames.length)}
-                </h3>
+      {showScanModal && (() => {
+        const hdrGames = scannedGames.filter((g) => g.enabled);
+        const sdrGames = scannedGames.filter((g) => !g.enabled);
+        const selectedCount = Object.values(selectedToImport).filter(Boolean).length;
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+            <div className="bg-[#0f0b0b] border-2 border-[#f55a6b] max-w-2xl w-full p-6 space-y-4 relative shadow-[0_0_30px_rgba(245,90,107,0.4)] max-h-[90vh] flex flex-col">
+              <div className="flex items-center justify-between border-b border-[#f55a6b]/30 pb-3">
+                <div className="flex items-center gap-2">
+                  <ScanSearch className="w-5 h-5 text-[#5accf5]" />
+                  <h3 className="glitch-title-bar px-2 py-0.5 text-xs font-bold uppercase">
+                    {t.scanModalTitle(scannedGames.length)}
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setShowScanModal(false)}
+                  className="text-[#8a7f81] hover:text-white cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
-              <button
-                onClick={() => setShowScanModal(false)}
-                className="text-[#8a7f81] hover:text-white cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
 
-            <p className="text-xs text-[#8a7f81]">
-              {t.scanModalSubtitle}
-            </p>
-
-            <div className="max-h-80 overflow-y-auto space-y-1.5 border border-[#f55a6b]/20 p-2 bg-[#120d0e]">
-              {scannedGames.map((game) => {
-                const isSelected = !!selectedToImport[game.exe_name];
-                return (
-                  <div
-                    key={game.exe_name}
-                    onClick={() =>
-                      setSelectedToImport((prev) => ({
-                        ...prev,
-                        [game.exe_name]: !prev[game.exe_name],
-                      }))
-                    }
-                    className={`p-2.5 border cursor-pointer flex items-center justify-between text-xs transition-all ${
-                      isSelected
-                        ? 'bg-[#1c0f12] border-[#f55a6b] text-white'
-                        : 'bg-black/40 border-white/10 text-[#8a7f81] hover:border-white/30'
-                    }`}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                <p className="text-[#8a7f81]">
+                  {t.scanModalSubtitle}
+                </p>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={selectAllHdr}
+                    className="text-[10px] uppercase px-2 py-1 bg-[#120d0e] border border-[#5accf5]/50 text-[#5accf5] hover:bg-[#5accf5]/10 cursor-pointer font-mono"
                   >
-                    <div className="space-y-0.5">
-                      <div className="font-bold flex items-center gap-2">
-                        <span>{game.name}</span>
-                        {game.launcher && (
-                          <span className="text-[9px] px-1 bg-black border border-white/20 text-[#5accf5]">
-                            {game.launcher}
-                          </span>
-                        )}
+                    {t.scanModalSelectAllHdr}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={selectAll}
+                    className="text-[10px] uppercase px-2 py-1 bg-[#120d0e] border border-white/20 text-white hover:bg-white/10 cursor-pointer font-mono"
+                  >
+                    {t.scanModalSelectAll}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={deselectAll}
+                    className="text-[10px] uppercase px-2 py-1 bg-[#120d0e] border border-white/10 text-[#8a7f81] hover:text-white cursor-pointer font-mono"
+                  >
+                    {t.scanModalDeselectAll}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+                {/* SECTION 1: HDR Games (Top, Pre-selected) */}
+                {hdrGames.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between px-2 py-1.5 bg-[#121c1f] border-l-2 border-[#5accf5] text-[#5accf5]">
+                      <div className="flex items-center gap-2 text-xs font-bold uppercase">
+                        <Sparkles className="w-4 h-4 text-[#5accf5]" />
+                        <span>{t.scanModalSectionHdr(hdrGames.length)}</span>
                       </div>
-                      <div className="text-[10px] text-[#5accf5] font-mono">[{game.exe_name}]</div>
+                      <span className="text-[10px] font-mono opacity-80">[AUTO ON]</span>
                     </div>
 
-                    <div
-                      className={`w-4 h-4 border flex items-center justify-center ${
-                        isSelected
-                          ? 'bg-[#f55a6b] border-[#f55a6b] text-black'
-                          : 'border-[#8a7f81]'
-                      }`}
-                    >
-                      {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                    <div className="space-y-1.5">
+                      {hdrGames.map((game) => {
+                        const isSelected = !!selectedToImport[game.exe_name];
+                        return (
+                          <div
+                            key={game.exe_name}
+                            onClick={() =>
+                              setSelectedToImport((prev) => ({
+                                ...prev,
+                                [game.exe_name]: !prev[game.exe_name],
+                              }))
+                            }
+                            className={`p-2.5 border cursor-pointer flex items-center justify-between text-xs transition-all ${
+                              isSelected
+                                ? 'bg-[#121c1f] border-[#5accf5] text-white shadow-[0_0_10px_rgba(90,204,245,0.15)]'
+                                : 'bg-black/40 border-white/10 text-[#8a7f81] hover:border-white/30'
+                            }`}
+                          >
+                            <div className="space-y-0.5">
+                              <div className="font-bold flex items-center gap-2">
+                                <span>{game.name}</span>
+                                {game.launcher && (
+                                  <span className="text-[9px] px-1 bg-black border border-[#5accf5]/30 text-[#5accf5]">
+                                    {game.launcher}
+                                  </span>
+                                )}
+                                <span className="text-[9px] px-1.5 py-0.2 bg-[#5accf5]/10 border border-[#5accf5]/50 text-[#5accf5] font-mono uppercase">
+                                  {game.hdr_type === 'autohdr' ? 'Auto HDR' : 'Native HDR'}
+                                </span>
+                              </div>
+                              <div className="text-[10px] text-[#5accf5] font-mono">[{game.exe_name}]</div>
+                            </div>
+
+                            <div
+                              className={`w-4 h-4 border flex items-center justify-center transition-colors ${
+                                isSelected
+                                  ? 'bg-[#5accf5] border-[#5accf5] text-black'
+                                  : 'border-[#8a7f81]'
+                              }`}
+                            >
+                              {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
-                );
-              })}
-            </div>
+                )}
 
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <GlitchButton
-                label={t.scanModalCancel}
-                variant="outline"
-                size="sm"
-                onClick={() => setShowScanModal(false)}
-              />
-              <GlitchButton
-                label={t.scanModalAddSelected}
-                variant="primary"
-                size="sm"
-                onClick={handleConfirmImport}
-              />
+                {/* SECTION 2: SDR Games (Bottom, Unchecked by default) */}
+                {sdrGames.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between px-2 py-1.5 bg-[#120d0e] border-l-2 border-[#8a7f81] text-[#8a7f81]">
+                      <div className="flex items-center gap-2 text-xs font-bold uppercase">
+                        <Gamepad2 className="w-4 h-4 text-[#8a7f81]" />
+                        <span>{t.scanModalSectionSdr(sdrGames.length)}</span>
+                      </div>
+                      <span className="text-[10px] font-mono opacity-80">[AUTO OFF]</span>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      {sdrGames.map((game) => {
+                        const isSelected = !!selectedToImport[game.exe_name];
+                        return (
+                          <div
+                            key={game.exe_name}
+                            onClick={() =>
+                              setSelectedToImport((prev) => ({
+                                ...prev,
+                                [game.exe_name]: !prev[game.exe_name],
+                              }))
+                            }
+                            className={`p-2.5 border cursor-pointer flex items-center justify-between text-xs transition-all ${
+                              isSelected
+                                ? 'bg-[#1c0f12] border-[#f55a6b] text-white'
+                                : 'bg-black/40 border-white/10 text-[#8a7f81] hover:border-white/30'
+                            }`}
+                          >
+                            <div className="space-y-0.5">
+                              <div className="font-bold flex items-center gap-2">
+                                <span>{game.name}</span>
+                                {game.launcher && (
+                                  <span className="text-[9px] px-1 bg-black border border-white/20 text-[#8a7f81]">
+                                    {game.launcher}
+                                  </span>
+                                )}
+                                <span className="text-[9px] px-1.5 py-0.2 bg-white/5 border border-white/10 text-[#8a7f81] font-mono uppercase">
+                                  SDR / Custom
+                                </span>
+                              </div>
+                              <div className="text-[10px] text-[#8a7f81] font-mono">[{game.exe_name}]</div>
+                            </div>
+
+                            <div
+                              className={`w-4 h-4 border flex items-center justify-center transition-colors ${
+                                isSelected
+                                  ? 'bg-[#f55a6b] border-[#f55a6b] text-black'
+                                  : 'border-[#8a7f81]'
+                              }`}
+                            >
+                              {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between border-t border-[#f55a6b]/30 pt-3">
+                <div className="text-xs text-[#8a7f81]">
+                  {selectedCount} vybráno / selected
+                </div>
+                <div className="flex items-center gap-3">
+                  <GlitchButton
+                    label={t.scanModalCancel}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowScanModal(false)}
+                  />
+                  <GlitchButton
+                    label={`${t.scanModalAddSelected} (${selectedCount})`}
+                    variant="primary"
+                    size="sm"
+                    onClick={handleConfirmImport}
+                  />
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
-      {/* Manual Add Modal */}
+      {/* Manual Add Modal & File Picker */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-          <div className="bg-[#0f0b0b] border-2 border-[#f55a6b] max-w-md w-full p-6 space-y-4 relative shadow-[0_0_30px_rgba(245,90,107,0.4)]">
+          <div className="bg-[#0f0b0b] border-2 border-[#f55a6b] max-w-lg w-full p-6 space-y-4 relative shadow-[0_0_30px_rgba(245,90,107,0.4)]">
             <div className="flex items-center justify-between border-b border-[#f55a6b]/30 pb-3">
               <h3 className="glitch-title-bar px-2 py-0.5 text-xs font-bold uppercase">
                 {t.manualModalTitle}
               </h3>
               <button
-                onClick={() => setShowAddModal(false)}
+                onClick={() => {
+                  setShowAddModal(false);
+                  setNewPath('');
+                  setIsHdrMatched(false);
+                }}
                 className="text-[#8a7f81] hover:text-white cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            {/* Interactive File Dropzone & Browse Button */}
+            <div
+              onClick={handleBrowseExe}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsDraggingOver(true);
+              }}
+              onDragLeave={() => setIsDraggingOver(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setIsDraggingOver(false);
+              }}
+              className={`p-4 border-2 border-dashed cursor-pointer text-center transition-all ${
+                isDraggingOver
+                  ? 'border-[#5accf5] bg-[#5accf5]/15 text-white shadow-[0_0_15px_rgba(90,204,245,0.3)]'
+                  : 'border-[#f55a6b]/40 hover:border-[#f55a6b] bg-[#120d0e]/60 text-[#8a7f81] hover:text-white'
+              }`}
+            >
+              <UploadCloud className={`w-7 h-7 mx-auto mb-1.5 transition-colors ${isDraggingOver ? 'text-[#5accf5]' : 'text-[#f55a6b]'}`} />
+              <div className="text-xs font-bold uppercase text-white flex items-center justify-center gap-1.5">
+                <FolderOpen className="w-3.5 h-3.5 text-[#5accf5]" />
+                <span>{t.manualModalBrowseBtn}</span>
+              </div>
+              <p className="text-[10px] mt-1 text-[#8a7f81]">
+                {t.manualModalDragDropHint}
+              </p>
+            </div>
+
+            {/* Catalog Match Banner */}
+            {isHdrMatched && (
+              <div className="p-2 bg-[#121c1f] border border-[#5accf5] text-[#5accf5] flex items-center gap-2 text-xs">
+                <Sparkles className="w-4 h-4 flex-shrink-0" />
+                <span className="font-bold uppercase tracking-wider">{t.manualModalDetectedBadge}</span>
+              </div>
+            )}
 
             <form onSubmit={handleAddCustomApp} className="space-y-4">
               <div className="space-y-1">
@@ -602,7 +834,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Cyberpunk 2077"
+                  placeholder="e.g. Silent Hill 2 / Cyberpunk 2077"
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                   className="w-full px-3 py-2 text-xs border border-[#f55a6b]/30 bg-[#120d0e] focus:border-[#f55a6b] text-white focus:outline-none"
@@ -610,15 +842,39 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs uppercase text-[#8a7f81]">{t.manualModalExe}</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. cyberpunk2077.exe"
-                  value={newExe}
-                  onChange={(e) => setNewExe(e.target.value)}
-                  className="w-full px-3 py-2 text-xs border border-[#f55a6b]/30 bg-[#120d0e] focus:border-[#f55a6b] text-white focus:outline-none"
-                />
+                <div className="flex items-center justify-between">
+                  <label className="text-xs uppercase text-[#8a7f81]">{t.manualModalExe}</label>
+                  <button
+                    type="button"
+                    onClick={handleBrowseExe}
+                    className="text-[10px] text-[#5accf5] hover:underline flex items-center gap-1 cursor-pointer font-mono"
+                  >
+                    <FolderOpen className="w-3 h-3" />
+                    {t.manualModalBrowseBtn}
+                  </button>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. SHProto-Win64-Shipping.exe"
+                    value={newExe}
+                    onChange={(e) => setNewExe(e.target.value)}
+                    className="w-full px-3 py-2 text-xs border border-[#f55a6b]/30 bg-[#120d0e] focus:border-[#f55a6b] text-white focus:outline-none font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleBrowseExe}
+                    className="px-3 py-1.5 bg-[#1c0f12] border border-[#f55a6b] text-[#f55a6b] hover:bg-[#f55a6b] hover:text-black text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                  >
+                    <FolderOpen className="w-4 h-4" />
+                  </button>
+                </div>
+                {newPath && (
+                  <div className="text-[9px] text-[#5accf5] font-mono truncate pt-0.5" title={newPath}>
+                    {t.manualModalPath}: {newPath}
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1">
@@ -641,7 +897,11 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                   label={t.manualModalCancel}
                   variant="outline"
                   size="sm"
-                  onClick={() => setShowAddModal(false)}
+                  onClick={() => {
+                    setShowAddModal(false);
+                    setNewPath('');
+                    setIsHdrMatched(false);
+                  }}
                 />
                 <GlitchButton
                   type="submit"

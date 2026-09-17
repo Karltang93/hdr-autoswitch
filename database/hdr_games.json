@@ -1309,6 +1309,20 @@
     "notes": "Nativní podpora HDR"
   },
   {
+    "name": "Dead Island 2",
+    "exe_name": "deadisland-win64-shipping.exe",
+    "hdr_type": "Native",
+    "support_tier": "native",
+    "notes": "Nativní podpora HDR"
+  },
+  {
+    "name": "Dead Island 2",
+    "exe_name": "deadisland2.exe",
+    "hdr_type": "Native",
+    "support_tier": "native",
+    "notes": "Nativní podpora HDR"
+  },
+  {
     "name": "Dead or Alive 6",
     "exe_name": "deadoralive6.exe",
     "hdr_type": "AutoHDR",
@@ -5136,6 +5150,27 @@
     "hdr_type": "Custom",
     "support_tier": "manual_fix",
     "notes": "Vyžaduje úpravu / mod / Special K (PCGamingWiki)"
+  },
+  {
+    "name": "Silent Hill 2",
+    "exe_name": "shproto-win64-shipping.exe",
+    "hdr_type": "Native",
+    "support_tier": "native",
+    "notes": "Nativní Unreal Engine 5 HDR podpora"
+  },
+  {
+    "name": "Silent Hill 2",
+    "exe_name": "shproto.exe",
+    "hdr_type": "Native",
+    "support_tier": "native",
+    "notes": "Nativní Unreal Engine 5 HDR podpora"
+  },
+  {
+    "name": "Silent Hill 2",
+    "exe_name": "silenthill2.exe",
+    "hdr_type": "Native",
+    "support_tier": "native",
+    "notes": "Nativní Unreal Engine 5 HDR podpora"
   },
   {
     "name": "Sid Meier's Civilization VI",

@@ -20,6 +20,16 @@ export interface HdrApp {
   launcher?: string;
 }
 
+export interface PickedGameInfo {
+  name: string;
+  exe_name: string;
+  path: string;
+  hdr_type: HdrType;
+  is_hdr_supported: boolean;
+  notes?: string;
+  launcher?: string;
+}
+
 export interface ActivityLogEntry {
   id: string;
   timestamp: string;

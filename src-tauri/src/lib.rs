@@ -65,6 +65,16 @@ fn scan_installed_games() -> Vec<HdrApp> {
 }
 
 #[tauri::command]
+fn pick_game_exe() -> Result<Option<scanner::PickedGameInfo>, String> {
+    scanner::pick_game_exe_dialog()
+}
+
+#[tauri::command]
+fn inspect_exe_path(path: String) -> Result<scanner::PickedGameInfo, String> {
+    scanner::inspect_exe_path(&path)
+}
+
+#[tauri::command]
 fn import_detected_games(state: State<'_, AppState>, detected: Vec<HdrApp>) -> Result<usize, String> {
     let mut conf = state.config_mgr.get_config();
     let mut count = 0;
@@ -307,7 +317,9 @@ pub fn run() {
             remove_app,
             toggle_app,
             sync_database,
-            get_current_status
+            get_current_status,
+            pick_game_exe,
+            inspect_exe_path
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

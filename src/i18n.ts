@@ -90,14 +90,23 @@ export interface Translations {
   scanModalAddSelected: string;
   scanModalSuccess: (count: number) => string;
   scanModalError: string;
+  scanModalSectionHdr: (count: number) => string;
+  scanModalSectionSdr: (count: number) => string;
+  scanModalSelectAllHdr: string;
+  scanModalSelectAll: string;
+  scanModalDeselectAll: string;
 
-  // Manual Add Modal
+  // Manual Add Modal & Drag & Drop
   manualModalTitle: string;
   manualModalName: string;
   manualModalExe: string;
   manualModalType: string;
   manualModalCancel: string;
   manualModalSubmit: string;
+  manualModalBrowseBtn: string;
+  manualModalDragDropHint: string;
+  manualModalDetectedBadge: string;
+  manualModalPath: string;
 
   // Catalog Browser
   catalogTitle: string;
@@ -256,11 +265,16 @@ const cs: Translations = {
   appsRemoveFromLibrary: 'Odebrat z knihovny',
 
   scanModalTitle: (count) => `NALEZENÉ HRY V PC (${count})`,
-  scanModalSubtitle: 'Vyberte hry, které chcete přidat do automatického sledování HDR:',
+  scanModalSubtitle: 'Hry s ověřenou podporou HDR jsou předvybrány nahoře. Ostatní nainstalované hry můžete zařadit níže:',
   scanModalCancel: 'ZRUŠIT',
   scanModalAddSelected: 'PŘIDAT VYBRANÉ',
   scanModalSuccess: (count) => `Úspěšně přidáno ${count} nových her do sledování!`,
   scanModalError: 'Chyba při prohledávání disků.',
+  scanModalSectionHdr: (count) => `HRY S PODPOROU HDR (${count}) — AUTOMATICKY AKTIVNÍ`,
+  scanModalSectionSdr: (count) => `OSTATNÍ NAINSTALOVANÉ HRY (${count}) — SDR / MOŽNOST AUTO HDR`,
+  scanModalSelectAllHdr: 'VYBRAT HDR',
+  scanModalSelectAll: 'VYBRAT VŠE',
+  scanModalDeselectAll: 'ODZNAČIT VŠE',
 
   manualModalTitle: 'PŘIDAT HRU RUČNĚ',
   manualModalName: 'NÁZEV HRY',
@@ -268,6 +282,10 @@ const cs: Translations = {
   manualModalType: 'TYP HDR PODPORY',
   manualModalCancel: 'ZRUŠIT',
   manualModalSubmit: 'PŘIDAT HRU',
+  manualModalBrowseBtn: 'PROCHÁZET...',
+  manualModalDragDropHint: 'Přetáhněte sem libovolný soubor .exe nebo klikněte na Procházet',
+  manualModalDetectedBadge: 'ROZPOZNÁNO V KATALOGU HDR',
+  manualModalPath: 'CESTA K SOUBORU',
 
   catalogTitle: 'DATABÁZE HDR HER',
   catalogArchiveCount: (count) => `${count} TITULŮ V ARCHIVU`,
@@ -423,11 +441,16 @@ const en: Translations = {
   appsRemoveFromLibrary: 'Remove from library',
 
   scanModalTitle: (count) => `FOUND GAMES ON PC (${count})`,
-  scanModalSubtitle: 'Select games to add to automatic HDR switching:',
+  scanModalSubtitle: 'Games with verified HDR support are pre-selected at the top. Other installed games can be included below:',
   scanModalCancel: 'CANCEL',
   scanModalAddSelected: 'ADD SELECTED',
   scanModalSuccess: (count) => `Successfully imported ${count} new games to HDR library!`,
   scanModalError: 'Failed to scan storage drives.',
+  scanModalSectionHdr: (count) => `HDR SUPPORTED GAMES (${count}) — ENABLED BY DEFAULT`,
+  scanModalSectionSdr: (count) => `OTHER INSTALLED GAMES (${count}) — SDR / AUTO HDR`,
+  scanModalSelectAllHdr: 'SELECT HDR',
+  scanModalSelectAll: 'SELECT ALL',
+  scanModalDeselectAll: 'DESELECT ALL',
 
   manualModalTitle: 'ADD GAME MANUALLY',
   manualModalName: 'GAME TITLE',
@@ -435,6 +458,10 @@ const en: Translations = {
   manualModalType: 'HDR SUPPORT TYPE',
   manualModalCancel: 'CANCEL',
   manualModalSubmit: 'ADD GAME',
+  manualModalBrowseBtn: 'BROWSE...',
+  manualModalDragDropHint: 'Drag and drop any .exe file here or click Browse',
+  manualModalDetectedBadge: 'MATCHED IN HDR DATABASE',
+  manualModalPath: 'EXECUTABLE PATH',
 
   catalogTitle: 'HDR GAME DATABASE',
   catalogArchiveCount: (count) => `${count} TITLES IN ARCHIVE`,
