@@ -6,11 +6,16 @@ use std::sync::{Arc, Mutex};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum HdrType {
+    #[serde(alias = "Native", alias = "native")]
     Native,
+    #[serde(alias = "AutoHdr", alias = "AutoHDR", alias = "autohdr")]
     AutoHdr,
+    #[serde(alias = "Media", alias = "media")]
     Media,
+    #[serde(alias = "Custom", alias = "custom")]
     Custom,
 }
+
 
 impl HdrType {
     pub fn as_str(&self) -> &'static str {

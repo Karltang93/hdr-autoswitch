@@ -112,11 +112,13 @@ pub fn inspect_exe_path(path: &str) -> Result<PickedGameInfo, String> {
         })
         .unwrap_or_default();
 
-    // Check catalog match by exe name or folder title
+    // Check catalog match by exe name, alternate exes, or folder title
     let matched_cat = catalog.iter().find(|c| {
         c.exe_name.eq_ignore_ascii_case(&exe_name)
+            || c.alternate_exes.iter().any(|a| a.eq_ignore_ascii_case(&exe_name))
             || (!folder_name.is_empty() && is_title_match(&c.name, &folder_name))
     });
+
 
     let (display_name, hdr_type, is_hdr, notes) = if let Some(cat) = matched_cat {
         (cat.name.clone(), cat.hdr_type.clone(), true, cat.notes.clone())
@@ -289,9 +291,15 @@ fn scan_steam_manifests(catalog: &[database::CatalogEntry], map: &mut HashMap<St
                     if !install_dir_name.is_empty() {
                         let full_game_dir = steamapps.join("common").join(&install_dir_name);
                         if full_game_dir.exists() {
+                            let clean_game_name = if let Some(slash_idx) = game_name.find(" / ") {
+                                game_name[..slash_idx].trim().to_string()
+                            } else {
+                                game_name.clone()
+                            };
+
                             match_and_insert_game(
                                 catalog,
-                                &game_name,
+                                &clean_game_name,
                                 &full_game_dir,
                                 None,
                                 map,
@@ -300,6 +308,7 @@ fn scan_steam_manifests(catalog: &[database::CatalogEntry], map: &mut HashMap<St
                             );
                         }
                     }
+
                 }
             }
         }
@@ -693,15 +702,27 @@ fn match_and_insert_game(
     }
 
     // 2. Check for catalog match
-    // Strategy A: Exe match against catalog
     let mut matched_cat = None;
     let mut primary_exe_pair = None;
 
-    for (exe_name, exe_path) in &game_exes {
-        if let Some(cat) = catalog.iter().find(|c| c.exe_name.eq_ignore_ascii_case(exe_name)) {
+    // Strategy 0: Direct Steam AppID match against catalog
+    if let Some(s_id) = steam_id {
+        if let Some(cat) = catalog.iter().find(|c| c.steam_id.as_deref() == Some(s_id)) {
             matched_cat = Some(cat);
-            primary_exe_pair = Some((exe_name.clone(), exe_path.clone()));
-            break;
+        }
+    }
+
+    // Strategy A: Exe match against catalog
+    if matched_cat.is_none() {
+        for (exe_name, exe_path) in &game_exes {
+            if let Some(cat) = catalog.iter().find(|c| {
+                c.exe_name.eq_ignore_ascii_case(exe_name)
+                    || c.alternate_exes.iter().any(|alt| alt.eq_ignore_ascii_case(exe_name))
+            }) {
+                matched_cat = Some(cat);
+                primary_exe_pair = Some((exe_name.clone(), exe_path.clone()));
+                break;
+            }
         }
     }
 
@@ -711,6 +732,21 @@ fn match_and_insert_game(
             matched_cat = Some(cat);
         }
     }
+
+    // If matched via Strategy 0 or B, try to find preferred exe from catalog entry
+    if primary_exe_pair.is_none() {
+        if let Some(cat) = matched_cat {
+            for (exe_name, exe_path) in &game_exes {
+                if cat.exe_name.eq_ignore_ascii_case(exe_name)
+                    || cat.alternate_exes.iter().any(|alt| alt.eq_ignore_ascii_case(exe_name))
+                {
+                    primary_exe_pair = Some((exe_name.clone(), exe_path.clone()));
+                    break;
+                }
+            }
+        }
+    }
+
 
     // 3. Determine the primary executable
     let (main_exe_name, main_exe_path) = if let Some(pair) = primary_exe_pair {
@@ -986,6 +1022,18 @@ fn extract_title_base(title: &str) -> &str {
 }
 
 pub fn is_title_match(cat_name: &str, candidate_name: &str) -> bool {
+    // If either name contains " / " (e.g. bilingual Steam Capcom titles), test both full and primary part
+    if let Some(pos) = candidate_name.find(" / ") {
+        if is_title_match(cat_name, candidate_name[..pos].trim()) {
+            return true;
+        }
+    }
+    if let Some(pos) = cat_name.find(" / ") {
+        if is_title_match(cat_name[..pos].trim(), candidate_name) {
+            return true;
+        }
+    }
+
     let norm_cat = normalize_game_title(cat_name);
     let norm_cand = normalize_game_title(candidate_name);
 
@@ -1026,8 +1074,36 @@ pub fn is_title_match(cat_name: &str, candidate_name: &str) -> bool {
     false
 }
 
+fn strip_year_parens(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let chars: Vec<char> = s.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] == '(' {
+            let mut j = i + 1;
+            while j < chars.len() && chars[j].is_whitespace() {
+                j += 1;
+            }
+            if j + 4 <= chars.len() && chars[j..j + 4].iter().all(|c| c.is_ascii_digit()) {
+                let mut k = j + 4;
+                while k < chars.len() && chars[k].is_whitespace() {
+                    k += 1;
+                }
+                if k < chars.len() && chars[k] == ')' {
+                    i = k + 1;
+                    continue;
+                }
+            }
+        }
+        result.push(chars[i]);
+        i += 1;
+    }
+    result
+}
+
 fn normalize_game_title(s: &str) -> String {
-    let mut lower = s.to_lowercase();
+    let stripped = strip_year_parens(s);
+    let mut lower = stripped.to_lowercase();
 
     // Normalize Roman numerals commonly used in game titles
     lower = lower
@@ -1041,6 +1117,7 @@ fn normalize_game_title(s: &str) -> String {
 
     clean_string(&lower)
 }
+
 
 fn clean_string(s: &str) -> String {
     s.to_lowercase()
@@ -1125,6 +1202,50 @@ mod tests {
         assert!(!is_title_match("Alan Wake 2", "Alan Wake"));
         assert!(!is_title_match("Star Wars: Squadrons", "Star Wars: Outlaws"));
     }
+
+    #[test]
+    fn test_bilingual_capcom_titles() {
+        assert!(is_title_match(
+            "Resident Evil 7: Biohazard",
+            "RESIDENT EVIL 7 biohazard / BIOHAZARD 7 resident evil"
+        ));
+        assert!(is_title_match(
+            "RESIDENT EVIL 7 biohazard / BIOHAZARD 7 resident evil",
+            "Resident Evil 7: Biohazard"
+        ));
+    }
+
+    #[test]
+    fn test_year_parens_stripping() {
+        assert!(is_title_match("Silent Hill 2 (2024)", "SILENT HILL 2"));
+        assert!(is_title_match("SILENT HILL 2", "Silent Hill 2 (2024)"));
+        assert!(is_title_match("Alone in the Dark (2024)", "Alone in the Dark"));
+    }
+
+    #[test]
+    fn test_alternate_exes_and_catalog_lookup() {
+        let cat = database::get_full_catalog();
+
+        // Check Silent Hill 2
+        let sh2 = cat.iter().find(|c| c.steam_id.as_deref() == Some("2124490"));
+        assert!(sh2.is_some(), "Silent Hill 2 must exist with Steam AppID 2124490");
+        let sh2_entry = sh2.unwrap();
+        assert_eq!(sh2_entry.hdr_type, HdrType::Native);
+
+        // Check lookup by alternate or main exes
+        let by_shipping = database::find_in_catalog("shproto-win64-shipping.exe");
+        assert!(by_shipping.is_some(), "Should find SH2 by shproto-win64-shipping.exe");
+
+        let by_eos = database::find_in_catalog("game_f_x64_eos.exe");
+        assert!(by_eos.is_some(), "Should find Alan Wake Remastered by game_f_x64_eos.exe");
+
+        let by_goty = database::find_in_catalog("borderlandsgoty.exe");
+        assert!(by_goty.is_some(), "Should find Borderlands GOTY by borderlandsgoty.exe");
+
+        let by_re7 = database::find_in_catalog("re7.exe");
+        assert!(by_re7.is_some(), "Should find Resident Evil 7 by re7.exe");
+    }
 }
+
 
 

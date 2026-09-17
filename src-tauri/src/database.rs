@@ -12,6 +12,10 @@ pub struct CatalogEntry {
     pub hdr_type: HdrType,
     pub support_tier: String, // "native", "limited", "always_on", "manual_fix", "autohdr", "media"
     pub notes: Option<String>,
+    #[serde(default)]
+    pub steam_id: Option<String>,
+    #[serde(default)]
+    pub alternate_exes: Vec<String>,
 }
 
 static EMBEDDED_CATALOG_JSON: &str = include_str!("../catalog.json");
@@ -38,7 +42,25 @@ pub fn get_full_catalog() -> Vec<CatalogEntry> {
 
     // 1. Put all embedded entries from current binary (always fresh & authoritative)
     for emb in embedded {
-        catalog_map.insert(clean_key(&emb.name), emb);
+        let key = clean_key(&emb.name);
+        catalog_map
+            .entry(key)
+            .and_modify(|existing| {
+                if existing.steam_id.is_none() && emb.steam_id.is_some() {
+                    existing.steam_id = emb.steam_id.clone();
+                }
+                let emb_exe = emb.exe_name.to_lowercase();
+                if !emb_exe.is_empty() && emb_exe != existing.exe_name.to_lowercase() && !existing.alternate_exes.contains(&emb_exe) {
+                    existing.alternate_exes.push(emb_exe);
+                }
+                for alt in &emb.alternate_exes {
+                    let alt_clean = alt.to_lowercase();
+                    if !existing.alternate_exes.contains(&alt_clean) && alt_clean != existing.exe_name.to_lowercase() {
+                        existing.alternate_exes.push(alt_clean);
+                    }
+                }
+            })
+            .or_insert(emb);
     }
 
     // 2. Merge additional entries from online sync cached on disk
@@ -46,7 +68,8 @@ pub fn get_full_catalog() -> Vec<CatalogEntry> {
         if let Ok(content) = fs::read_to_string(&cache_file) {
             if let Ok(cached_entries) = serde_json::from_str::<Vec<CatalogEntry>>(&content) {
                 for cached in cached_entries {
-                    catalog_map.entry(clean_key(&cached.name)).or_insert(cached);
+                    let key = clean_key(&cached.name);
+                    catalog_map.entry(key).or_insert(cached);
                 }
             }
         }
@@ -85,20 +108,24 @@ pub fn get_default_catalog() -> Vec<HdrApp> {
             enabled: true,
             hdr_type: entry.hdr_type,
             path: None,
-            alternate_exes: Vec::new(),
-            steam_id: None,
+            alternate_exes: entry.alternate_exes,
+            steam_id: entry.steam_id,
             launcher: None,
         })
         .collect()
 }
+
 
 pub fn find_in_catalog(exe_name: &str) -> Option<CatalogEntry> {
     let catalog = get_full_catalog();
     let exe_clean = exe_name.to_lowercase();
     let exe_stem = exe_clean.trim_end_matches(".exe");
 
-    // 1. Direct match with entry.exe_name
-    if let Some(entry) = catalog.iter().find(|c| c.exe_name.eq_ignore_ascii_case(&exe_clean)) {
+    // 1. Direct match with entry.exe_name or entry.alternate_exes
+    if let Some(entry) = catalog.iter().find(|c| {
+        c.exe_name.eq_ignore_ascii_case(&exe_clean)
+            || c.alternate_exes.iter().any(|alt| alt.eq_ignore_ascii_case(&exe_clean))
+    }) {
         return Some(entry.clone());
     }
 
@@ -127,7 +154,12 @@ pub fn find_in_catalog(exe_name: &str) -> Option<CatalogEntry> {
             let cat_exe_clean = c.exe_name.to_lowercase();
             let cat_stem = cat_exe_clean.trim_end_matches(".exe");
             let cat_clean = clean_key(&c.name);
-            cat_stem == stripped_stem || cat_clean == clean_stripped
+            cat_stem == stripped_stem
+                || cat_clean == clean_stripped
+                || c.alternate_exes.iter().any(|alt| {
+                    let alt_stem = alt.to_lowercase();
+                    alt_stem.trim_end_matches(".exe") == stripped_stem
+                })
         }) {
             return Some(entry.clone());
         }
@@ -135,6 +167,7 @@ pub fn find_in_catalog(exe_name: &str) -> Option<CatalogEntry> {
 
     None
 }
+
 
 pub async fn fetch_online_database() -> Result<Vec<CatalogEntry>, String> {
     let current_catalog = get_full_catalog();
@@ -210,10 +243,13 @@ pub async fn fetch_online_database() -> Result<Vec<CatalogEntry>, String> {
                         hdr_type,
                         support_tier: tier.to_string(),
                         notes: Some(notes.to_string()),
+                        steam_id: None,
+                        alternate_exes: Vec::new(),
                     }
                 });
         }
     }
+
 
     // 2. Fetch PCGamingWiki Windows Auto HDR games page
     let autohdr_params = [
@@ -335,7 +371,10 @@ fn parse_pcgw_autohdr_wikitext(wikitext: &str, map: &mut HashMap<String, Catalog
                             hdr_type: HdrType::AutoHdr,
                             support_tier: "autohdr".to_string(),
                             notes: Some("Podporuje Microsoft Windows Auto HDR".to_string()),
+                            steam_id: None,
+                            alternate_exes: Vec::new(),
                         });
+
                     }
                 }
             }
