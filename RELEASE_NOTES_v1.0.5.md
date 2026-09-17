@@ -1,6 +1,6 @@
 # HDR Auto-Switch v1.0.5 — The Native HDR Precision, Steam AppID & Multi-Source Release
 
-> **Comprehensive resolution of native HDR detection issues reported by the community: direct Steam AppID pairing (Strategy 0) across 330+ titles, real production executable corrections with `alternate_exes` preservation, bilingual Capcom title parsing, automatic remake year stripping, and multi-source database expansion merging Steam Curator "HDR Games", HDR Gamer, and PCGamingWiki into 1,016 deduplicated verified PC games.**
+> **Comprehensive resolution of native HDR detection issues reported by the community: direct Steam AppID pairing (Strategy 0) across 350+ titles, real production executable corrections with `alternate_exes` preservation, bilingual Capcom title parsing, automatic remake year stripping, and multi-source database expansion merging Steam Curator "HDR Games", HDR Gamer, and PCGamingWiki into 1,035 deduplicated verified PC games.**
 
 
 ---
@@ -10,7 +10,7 @@
 #### 1. 🎯 Direct Steam AppID Pairing (Strategy 0)
 * **Bulletproof Steam Identification**:
   - The PC game scanner parses `appmanifest_{appid}.acf` for all installed games across all Steam libraries.
-  - The catalog is now pre-linked with **330+ official Steam AppIDs** (sourced from Steam Curator *HDR Games*).
+  - The catalog is now pre-linked with **353 official Steam AppIDs** (sourced from Steam Curator *HDR Games*).
   - Games from Steam (including *Silent Hill 2, Resident Evil 7: Biohazard, Borderlands GOTY Enhanced, Baldur's Gate 3, Cyberpunk 2077, The Witcher 3, Black Myth: Wukong, Forza Horizon 5, Dead Space, God of War*, etc.) are now recognized **instantly and with 100% precision**.
   - Identification is completely decoupled from heuristic directory naming or guessing executable names — the scanner matches the AppID and directly inspects the hard drive for the true active binary.
 
@@ -24,6 +24,12 @@
     - **Resident Evil 7: Biohazard**: `re7.exe` (Steam AppID `418370`, Native HDR) + `re7trial.exe`, `residentevil7biohazard.exe`
     - **Resident Evil 2, 3, 4, Village**: `re2.exe`, `re3.exe`, `re4.exe`, `re8.exe`
     - **Baldur's Gate 3**: `bg3.exe` (Steam AppID `1086940`) + `bg3_dx11.exe`
+    - **Ghostrunner 1 & 2**: `Ghostrunner-Win64-Shipping.exe` (Steam AppID `1073800`), `Ghostrunner2-Win64-Shipping.exe` (Steam AppID `2144740`)
+    - **Mass Effect Legendary Edition**: `MassEffectLauncher.exe` (Steam AppID `1328670`) + `MassEffect1.exe`, `MassEffect2.exe`, `MassEffect3.exe`
+    - **Uncharted: Legacy of Thieves Collection**: `u4.exe` (Steam AppID `1659420`) + `tll.exe`
+    - **Gears of War 4**: `GearGame.exe`
+    - **Grounded**: `Maine-Win64-Shipping.exe` (Steam AppID `962130`) + `Grounded.exe`
+    - **Psychonauts 2**: `Psychonauts2-Win64-Shipping.exe` (Steam AppID `607080`)
     - And dozens more (*Tekken 8, Diablo IV, Street Fighter 6, Dead Island 2, Helldivers 2, Spider-Man 2, S.T.A.L.K.E.R. 2, Space Marine 2...*).
 * **Catalog Deduplication Fix**:
   - Resolved a memory bug in `database.rs` where duplicate entries for the same title overwritten previous binaries in memory upon startup.
@@ -36,8 +42,8 @@
   - **HDR Gamer**: Integrated calibration guides and settings links for verified PC titles.
 * **Strict PC-Only Validation (No Console Pollution)**:
   - HDR Gamer covers both console and PC titles. To maintain absolute fidelity for a Windows PC utility, we strictly filter out console-exclusive games (*Demon's Souls, Gran Turismo 7, Astro's Playroom*) as well as games that only feature native HDR on consoles while the PC version is SDR (such as **World of Tanks**, which is now correctly kept in the bottom SDR section!).
-* **1,016 Deduplicated Unique PC Games**:
-  - Rigorous canonical normalization ensures zero duplicate entries, growing the clean PC catalog from 959 to **1,016 verified PC titles** with 329 pre-linked Steam AppIDs.
+* **1,035 Deduplicated Unique PC Games**:
+  - Rigorous canonical normalization ensures zero duplicate entries, growing the clean PC catalog from 959 to **1,035 verified PC titles** with 353 pre-linked Steam AppIDs.
   - Lowercase `hdr_type` serialization with enum aliases ensures full cross-version configuration backwards compatibility.
 
 

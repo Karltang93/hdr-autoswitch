@@ -54,8 +54,8 @@ Unlike conventional tools that continuously poll running processes in background
 * **Deactivate on Alt+Tab (with Debounce)**: Reverts to SDR when leaving the game window after a configurable delay (0 to 10 seconds).
 
 ### 📚 5. Multi-Source Verified Database (Steam Curator, HDR Gamer, PCGamingWiki)
-* **Direct Steam AppID Pairing**: Pre-linked with **330+ official Steam AppIDs** (from Steam Curator *HDR Games*) for instant, 100% accurate game identification without guessing folder or binary names.
-* Comprehensive catalog of **1,100+ titles** including Native HDR (*Silent Hill 2, Alan Wake 2 & Remastered, Resident Evil 2/3/4/7/Village, Cyberpunk 2077, Black Myth: Wukong, Borderlands GOTY Enhanced, Baldur's Gate 3*), Windows Auto HDR, and HDR Gamer calibration profiles.
+* **Direct Steam AppID Pairing**: Pre-linked with **350+ official Steam AppIDs** (from Steam Curator *HDR Games*) for instant, 100% accurate game identification without guessing folder or binary names.
+* Comprehensive catalog of **1,035+ verified PC titles** including Native HDR (*Silent Hill 2, Alan Wake 2 & Remastered, Resident Evil 2/3/4/7/Village, Cyberpunk 2077, Black Myth: Wukong, Borderlands GOTY Enhanced, Baldur's Gate 3, Ghostrunner 1 & 2, Mass Effect Legendary Edition*), Windows Auto HDR, and HDR Gamer calibration profiles.
 * Built-in 1-click online synchronization with PCGamingWiki API and GitHub master database.
 
 
