@@ -1,6 +1,6 @@
 # HDR Auto-Switch v1.0.5 — The Native HDR Precision, Steam AppID & Multi-Source Release
 
-> **Comprehensive resolution of native HDR detection issues reported by the community: direct Steam AppID pairing (Strategy 0) across 350+ titles, real production executable corrections with `alternate_exes` preservation, bilingual Capcom title parsing, automatic remake year stripping, and multi-source database expansion merging Steam Curator "HDR Games", HDR Gamer, and PCGamingWiki into 1,035 deduplicated verified PC games.**
+> **Comprehensive resolution of native HDR detection issues reported by the community: direct Steam AppID pairing (Strategy 0) across 340+ titles, real production executable corrections with `alternate_exes` preservation, bilingual Capcom title parsing, automatic remake year stripping, and multi-source database expansion merging Steam Curator "HDR Games", HDR Gamer, and PCGamingWiki into 1,027 deduplicated verified PC games.**
 
 
 ---
@@ -10,7 +10,7 @@
 #### 1. 🎯 Direct Steam AppID Pairing (Strategy 0)
 * **Bulletproof Steam Identification**:
   - The PC game scanner parses `appmanifest_{appid}.acf` for all installed games across all Steam libraries.
-  - The catalog is now pre-linked with **353 official Steam AppIDs** (sourced from Steam Curator *HDR Games*).
+  - The catalog is now pre-linked with **347 official Steam AppIDs** (sourced from Steam Curator *HDR Games*).
   - Games from Steam (including *Silent Hill 2, Resident Evil 7: Biohazard, Borderlands GOTY Enhanced, Baldur's Gate 3, Cyberpunk 2077, The Witcher 3, Black Myth: Wukong, Forza Horizon 5, Dead Space, God of War*, etc.) are now recognized **instantly and with 100% precision**.
   - Identification is completely decoupled from heuristic directory naming or guessing executable names — the scanner matches the AppID and directly inspects the hard drive for the true active binary.
 
@@ -42,8 +42,8 @@
   - **HDR Gamer**: Integrated calibration guides and settings links for verified PC titles.
 * **Strict PC-Only Validation (No Console Pollution)**:
   - HDR Gamer covers both console and PC titles. To maintain absolute fidelity for a Windows PC utility, we strictly filter out console-exclusive games (*Demon's Souls, Gran Turismo 7, Astro's Playroom*) as well as games that only feature native HDR on consoles while the PC version is SDR (such as **World of Tanks**, which is now correctly kept in the bottom SDR section!).
-* **1,035 Deduplicated Unique PC Games**:
-  - Rigorous canonical normalization ensures zero duplicate entries, growing the clean PC catalog from 959 to **1,035 verified PC titles** with 353 pre-linked Steam AppIDs.
+* **1,027 Deduplicated Unique PC Games**:
+  - Rigorous canonical normalization ensures zero duplicate entries, growing the clean PC catalog from 959 to **1,027 verified PC titles** with 347 pre-linked Steam AppIDs.
   - Lowercase `hdr_type` serialization with enum aliases ensures full cross-version configuration backwards compatibility.
 
 

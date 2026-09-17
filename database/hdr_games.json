@@ -1206,15 +1206,6 @@
     "alternate_exes": []
   },
   {
-    "name": "Call of Duty HQ",
-    "exe_name": "cod.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "Nativní podpora",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
     "name": "Call of Duty: Advanced Warfare",
     "exe_name": "callofdutyadvancedwarfare.exe",
     "hdr_type": "autohdr",
@@ -1372,15 +1363,6 @@
     "support_tier": "native",
     "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/04/call-of-duty-wwii-ps4-hdr-settings.html",
     "steam_id": "476600",
-    "alternate_exes": []
-  },
-  {
-    "name": "Call of Duty®",
-    "exe_name": "callofduty.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "Steam Curator (HDR Games): HDR. Native support.",
-    "steam_id": "1938090",
     "alternate_exes": []
   },
   {
@@ -1839,7 +1821,7 @@
     "hdr_type": "native",
     "support_tier": "native",
     "notes": "Nativní podpora HDR | HDR Gamer: https://www.hdrgamer.com/2024/03/dead-island-2-hdr-settings.html",
-    "steam_id": "2246340",
+    "steam_id": "934700",
     "alternate_exes": [
       "deadisland.exe"
     ]
@@ -2025,15 +2007,6 @@
     "hdr_type": "native",
     "support_tier": "native",
     "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2023/06/diablo-iv-hdr-settings.html",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "Diablo IV",
-    "exe_name": "diablo iv.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "Nativní HDR podpora",
     "steam_id": null,
     "alternate_exes": [
       "diablo iv launcher.exe"
@@ -3447,20 +3420,11 @@
     "exe_name": "gowragna.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2022/11/god-of-war-ragnarok-hdr-settings.html",
     "steam_id": "2322010",
     "alternate_exes": [
       "gowragna-win64-shipping.exe"
     ]
-  },
-  {
-    "name": "God of War Ragnarök",
-    "exe_name": "godofwarragnark.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/11/god-of-war-ragnarok-hdr-settings.html",
-    "steam_id": "2322010",
-    "alternate_exes": []
   },
   {
     "name": "Godfall",
@@ -5048,13 +5012,11 @@
   {
     "name": "Mass Effect",
     "exe_name": "masseffect.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "Vyžaduje úpravu / mod / Special K (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/01/mass-effect-legendary-edition-ps5-hdr.html",
-    "steam_id": "1328670",
-    "alternate_exes": [
-      "masseffectlegendaryedition.exe"
-    ]
+    "hdr_type": "custom",
+    "support_tier": "manual_fix",
+    "notes": "Vyžaduje úpravu / mod / Special K (PCGamingWiki)",
+    "steam_id": null,
+    "alternate_exes": []
   },
   {
     "name": "Mass Effect 1 (LE)",
@@ -5798,15 +5760,6 @@
     "alternate_exes": [
       "nioh 2.exe"
     ]
-  },
-  {
-    "name": "Nioh 2: The Complete Edition",
-    "exe_name": "nioh2thecompleteedition.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
-    "steam_id": "1325200",
-    "alternate_exes": []
   },
   {
     "name": "Nioh 3",
@@ -6707,20 +6660,11 @@
     "alternate_exes": []
   },
   {
-    "name": "Resident Evil 7",
-    "exe_name": "re7.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "RE Engine nativní HDR",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
     "name": "Resident Evil 7: Biohazard",
     "exe_name": "re7.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Omezená nativní podpora HDR (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/01/resident-evil-7-biohazard-hdr-settings.html",
+    "notes": "RE Engine nativní HDR | HDR Gamer: https://www.hdrgamer.com/2022/01/resident-evil-7-biohazard-hdr-settings.html",
     "steam_id": "418370",
     "alternate_exes": [
       "re7trial.exe",
@@ -6749,17 +6693,8 @@
     "name": "Resident Evil Village",
     "exe_name": "re8.exe",
     "hdr_type": "native",
-    "support_tier": "limited",
-    "notes": "RE Engine nativní HDR | HDR Gamer: https://www.hdrgamer.com/2022/01/resident-evil-village-ps5-hdr-peak.html",
-    "steam_id": "1196590",
-    "alternate_exes": []
-  },
-  {
-    "name": "Resident Evil Village",
-    "exe_name": "re8.exe",
-    "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora",
+    "notes": "RE Engine nativní HDR | HDR Gamer: https://www.hdrgamer.com/2022/01/resident-evil-village-ps5-hdr-peak.html",
     "steam_id": "1196590",
     "alternate_exes": [
       "residentevilvillage.exe"
@@ -8840,15 +8775,6 @@
       "tll-l.exe",
       "uncharted.exe"
     ]
-  },
-  {
-    "name": "Uncharted: Legacy of Thieves Collection",
-    "exe_name": "unchartedlegacyofthievescollection.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
-    "steam_id": "1659420",
-    "alternate_exes": []
   },
   {
     "name": "Uncharted: The Lost Legacy",
