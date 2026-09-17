@@ -1,6 +1,7 @@
 # HDR Auto-Switch v1.0.5 — The Native HDR Precision, Steam AppID & Multi-Source Release
 
-> **Comprehensive resolution of native HDR detection issues reported by the community: direct Steam AppID pairing (Strategy 0) across 330+ titles, real production executable corrections with `alternate_exes` preservation, bilingual Capcom title parsing, automatic remake year stripping, and multi-source database expansion merging Steam Curator "HDR Games", HDR Gamer, and PCGamingWiki into 1,096 deduplicated verified games.**
+> **Comprehensive resolution of native HDR detection issues reported by the community: direct Steam AppID pairing (Strategy 0) across 330+ titles, real production executable corrections with `alternate_exes` preservation, bilingual Capcom title parsing, automatic remake year stripping, and multi-source database expansion merging Steam Curator "HDR Games", HDR Gamer, and PCGamingWiki into 1,016 deduplicated verified PC games.**
+
 
 ---
 
@@ -28,14 +29,17 @@
   - Resolved a memory bug in `database.rs` where duplicate entries for the same title overwritten previous binaries in memory upon startup.
   - All executable variations are now safely retained in `alternate_exes` and searched across automated scanning, native file browsing, and drag-and-drop.
 
-#### 3. 🌐 Multi-Source Database Expansion (Zero Duplicates)
+#### 3. 🌐 Multi-Source Database Expansion & PC-Only Validation (Zero Duplicates)
 * **Merged 3 Independent Verified HDR Sources**:
   - **Steam Curator "HDR Games"**: 323 curated Steam games with verified AppIDs, HDR grades, and clear tags separating Native HDR from community mods (RenoDX / Special K).
-  - **HDR Gamer**: 208 games with verified HDR calibration settings and test results from `hdrgamer.com`.
-  - **PCGamingWiki**: Fully preserved and refreshed.
-* **1,096 Deduplicated Unique Games**:
-  - Rigorous canonical normalization ensures zero duplicate entries while growing the catalog from 959 to **1,096 unique titles**.
+  - **PCGamingWiki**: Fully preserved, refreshed, and unescaped (fixing raw HTML entities like `&#39;` in titles like *Baldur's Gate 3* or *Tony Hawk's Pro Skater*).
+  - **HDR Gamer**: Integrated calibration guides and settings links for verified PC titles.
+* **Strict PC-Only Validation (No Console Pollution)**:
+  - HDR Gamer covers both console and PC titles. To maintain absolute fidelity for a Windows PC utility, we strictly filter out console-exclusive games (*Demon's Souls, Gran Turismo 7, Astro's Playroom*) as well as games that only feature native HDR on consoles while the PC version is SDR (such as **World of Tanks**, which is now correctly kept in the bottom SDR section!).
+* **1,016 Deduplicated Unique PC Games**:
+  - Rigorous canonical normalization ensures zero duplicate entries, growing the clean PC catalog from 959 to **1,016 verified PC titles** with 329 pre-linked Steam AppIDs.
   - Lowercase `hdr_type` serialization with enum aliases ensures full cross-version configuration backwards compatibility.
+
 
 #### 4. 🈳 Bilingual Capcom Titles & Remake Year Stripping
 * **Bilingual Slashed Titles**:

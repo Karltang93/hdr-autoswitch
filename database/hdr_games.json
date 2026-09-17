@@ -1,14 +1,5 @@
 [
   {
-    "name": "'+a(this).attr('tab-ify')+'",
-    "exe_name": "athisattrtabify.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (javascript:;)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
     "name": "007 First Light",
     "exe_name": "007firstlight.exe",
     "hdr_type": "native",
@@ -67,7 +58,7 @@
     "exe_name": "aplaguetaleinnocence_x64.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2022/02/a-plague-tale-innocence-hdr-settings.html",
     "steam_id": "752590",
     "alternate_exes": []
   },
@@ -76,7 +67,7 @@
     "exe_name": "aplaguetalerequiem_x64.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2022/10/a-plague-tale-requiem-hdr-settings.html",
     "steam_id": "1182900",
     "alternate_exes": []
   },
@@ -193,7 +184,7 @@
     "exe_name": "agentsofmayhem.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2023/03/agents-of-mayhem-hdr-settings.html",
     "steam_id": "304530",
     "alternate_exes": []
   },
@@ -220,9 +211,11 @@
     "exe_name": "alanwake2.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Špičková nativní HDR kalibrace",
+    "notes": "Špičková nativní HDR kalibrace | HDR Gamer: https://www.hdrgamer.com/2024/02/alan-wake-2-hdr-settings.html",
     "steam_id": null,
-    "alternate_exes": []
+    "alternate_exes": [
+      "alanwakeii.exe"
+    ]
   },
   {
     "name": "Alan Wake Remastered",
@@ -384,7 +377,7 @@
     "exe_name": "arksurvivalevolved.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Steam Curator (HDR Games): It used to have native support since version 271.3, but it was dropped later.",
+    "notes": "Steam Curator (HDR Games): It used to have native support since version 271.3, but it was dropped later. | HDR Gamer: https://www.hdrgamer.com/2022/07/ark-survival-evolved-hdr-settings.html",
     "steam_id": "346110",
     "alternate_exes": []
   },
@@ -443,105 +436,6 @@
     "alternate_exes": []
   },
   {
-    "name": "Assassin&#39;s Creed II",
-    "exe_name": "assassin39screedii.exe",
-    "hdr_type": "custom",
-    "support_tier": "manual_fix",
-    "notes": "Vyžaduje úpravu / mod / Special K (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "Assassin&#39;s Creed III",
-    "exe_name": "assassin39screediii.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "Vyžaduje úpravu / mod / Special K (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "Assassin&#39;s Creed Mirage",
-    "exe_name": "assassin39screedmirage.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "Assassin&#39;s Creed Odyssey",
-    "exe_name": "assassin39screedodyssey.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "Assassin&#39;s Creed Origins",
-    "exe_name": "assassin39screedorigins.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "Assassin&#39;s Creed Shadows",
-    "exe_name": "assassin39screedshadows.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "Assassin&#39;s Creed Valhalla",
-    "exe_name": "assassin39screedvalhalla.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "Assassin&#39;s Creed: Black Flag Resynced",
-    "exe_name": "assassin39screedblackflagresynced.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "Assassin&#39;s Creed: Brotherhood",
-    "exe_name": "assassin39screedbrotherhood.exe",
-    "hdr_type": "custom",
-    "support_tier": "manual_fix",
-    "notes": "Vyžaduje úpravu / mod / Special K (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "Assassin&#39;s Creed: Liberation HD",
-    "exe_name": "assassin39screedliberationhd.exe",
-    "hdr_type": "native",
-    "support_tier": "always_on",
-    "notes": "Trvale aktivní v enginu (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "Assassin&#39;s Creed: Revelations",
-    "exe_name": "assassin39screedrevelations.exe",
-    "hdr_type": "custom",
-    "support_tier": "manual_fix",
-    "notes": "Vyžaduje úpravu / mod / Special K (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
     "name": "Assassin's Creed Chronicles: China",
     "exe_name": "assassinscreedchronicleschina.exe",
     "hdr_type": "autohdr",
@@ -575,7 +469,20 @@
     "support_tier": "autohdr",
     "notes": "Podporuje Microsoft Windows Auto HDR",
     "steam_id": null,
-    "alternate_exes": []
+    "alternate_exes": [
+      "assassin39screedii.exe"
+    ]
+  },
+  {
+    "name": "Assassin's Creed III",
+    "exe_name": "assassin39screediii.exe",
+    "hdr_type": "native",
+    "support_tier": "native",
+    "notes": "Vyžaduje úpravu / mod / Special K (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/01/assassins-creed-iii-remastered-hdr.html",
+    "steam_id": "911400",
+    "alternate_exes": [
+      "assassin39screediiiremastered.exe"
+    ]
   },
   {
     "name": "Assassin's Creed IV: Black Flag",
@@ -591,26 +498,41 @@
     "exe_name": "acmirage.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2023/10/assassins-creed-mirage-hdr-settings.html",
     "steam_id": null,
-    "alternate_exes": []
+    "alternate_exes": [
+      "assassin39screedmirage.exe"
+    ]
   },
   {
     "name": "Assassin's Creed Odyssey",
     "exe_name": "acodyssey.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2022/02/assassins-creed-odyssey-hdr-settings.html",
     "steam_id": "812140",
-    "alternate_exes": []
+    "alternate_exes": [
+      "assassin39screedodyssey.exe"
+    ]
   },
   {
     "name": "Assassin's Creed Origins",
     "exe_name": "aco.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2022/06/assassins-creed-origins-hdr-settings.html",
     "steam_id": "582160",
+    "alternate_exes": [
+      "assassin39screedorigins.exe"
+    ]
+  },
+  {
+    "name": "Assassin's Creed Shadows",
+    "exe_name": "assassin39screedshadows.exe",
+    "hdr_type": "native",
+    "support_tier": "native",
+    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "steam_id": "3159330",
     "alternate_exes": []
   },
   {
@@ -636,26 +558,46 @@
     "exe_name": "acvalhalla.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2022/07/assassins-creed-valhalla-hdr-settings.html",
+    "steam_id": null,
+    "alternate_exes": [
+      "assassin39screedvalhalla.exe"
+    ]
+  },
+  {
+    "name": "Assassin's Creed: Black Flag Resynced",
+    "exe_name": "assassin39screedblackflagresynced.exe",
+    "hdr_type": "native",
+    "support_tier": "native",
+    "notes": "Nativní HDR podpora (PCGamingWiki)",
     "steam_id": null,
     "alternate_exes": []
   },
   {
-    "name": "Assassin's Creed® III Remastered",
-    "exe_name": "assassinscreediiiremastered.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "Steam Curator (HDR Games): HDR. Native support.",
-    "steam_id": "911400",
+    "name": "Assassin's Creed: Brotherhood",
+    "exe_name": "assassin39screedbrotherhood.exe",
+    "hdr_type": "custom",
+    "support_tier": "manual_fix",
+    "notes": "Vyžaduje úpravu / mod / Special K (PCGamingWiki)",
+    "steam_id": null,
     "alternate_exes": []
   },
   {
-    "name": "Assassin’s Creed Shadows",
-    "exe_name": "assassinscreedshadows.exe",
+    "name": "Assassin's Creed: Liberation HD",
+    "exe_name": "assassin39screedliberationhd.exe",
     "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "Steam Curator (HDR Games): HDR. Native support.",
-    "steam_id": "3159330",
+    "support_tier": "always_on",
+    "notes": "Trvale aktivní v enginu (PCGamingWiki)",
+    "steam_id": null,
+    "alternate_exes": []
+  },
+  {
+    "name": "Assassin's Creed: Revelations",
+    "exe_name": "assassin39screedrevelations.exe",
+    "hdr_type": "custom",
+    "support_tier": "manual_fix",
+    "notes": "Vyžaduje úpravu / mod / Special K (PCGamingWiki)",
+    "steam_id": null,
     "alternate_exes": []
   },
   {
@@ -665,7 +607,10 @@
     "support_tier": "manual_fix",
     "notes": "Vyžaduje Custom Shaders Patch (CSP) + Pure mod pro HDR",
     "steam_id": null,
-    "alternate_exes": []
+    "alternate_exes": [
+      "assettocorsa.exe",
+      "acs_x86.exe"
+    ]
   },
   {
     "name": "Assetto Corsa Competizione",
@@ -674,7 +619,10 @@
     "support_tier": "native",
     "notes": "Nativní HDR podpora v grafickém nastavení (PCGamingWiki)",
     "steam_id": "805550",
-    "alternate_exes": []
+    "alternate_exes": [
+      "acc.exe",
+      "assettocorsacompetizione.exe"
+    ]
   },
   {
     "name": "Astroneer",
@@ -686,16 +634,7 @@
     "alternate_exes": []
   },
   {
-    "name": "Astro’s Playroom",
-    "exe_name": "astrosplayroom.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2023/01/astros-playroom-hdr-settings.html)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "Atelier Resleriana: The Red Alchemist &amp; the White Guardian",
+    "name": "Atelier Resleriana: The Red Alchemist & the White Guardian",
     "exe_name": "atelierreslerianatheredalchemistampthewhiteguardian.exe",
     "hdr_type": "native",
     "support_tier": "native",
@@ -771,7 +710,7 @@
     "exe_name": "back4blood.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/07/back-4-blood-hdr-settings.html",
     "steam_id": "924970",
     "alternate_exes": []
   },
@@ -785,20 +724,11 @@
     "alternate_exes": []
   },
   {
-    "name": "Baldur&#39;s Gate 3",
-    "exe_name": "baldur39sgate3.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
     "name": "Baldur's Gate 3",
     "exe_name": "bg3.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR (Vulkan & DX11)",
+    "notes": "Nativní HDR (Vulkan & DX11) | HDR Gamer: https://www.hdrgamer.com/2024/01/baldurs-gate-iii-hdr-settings.html",
     "steam_id": "1086940",
     "alternate_exes": [
       "bg3_dx11.exe",
@@ -882,7 +812,7 @@
     "exe_name": "bf1.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2022/02/battlefield-1-hdr-settings.html",
     "steam_id": "1238840",
     "alternate_exes": []
   },
@@ -891,7 +821,7 @@
     "exe_name": "bf2042.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2022/08/battlefield-2042-hdr-settings.html",
     "steam_id": "1517290",
     "alternate_exes": []
   },
@@ -918,7 +848,7 @@
     "exe_name": "bfv.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2022/02/battlefield-v-hdr-settings.html",
     "steam_id": "1238810",
     "alternate_exes": []
   },
@@ -1006,8 +936,8 @@
   {
     "name": "BIOMUTANT",
     "exe_name": "biomutant.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
+    "hdr_type": "custom",
+    "support_tier": "manual_fix",
     "notes": "Steam Curator (HDR Games): HDR. Workaround, can be forced using SpecialK.",
     "steam_id": "597820",
     "alternate_exes": []
@@ -1042,8 +972,8 @@
   {
     "name": "Black Desert",
     "exe_name": "blackdesert.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
+    "hdr_type": "autohdr",
+    "support_tier": "autohdr",
     "notes": "Podporuje Microsoft Windows Auto HDR",
     "steam_id": null,
     "alternate_exes": []
@@ -1134,8 +1064,8 @@
   {
     "name": "Bloodstained: Ritual of the Night",
     "exe_name": "bloodstainedritualofthenight.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
+    "hdr_type": "autohdr",
+    "support_tier": "autohdr",
     "notes": "Podporuje Microsoft Windows Auto HDR",
     "steam_id": "692850",
     "alternate_exes": []
@@ -1172,7 +1102,7 @@
     "exe_name": "borderlands3.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2022/02/borderlands-3-hdr-settings.html",
     "steam_id": "397540",
     "alternate_exes": []
   },
@@ -1300,7 +1230,7 @@
     "exe_name": "callofdutyblackops6.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2024/11/call-of-duty-black-ops-6-hdr-settings.html",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -1318,7 +1248,7 @@
     "exe_name": "callofdutyblackopscoldwar.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/04/call-of-duty-black-ops-cold-war-ps5-hdr.html",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -1374,7 +1304,9 @@
     "support_tier": "native",
     "notes": "Nativní HDR podpora (PCGamingWiki)",
     "steam_id": null,
-    "alternate_exes": []
+    "alternate_exes": [
+      "callofdutymodernwarfareremastered.exe"
+    ]
   },
   {
     "name": "Call of Duty: Modern Warfare 4",
@@ -1390,7 +1322,7 @@
     "exe_name": "callofdutymodernwarfareii.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/10/call-of-duty-modern-warfare-ii-hdr.html",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -1408,16 +1340,7 @@
     "exe_name": "callofdutyvanguard.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "Call of Duty: Warzone",
-    "exe_name": "callofdutywarzone.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/01/call-of-duty-warzone-hdr-calibration.html)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/04/call-of-duty-vanguard-ps5-hdr-settings.html",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -1435,7 +1358,7 @@
     "exe_name": "callofdutywwii.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/04/call-of-duty-wwii-ps4-hdr-settings.html",
     "steam_id": "476600",
     "alternate_exes": []
   },
@@ -1669,15 +1592,15 @@
     "exe_name": "crackdown3.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/08/crackdown-3-hdr-settings.html",
     "steam_id": null,
     "alternate_exes": []
   },
   {
     "name": "Crash Bandicoot N. Sane Trilogy",
     "exe_name": "crashbandicootnsanetrilogy.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
+    "hdr_type": "autohdr",
+    "support_tier": "autohdr",
     "notes": "Podporuje Microsoft Windows Auto HDR",
     "steam_id": null,
     "alternate_exes": []
@@ -1725,7 +1648,9 @@
     "support_tier": "native",
     "notes": "Podporuje Microsoft Windows Auto HDR",
     "steam_id": null,
-    "alternate_exes": []
+    "alternate_exes": [
+      "crysisremastered.exe"
+    ]
   },
   {
     "name": "Crysis 2",
@@ -1734,7 +1659,9 @@
     "support_tier": "autohdr",
     "notes": "Podporuje Microsoft Windows Auto HDR",
     "steam_id": null,
-    "alternate_exes": []
+    "alternate_exes": [
+      "crysis2remastered.exe"
+    ]
   },
   {
     "name": "Crysis 3",
@@ -1743,16 +1670,9 @@
     "support_tier": "autohdr",
     "notes": "Podporuje Microsoft Windows Auto HDR",
     "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "Crysis Remastered Trilogy",
-    "exe_name": "crysisremasteredtrilogy.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/01/crysis-remastered-trilogy-hdr-peak.html)",
-    "steam_id": null,
-    "alternate_exes": []
+    "alternate_exes": [
+      "crysis3remastered.exe"
+    ]
   },
   {
     "name": "Cthulhu: The Cosmic Abyss",
@@ -1786,7 +1706,7 @@
     "exe_name": "cyberpunk2077.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Plná nativní HDR podpora",
+    "notes": "Plná nativní HDR podpora | HDR Gamer: https://www.hdrgamer.com/2022/01/cyberpunk-2077-hdr-settings.html",
     "steam_id": "1091500",
     "alternate_exes": []
   },
@@ -1885,7 +1805,7 @@
     "exe_name": "daysgone.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2022/01/days-gone.html",
     "steam_id": "1259420",
     "alternate_exes": []
   },
@@ -1912,7 +1832,7 @@
     "exe_name": "deadisland-win64-shipping.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora HDR",
+    "notes": "Nativní podpora HDR | HDR Gamer: https://www.hdrgamer.com/2024/03/dead-island-2-hdr-settings.html",
     "steam_id": "2246340",
     "alternate_exes": [
       "deadisland.exe"
@@ -1941,9 +1861,11 @@
     "exe_name": "deadspace.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2023/01/dead-space-remake-hdr-settings.html",
     "steam_id": "1693980",
-    "alternate_exes": []
+    "alternate_exes": [
+      "deadspace2023.exe"
+    ]
   },
   {
     "name": "Dead Space Remake",
@@ -1959,22 +1881,15 @@
     "exe_name": "ds.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní Decima Engine HDR",
+    "notes": "Nativní Decima Engine HDR | HDR Gamer: https://www.hdrgamer.com/2022/01/death-stranding-hdr-peak-brightness.html",
     "steam_id": "1850570",
-    "alternate_exes": []
+    "alternate_exes": [
+      "deathstrandingdirector39scut.exe"
+    ]
   },
   {
     "name": "Death Stranding 2: On the Beach",
     "exe_name": "deathstranding2onthebeach.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "Death Stranding Director&#39;s Cut",
-    "exe_name": "deathstrandingdirector39scut.exe",
     "hdr_type": "native",
     "support_tier": "native",
     "notes": "Nativní HDR podpora (PCGamingWiki)",
@@ -1995,7 +1910,7 @@
     "exe_name": "deathloop.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2022/04/deathloop-hdr-settings.html",
     "steam_id": "1252330",
     "alternate_exes": []
   },
@@ -2036,15 +1951,6 @@
     "alternate_exes": []
   },
   {
-    "name": "Demon’s Souls",
-    "exe_name": "demonssouls.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/01/demons-souls.html)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
     "name": "Desordre",
     "exe_name": "desordre.exe",
     "hdr_type": "native",
@@ -2058,17 +1964,8 @@
     "exe_name": "destiny2.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2022/03/destiny-2-hdr-settings.html",
     "steam_id": "1085660",
-    "alternate_exes": []
-  },
-  {
-    "name": "Destruction AllStars",
-    "exe_name": "destructionallstars.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2023/03/destruction-allstars-hdr-settings.html)",
-    "steam_id": null,
     "alternate_exes": []
   },
   {
@@ -2076,16 +1973,7 @@
     "exe_name": "detroitbecomehuman.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "Deus Ex: Human Revolution - Director&#39;s Cut",
-    "exe_name": "deusexhumanrevolutiondirector39scut.exe",
-    "hdr_type": "custom",
-    "support_tier": "manual_fix",
-    "notes": "Vyžaduje úpravu / mod / Special K (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/01/detroit-become-human.html",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -2096,14 +1984,16 @@
     "support_tier": "autohdr",
     "notes": "Podporuje Microsoft Windows Auto HDR",
     "steam_id": null,
-    "alternate_exes": []
+    "alternate_exes": [
+      "deusexhumanrevolutiondirector39scut.exe"
+    ]
   },
   {
     "name": "Deus Ex: Mankind Divided",
     "exe_name": "dxmd.exe",
     "hdr_type": "native",
     "support_tier": "limited",
-    "notes": "Vyžaduje DX11 režim pro stabilní HDR",
+    "notes": "Vyžaduje DX11 režim pro stabilní HDR | HDR Gamer: https://www.hdrgamer.com/2022/01/deus-ex-mankind-divided.html",
     "steam_id": "337000",
     "alternate_exes": []
   },
@@ -2112,7 +2002,7 @@
     "exe_name": "devilmaycry5.exe",
     "hdr_type": "native",
     "support_tier": "limited",
-    "notes": "Omezená nativní podpora HDR (PCGamingWiki)",
+    "notes": "Omezená nativní podpora HDR (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/01/devil-may-cry-5-hdr-settings.html",
     "steam_id": "601150",
     "alternate_exes": []
   },
@@ -2130,7 +2020,7 @@
     "exe_name": "diablo iv.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2023/06/diablo-iv-hdr-settings.html",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -2195,7 +2085,7 @@
     "exe_name": "dirt5.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/01/dirt-5.html",
     "steam_id": "1038250",
     "alternate_exes": []
   },
@@ -2263,15 +2153,6 @@
     "alternate_exes": []
   },
   {
-    "name": "DISSIDIA FINAL FANTASY NT Free Edition",
-    "exe_name": "dissidiafinalfantasyntfreeedition.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2023/03/dissidia-final-fantasy-nt-free-edition.html)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
     "name": "Distant Worlds 2",
     "exe_name": "distantworlds2.exe",
     "hdr_type": "native",
@@ -2287,7 +2168,9 @@
     "support_tier": "native",
     "notes": "Nativní HDR podpora (PCGamingWiki)",
     "steam_id": "435150",
-    "alternate_exes": []
+    "alternate_exes": [
+      "divinityoriginalsiniidefinitiveedition.exe"
+    ]
   },
   {
     "name": "Donut County",
@@ -2321,9 +2204,11 @@
     "exe_name": "doometernalx64vk.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní idTech 7 HDR",
+    "notes": "Nativní idTech 7 HDR | HDR Gamer: https://www.hdrgamer.com/2022/01/doom-eternal.html",
     "steam_id": "782330",
-    "alternate_exes": []
+    "alternate_exes": [
+      "doometernalx64tk-vk.exe"
+    ]
   },
   {
     "name": "DOOM Eternal (D3D12)",
@@ -2434,22 +2319,15 @@
     "alternate_exes": []
   },
   {
-    "name": "Dragon&#39;s Dogma 2",
-    "exe_name": "dragon39sdogma2.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
     "name": "Dragon's Dogma 2",
     "exe_name": "dd2.exe",
     "hdr_type": "native",
     "support_tier": "native",
     "notes": "Nativní podpora",
     "steam_id": "2054970",
-    "alternate_exes": []
+    "alternate_exes": [
+      "dragon39sdogma2.exe"
+    ]
   },
   {
     "name": "DragonSword: Awakening",
@@ -2497,7 +2375,7 @@
     "alternate_exes": []
   },
   {
-    "name": "Dungeons &amp; Dragons: Dark Alliance",
+    "name": "Dungeons & Dragons: Dark Alliance",
     "exe_name": "dungeonsampdragonsdarkalliance.exe",
     "hdr_type": "custom",
     "support_tier": "manual_fix",
@@ -2672,7 +2550,7 @@
     "exe_name": "eldenring.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora HDR10",
+    "notes": "Nativní podpora HDR10 | HDR Gamer: https://www.hdrgamer.com/2022/02/elden-ring-hdr-settings.html",
     "steam_id": "1245620",
     "alternate_exes": []
   },
@@ -2794,15 +2672,6 @@
     "alternate_exes": []
   },
   {
-    "name": "Everybody's Golf",
-    "exe_name": "everybodysgolf.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/07/everybodys-golf-hdr-settings.html)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
     "name": "Evil Genius 2: World Domination",
     "exe_name": "evilgenius2worlddomination.exe",
     "hdr_type": "native",
@@ -2897,7 +2766,7 @@
     "exe_name": "f122.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/07/f1-22-hdr-settings.html",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -2967,8 +2836,8 @@
   {
     "name": "Fallout 76",
     "exe_name": "fallout76.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
+    "hdr_type": "custom",
+    "support_tier": "manual_fix",
     "notes": "Steam Curator (HDR Games): HDR. Workaround, can be forced using RenoDX.",
     "steam_id": "1151340",
     "alternate_exes": []
@@ -3005,7 +2874,7 @@
     "exe_name": "farcry5.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Windows 11 Auto HDR ověřeno",
+    "notes": "Windows 11 Auto HDR ověřeno | HDR Gamer: https://www.hdrgamer.com/2022/07/far-cry-5-hdr-settings.html",
     "steam_id": "552520",
     "alternate_exes": []
   },
@@ -3014,7 +2883,7 @@
     "exe_name": "farcry6.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2022/01/far-cry-6.html",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -3023,7 +2892,7 @@
     "exe_name": "farcrynewdawn.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/07/far-cry-new-dawn-hdr-settings.html",
     "steam_id": "939960",
     "alternate_exes": []
   },
@@ -3033,15 +2902,6 @@
     "hdr_type": "native",
     "support_tier": "native",
     "notes": "Nativní HDR podpora (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "Farming Simulator 22",
-    "exe_name": "farmingsimulator22.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/08/farming-simulator-22-hdr-settings.html)",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -3086,7 +2946,7 @@
     "exe_name": "fifa23.exe",
     "hdr_type": "native",
     "support_tier": "always_on",
-    "notes": "Trvale aktivní v enginu (PCGamingWiki)",
+    "notes": "Trvale aktivní v enginu (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/09/fifa-23-hdr-settings.html",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -3158,17 +3018,8 @@
     "exe_name": "finalfantasyviirebirth.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2024/02/final-fantasy-vii-rebirth-hdr-settings.html",
     "steam_id": "2909400",
-    "alternate_exes": []
-  },
-  {
-    "name": "Final Fantasy VII Rebirth Demo",
-    "exe_name": "finalfantasyviirebirthdemo.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2024/02/final-fantasy-7-rebirth-demo-hdr.html)",
-    "steam_id": null,
     "alternate_exes": []
   },
   {
@@ -3176,7 +3027,7 @@
     "exe_name": "ff7remake_.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2022/01/final-fantasy-vii-remake-ps5-hdr-peak.html",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -3221,7 +3072,7 @@
     "exe_name": "finalfantasyxv.exe",
     "hdr_type": "native",
     "support_tier": "limited",
-    "notes": "Omezená nativní podpora HDR (PCGamingWiki)",
+    "notes": "Omezená nativní podpora HDR (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/01/final-fantasy-xv-hdr-settings.html",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -3293,7 +3144,7 @@
     "exe_name": "forspoken.exe",
     "hdr_type": "native",
     "support_tier": "always_on",
-    "notes": "Trvale aktivní v enginu (PCGamingWiki)",
+    "notes": "Trvale aktivní v enginu (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2023/01/forspoken-ps5-hdr-settings.html",
     "steam_id": "1680880",
     "alternate_exes": []
   },
@@ -3311,7 +3162,7 @@
     "exe_name": "forzahorizon4.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/10/forza-horizon-4-hdr-settings.html",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -3320,7 +3171,7 @@
     "exe_name": "forzahorizon5.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2022/05/forza-horizon-5-hdr-settings.html",
     "steam_id": "1551360",
     "alternate_exes": []
   },
@@ -3419,17 +3270,8 @@
     "exe_name": "gears5.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2022/06/gears-5-hdr-settings.html",
     "steam_id": "1097840",
-    "alternate_exes": []
-  },
-  {
-    "name": "Gears of War 4",
-    "exe_name": "gearsofwar4.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/10/gears-of-war-4-hdr-settings.html)",
-    "steam_id": null,
     "alternate_exes": []
   },
   {
@@ -3471,8 +3313,8 @@
   {
     "name": "Genshin Impact",
     "exe_name": "genshinimpact.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
+    "hdr_type": "custom",
+    "support_tier": "manual_fix",
     "notes": "Vyžaduje úpravu / mod / Special K (PCGamingWiki)",
     "steam_id": null,
     "alternate_exes": []
@@ -3491,18 +3333,12 @@
     "exe_name": "ghost_of_tsushima.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2022/02/ghost-of-tsushima-ps5-hdr-settings.html",
     "steam_id": "2215430",
-    "alternate_exes": []
-  },
-  {
-    "name": "Ghost of Tsushima Director&#39;s Cut",
-    "exe_name": "ghostoftsushimadirector39scut.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
+    "alternate_exes": [
+      "ghostoftsushima.exe",
+      "ghostoftsushimadirector39scut.exe"
+    ]
   },
   {
     "name": "Ghostbusters: Spirits Unleashed",
@@ -3523,29 +3359,11 @@
     "alternate_exes": []
   },
   {
-    "name": "Ghostrunner",
-    "exe_name": "ghostrunner.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/04/ghostrunner-ps5-hdr-settings.html)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "Ghostrunner 2",
-    "exe_name": "ghostrunner2.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2024/02/ghostrunner-2-hdr-settings.html)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
     "name": "Ghostwire: Tokyo",
     "exe_name": "ghostwire-tokyo.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2022/05/ghostwire-tokyo-ps5-hdr-settings.html",
     "steam_id": "1475810",
     "alternate_exes": []
   },
@@ -3572,7 +3390,7 @@
     "exe_name": "gow.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2022/01/god-of-war-hdr-settings.html",
     "steam_id": "1593500",
     "alternate_exes": []
   },
@@ -3592,7 +3410,7 @@
     "exe_name": "godofwarragnark.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/11/god-of-war-ragnarok-hdr-settings.html",
     "steam_id": "2322010",
     "alternate_exes": []
   },
@@ -3619,7 +3437,7 @@
     "exe_name": "gothamknights.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2023/02/gotham-knights-hdr-settings.html",
     "steam_id": "1496790",
     "alternate_exes": []
   },
@@ -3629,24 +3447,6 @@
     "hdr_type": "native",
     "support_tier": "native",
     "notes": "Nativní HDR podpora (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "Gran Turismo 7",
-    "exe_name": "granturismo7.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/03/gran-turismo-7-hdr-settings.html)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "Gran Turismo Sport",
-    "exe_name": "granturismosport.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/01/gran-turismo-sport-hdr-peak-brightness.html)",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -3662,8 +3462,8 @@
   {
     "name": "Grand Theft Auto V",
     "exe_name": "gta5.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
+    "hdr_type": "custom",
+    "support_tier": "autohdr",
     "notes": "Windows 11 Auto HDR ověřeno",
     "steam_id": null,
     "alternate_exes": []
@@ -3698,8 +3498,8 @@
   {
     "name": "GreedFall",
     "exe_name": "greedfall.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
+    "hdr_type": "custom",
+    "support_tier": "manual_fix",
     "notes": "Steam Curator (HDR Games): HDR. Workaround, can be forced using RenoDX.",
     "steam_id": "606880",
     "alternate_exes": []
@@ -3718,7 +3518,7 @@
     "exe_name": "gridlegends.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/09/grid-legends-hdr-settings.html",
     "steam_id": "1307710",
     "alternate_exes": []
   },
@@ -3759,15 +3559,6 @@
     "alternate_exes": []
   },
   {
-    "name": "Grounded",
-    "exe_name": "grounded.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/10/grounded-hdr-settings.html)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
     "name": "Gylt",
     "exe_name": "gylt.exe",
     "hdr_type": "native",
@@ -3790,7 +3581,7 @@
     "exe_name": "haloinfinite.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2022/05/halo-infinite-hdr-settings.html",
     "steam_id": "1240440",
     "alternate_exes": []
   },
@@ -3833,8 +3624,8 @@
   {
     "name": "Halo: The Master Chief Collection",
     "exe_name": "halothemasterchiefcollection.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
+    "hdr_type": "autohdr",
+    "support_tier": "autohdr",
     "notes": "Podporuje Microsoft Windows Auto HDR",
     "steam_id": null,
     "alternate_exes": []
@@ -3921,30 +3712,12 @@
     "alternate_exes": []
   },
   {
-    "name": "Hellblade II: Senua&#39;s Saga",
+    "name": "Hellblade II: Senua's Saga",
     "exe_name": "hellbladeiisenua39ssaga.exe",
     "hdr_type": "native",
     "support_tier": "native",
     "notes": "Nativní HDR podpora (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "Hellblade II: Senua’s Saga",
-    "exe_name": "hellbladeiisenuassaga.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "Steam Curator (HDR Games): HDR. Native support.",
     "steam_id": "2461850",
-    "alternate_exes": []
-  },
-  {
-    "name": "Hellblade: Senua&#39;s Sacrifice",
-    "exe_name": "hellbladesenua39ssacrifice.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
-    "steam_id": null,
     "alternate_exes": []
   },
   {
@@ -3952,9 +3725,11 @@
     "exe_name": "hellblade-win64-shipping.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Windows 11 Auto HDR ověřeno",
+    "notes": "Windows 11 Auto HDR ověřeno | HDR Gamer: https://www.hdrgamer.com/2022/02/hellblade-senuas-sacrifice-hdr-settings.html",
     "steam_id": "414340",
-    "alternate_exes": []
+    "alternate_exes": [
+      "hellbladesenua39ssacrifice.exe"
+    ]
   },
   {
     "name": "Helldivers 2",
@@ -4056,15 +3831,6 @@
     "alternate_exes": []
   },
   {
-    "name": "Hitman 3",
-    "exe_name": "hitman3.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/01/hitman-3-ps5-hdr-peak-brightness-table.html)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
     "name": "Hitman World of Assassination",
     "exe_name": "hitman3.exe",
     "hdr_type": "native",
@@ -4105,7 +3871,7 @@
     "exe_name": "hogwartslegacy.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2023/02/hogwarts-legacy-hdr-settings.html",
     "steam_id": "990080",
     "alternate_exes": []
   },
@@ -4137,15 +3903,6 @@
     "alternate_exes": []
   },
   {
-    "name": "Homefront: The Revolution",
-    "exe_name": "homefronttherevolution.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/12/homefront-revolution-hdr-settings.html)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
     "name": "Homeworld 3",
     "exe_name": "homeworld3.exe",
     "hdr_type": "native",
@@ -4168,7 +3925,7 @@
     "exe_name": "horizonforbiddenwest.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2022/02/horizon-forbidden-west-hdr-settings.html",
     "steam_id": "2420110",
     "alternate_exes": []
   },
@@ -4177,16 +3934,18 @@
     "exe_name": "horizonzerodawn.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2022/01/horizon-zero-dawn.html",
     "steam_id": "1151640",
-    "alternate_exes": []
+    "alternate_exes": [
+      "horizonzerodawnremastered.exe"
+    ]
   },
   {
     "name": "Hot Wheels Unleashed",
     "exe_name": "hotwheelsunleashed.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/08/hot-wheels-unleashed-hdr-settings.html",
     "steam_id": "1271700",
     "alternate_exes": []
   },
@@ -4296,7 +4055,7 @@
     "exe_name": "immortalsfenyxrising.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/09/immortals-fenyx-rising-hdr-settings.html",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -4305,7 +4064,7 @@
     "exe_name": "immortalsofaveum.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2024/04/immortals-of-aveum-hdr-settings.html",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -4323,7 +4082,7 @@
     "exe_name": "indianajones.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora HDR",
+    "notes": "Nativní podpora HDR | HDR Gamer: https://www.hdrgamer.com/2024/12/indiana-jones-and-great-circle-hdr.html",
     "steam_id": "2677660",
     "alternate_exes": []
   },
@@ -4333,24 +4092,6 @@
     "hdr_type": "custom",
     "support_tier": "manual_fix",
     "notes": "Vyžaduje úpravu / mod / Special K (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "Infamous First Light",
-    "exe_name": "infamousfirstlight.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/04/infamous-first-light-hdr-settings.html)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "Infamous Second Son",
-    "exe_name": "infamoussecondson.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/04/infamous-second-son-hdr-settings.html)",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -4377,7 +4118,7 @@
     "exe_name": "injustice2.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/01/injustice-2-hdr-settings.html",
     "steam_id": "627270",
     "alternate_exes": []
   },
@@ -4510,8 +4251,8 @@
   {
     "name": "Just Cause 4",
     "exe_name": "justcause4.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
+    "hdr_type": "autohdr",
+    "support_tier": "autohdr",
     "notes": "Podporuje Microsoft Windows Auto HDR",
     "steam_id": null,
     "alternate_exes": []
@@ -4526,8 +4267,8 @@
     "alternate_exes": []
   },
   {
-    "name": "Just Shapes &amp; Beats",
-    "exe_name": "justshapesampbeats.exe",
+    "name": "Just Shapes & Beats",
+    "exe_name": "justshapesbeats.exe",
     "hdr_type": "native",
     "support_tier": "native",
     "notes": "Steam Curator (HDR Games): HDR. Native support.",
@@ -4584,7 +4325,7 @@
     "exe_name": "kena-win64-shipping.exe",
     "hdr_type": "native",
     "support_tier": "autohdr",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2022/01/kena-bridge-of-spirits-hdr-settings.html",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -4679,20 +4420,11 @@
     "alternate_exes": []
   },
   {
-    "name": "Klaus Veen&#39;s Treason",
+    "name": "Klaus Veen's Treason",
     "exe_name": "klausveen39streason.exe",
     "hdr_type": "native",
     "support_tier": "native",
     "notes": "Nativní HDR podpora (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "Knack II",
-    "exe_name": "knackii.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/02/knack-ii-hdr-settings.html)",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -4715,21 +4447,21 @@
     "alternate_exes": []
   },
   {
-    "name": "KovaaK&#39;s FPS Aim Trainer",
-    "exe_name": "kovaak39sfpsaimtrainer.exe",
-    "hdr_type": "custom",
-    "support_tier": "manual_fix",
-    "notes": "Vyžaduje úpravu / mod / Special K (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
     "name": "KovaaK's",
     "exe_name": "kovaaks.exe",
     "hdr_type": "custom",
     "support_tier": "manual_fix",
     "notes": "Steam Curator (HDR Games): HDR. Workaround, edit GameUserSettings.ini file.",
     "steam_id": "824270",
+    "alternate_exes": []
+  },
+  {
+    "name": "KovaaK's FPS Aim Trainer",
+    "exe_name": "kovaak39sfpsaimtrainer.exe",
+    "hdr_type": "custom",
+    "support_tier": "manual_fix",
+    "notes": "Vyžaduje úpravu / mod / Special K (PCGamingWiki)",
+    "steam_id": null,
     "alternate_exes": []
   },
   {
@@ -4766,7 +4498,9 @@
     "support_tier": "native",
     "notes": "Podporuje Microsoft Windows Auto HDR",
     "steam_id": "1946700",
-    "alternate_exes": []
+    "alternate_exes": [
+      "layersoffear2023.exe"
+    ]
   },
   {
     "name": "Legends of Runeterra",
@@ -4809,7 +4543,7 @@
     "exe_name": "legostarwarstheskywalkersaga.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/04/lego-star-wars-skywalker-saga-hdr.html",
     "steam_id": "920210",
     "alternate_exes": []
   },
@@ -4827,7 +4561,7 @@
     "exe_name": "lop-win64-shipping.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2023/09/lies-of-p-hdr-settings.html",
     "steam_id": "1627720",
     "alternate_exes": []
   },
@@ -4854,7 +4588,7 @@
     "exe_name": "lifeisstrangetruecolors.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/01/life-is-strange-true-colors-hdr-settings.html",
     "steam_id": "936790",
     "alternate_exes": []
   },
@@ -4937,7 +4671,9 @@
     "support_tier": "native",
     "notes": "Nativní podpora",
     "steam_id": "1501750",
-    "alternate_exes": []
+    "alternate_exes": [
+      "lordsofthefallen2023.exe"
+    ]
   },
   {
     "name": "Lords of the Fallen II",
@@ -4985,7 +4721,7 @@
     "alternate_exes": []
   },
   {
-    "name": "Lost Records: Bloom &amp; Rage",
+    "name": "Lost Records: Bloom & Rage",
     "exe_name": "lostrecordsbloomamprage.exe",
     "hdr_type": "native",
     "support_tier": "native",
@@ -5070,7 +4806,7 @@
     "exe_name": "maddennfl23.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/08/madden-nfl-23-hdr-settings.html",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -5113,17 +4849,19 @@
   {
     "name": "Mafia III",
     "exe_name": "mafiaiii.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
+    "hdr_type": "custom",
+    "support_tier": "manual_fix",
     "notes": "Vyžaduje úpravu / mod / Special K (PCGamingWiki)",
     "steam_id": null,
-    "alternate_exes": []
+    "alternate_exes": [
+      "mafiaiiidefinitiveedition.exe"
+    ]
   },
   {
     "name": "Mafia: Definitive Edition",
     "exe_name": "mafiadefinitiveedition.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
+    "hdr_type": "autohdr",
+    "support_tier": "autohdr",
     "notes": "Podporuje Microsoft Windows Auto HDR",
     "steam_id": "1030840",
     "alternate_exes": []
@@ -5143,15 +4881,6 @@
     "hdr_type": "native",
     "support_tier": "native",
     "notes": "Nativní HDR podpora (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "Maneater",
-    "exe_name": "maneater.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/08/maneater-hdr-settings.html)",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -5183,75 +4912,30 @@
     "alternate_exes": []
   },
   {
-    "name": "Marvel&#39;s Avengers",
+    "name": "Marvel's Avengers",
     "exe_name": "marvel39savengers.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "Marvel&#39;s Guardians of the Galaxy",
-    "exe_name": "marvel39sguardiansofthegalaxy.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "Marvel&#39;s Midnight Suns",
-    "exe_name": "marvel39smidnightsuns.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "Marvel&#39;s Spider-Man 2",
-    "exe_name": "marvel39sspiderman2.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "Marvel&#39;s Spider-Man Remastered",
-    "exe_name": "marvel39sspidermanremastered.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "Marvel&#39;s Spider-Man: Miles Morales",
-    "exe_name": "marvel39sspidermanmilesmorales.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "Marvel's Avengers",
-    "exe_name": "marvelsavengers.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/01/marvels-avengers.html)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/01/marvels-avengers.html",
     "steam_id": null,
     "alternate_exes": []
   },
   {
     "name": "Marvel's Guardians of the Galaxy",
-    "exe_name": "marvelsguardiansofthegalaxy.exe",
+    "exe_name": "marvel39sguardiansofthegalaxy.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Steam Curator (HDR Games): HDR. Native support.",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/01/marvels-guardians-of-galaxy-hdr-peak.html",
     "steam_id": "1088850",
+    "alternate_exes": []
+  },
+  {
+    "name": "Marvel's Midnight Suns",
+    "exe_name": "marvel39smidnightsuns.exe",
+    "hdr_type": "native",
+    "support_tier": "native",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/12/marvels-midnight-suns-hdr-settings.html",
+    "steam_id": null,
     "alternate_exes": []
   },
   {
@@ -5259,9 +4943,11 @@
     "exe_name": "spiderman2.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Steam Curator (HDR Games): HDR. Native support.",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2023/10/marvels-spider-man-2-hdr-settings.html",
     "steam_id": "2651280",
-    "alternate_exes": []
+    "alternate_exes": [
+      "marvel39sspiderman2.exe"
+    ]
   },
   {
     "name": "Marvel's Spider-Man Remastered",
@@ -5270,34 +4956,32 @@
     "support_tier": "native",
     "notes": "Nativní podpora",
     "steam_id": "1817070",
-    "alternate_exes": []
+    "alternate_exes": [
+      "spider-man.exe",
+      "marvel39sspidermanremastered.exe"
+    ]
   },
   {
     "name": "Marvel's Spider-Man: Miles Morales",
     "exe_name": "milesmorales.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2022/02/marvels-spider-man-miles-morales-hdr.html",
     "steam_id": "1817190",
-    "alternate_exes": []
-  },
-  {
-    "name": "Marvel’s Midnight Suns",
-    "exe_name": "marvelsmidnightsuns.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/12/marvels-midnight-suns-hdr-settings.html)",
-    "steam_id": null,
-    "alternate_exes": []
+    "alternate_exes": [
+      "marvel39sspidermanmilesmorales.exe"
+    ]
   },
   {
     "name": "Mass Effect",
     "exe_name": "masseffect.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Vyžaduje úpravu / mod / Special K (PCGamingWiki)",
+    "notes": "Vyžaduje úpravu / mod / Special K (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/01/mass-effect-legendary-edition-ps5-hdr.html",
     "steam_id": "1328670",
-    "alternate_exes": []
+    "alternate_exes": [
+      "masseffectlegendaryedition.exe"
+    ]
   },
   {
     "name": "Mass Effect 1 (LE)",
@@ -5331,17 +5015,8 @@
     "exe_name": "masseffectandromeda.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/02/mass-effect-andromeda-hdr-settings.html",
     "steam_id": "1238000",
-    "alternate_exes": []
-  },
-  {
-    "name": "Matterfall",
-    "exe_name": "matterfall.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2023/03/matterfall-hdr-settings.html)",
-    "steam_id": null,
     "alternate_exes": []
   },
   {
@@ -5457,18 +5132,22 @@
     "exe_name": "metroexodus.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/02/metro-exodus-ps5-hdr-settings.html",
     "steam_id": "412020",
-    "alternate_exes": []
+    "alternate_exes": [
+      "metroexodusedition.exe"
+    ]
   },
   {
     "name": "Microsoft Flight Simulator",
     "exe_name": "flightsimulator.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2022/06/microsoft-flight-simulator-hdr-settings.html",
     "steam_id": null,
-    "alternate_exes": []
+    "alternate_exes": [
+      "microsoftflightsimulator2020.exe"
+    ]
   },
   {
     "name": "Microsoft Flight Simulator (2020) 40th Anniversary Edition",
@@ -5493,7 +5172,7 @@
     "exe_name": "middleearthshadowofwar.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/02/middle-earth-shadow-of-war-hdr-settings.html",
     "steam_id": "356190",
     "alternate_exes": []
   },
@@ -5543,15 +5222,6 @@
     "alternate_exes": []
   },
   {
-    "name": "MLB The Show 22",
-    "exe_name": "mlbtheshow22.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/08/mlb-show-22-hdr-settings.html)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
     "name": "Monopoly (2024)",
     "exe_name": "monopoly2024.exe",
     "hdr_type": "native",
@@ -5579,15 +5249,6 @@
     "alternate_exes": []
   },
   {
-    "name": "Monster Energy Supercross - The Official Videogame 5",
-    "exe_name": "monsterenergysupercrosstheofficialvideogame5.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/10/monster-energy-supercross-5-hdr-settings.html)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
     "name": "Monster Energy Supercross 3",
     "exe_name": "monsterenergysupercross3.exe",
     "hdr_type": "native",
@@ -5610,7 +5271,7 @@
     "exe_name": "monsterhunterrise.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2023/01/monster-hunter-rise-hdr-settings.html",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -5628,7 +5289,7 @@
     "exe_name": "monsterhunterworld.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2022/04/monster-hunter-world-hdr-settings.html",
     "steam_id": "582010",
     "alternate_exes": []
   },
@@ -5655,7 +5316,7 @@
     "exe_name": "mortalkombat1.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2023/09/mortal-kombat-1-hdr-settings.html",
     "steam_id": "1971870",
     "alternate_exes": []
   },
@@ -5664,7 +5325,7 @@
     "exe_name": "mortalkombat11.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/01/mortal-kombat-11-hdr-peak-brightness.html",
     "steam_id": "976310",
     "alternate_exes": []
   },
@@ -5718,7 +5379,7 @@
     "exe_name": "motogp22.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Steam Curator (HDR Games): HDR. Native support.",
+    "notes": "Steam Curator (HDR Games): HDR. Native support. | HDR Gamer: https://www.hdrgamer.com/2022/08/motogp-22-hdr-settings.html",
     "steam_id": "1710580",
     "alternate_exes": []
   },
@@ -5804,15 +5465,6 @@
     "alternate_exes": []
   },
   {
-    "name": "MXGP 2021 - The Official Motocross Videogame",
-    "exe_name": "mxgp2021theofficialmotocrossvideogame.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/10/mxgp-2021-hdr-settings.html)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
     "name": "MXGP Pro",
     "exe_name": "mxgppro.exe",
     "hdr_type": "native",
@@ -5876,15 +5528,6 @@
     "alternate_exes": []
   },
   {
-    "name": "NBA 2K22",
-    "exe_name": "nba2k22.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/08/nba-2k22-hdr-settings.html)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
     "name": "NBA 2K26",
     "exe_name": "nba2k26.exe",
     "hdr_type": "native",
@@ -5925,7 +5568,7 @@
     "exe_name": "needforspeedheat.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2022/08/need-for-speed-heat-hdr-settings.html",
     "steam_id": "1222680",
     "alternate_exes": []
   },
@@ -5943,7 +5586,7 @@
     "exe_name": "needforspeedunbound.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2022/12/need-for-speed-unbound-hdr-settings.html",
     "steam_id": "1846380",
     "alternate_exes": []
   },
@@ -5979,16 +5622,7 @@
     "exe_name": "nexmachina.exe",
     "hdr_type": "native",
     "support_tier": "always_on",
-    "notes": "Trvale aktivní v enginu (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "NHL 23",
-    "exe_name": "nhl23.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/10/nhl-23-hdr-settings.html)",
+    "notes": "Trvale aktivní v enginu (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2023/01/nex-machina-hdr-settings.html",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -5997,7 +5631,7 @@
     "exe_name": "ninokuniiirevenantkingdom.exe",
     "hdr_type": "native",
     "support_tier": "limited",
-    "notes": "Omezená nativní podpora HDR (PCGamingWiki)",
+    "notes": "Omezená nativní podpora HDR (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/04/ni-no-kuni-ii-revenant-kingdom-hdr.html",
     "steam_id": "589360",
     "alternate_exes": []
   },
@@ -6047,15 +5681,6 @@
     "alternate_exes": []
   },
   {
-    "name": "Nioh 2 Remastered",
-    "exe_name": "nioh2remastered.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/04/nioh-2-remastered-hdr-settings.html)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
     "name": "Nioh 2: The Complete Edition",
     "exe_name": "nioh2thecompleteedition.exe",
     "hdr_type": "native",
@@ -6083,22 +5708,15 @@
     "alternate_exes": []
   },
   {
-    "name": "No Man&#39;s Sky",
-    "exe_name": "noman39ssky.exe",
-    "hdr_type": "native",
-    "support_tier": "limited",
-    "notes": "Omezená nativní podpora HDR (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
     "name": "No Man's Sky",
     "exe_name": "nms.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2022/04/no-mans-sky-ps5-hdr-settings.html",
     "steam_id": "275850",
-    "alternate_exes": []
+    "alternate_exes": [
+      "noman39ssky.exe"
+    ]
   },
   {
     "name": "No Rest for the Wicked",
@@ -6123,7 +5741,7 @@
     "exe_name": "observersystemredux.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/09/observer-system-redux-hdr-settings.html",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -6191,15 +5809,6 @@
     "alternate_exes": []
   },
   {
-    "name": "Onrush",
-    "exe_name": "onrush.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/08/onrush-hdr-settings.html)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
     "name": "Ontos",
     "exe_name": "ontos.exe",
     "hdr_type": "native",
@@ -6240,7 +5849,7 @@
     "exe_name": "oriandthewillofthewisps.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/07/ori-and-will-of-wisps-hdr-settings.html",
     "steam_id": "1057090",
     "alternate_exes": []
   },
@@ -6285,7 +5894,7 @@
     "exe_name": "outriders.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Steam Curator (HDR Games): HDR. Native support.",
+    "notes": "Steam Curator (HDR Games): HDR. Native support. | HDR Gamer: https://www.hdrgamer.com/2022/02/outriders-hdr-settings.html",
     "steam_id": "680420",
     "alternate_exes": []
   },
@@ -6303,7 +5912,7 @@
     "exe_name": "overwatch2.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/10/overwatch-2-hdr-settings.html",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -6416,15 +6025,6 @@
     "alternate_exes": []
   },
   {
-    "name": "PGA Tour 2K23",
-    "exe_name": "pgatour2k23.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/12/pga-tour-2k23-hdr-settings.html)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
     "name": "PGA TOUR 2K25",
     "exe_name": "pgatour2k25.exe",
     "hdr_type": "native",
@@ -6533,15 +6133,6 @@
     "alternate_exes": []
   },
   {
-    "name": "Plants vs. Zombies: Battle for Neighborville",
-    "exe_name": "plantsvszombiesbattleforneighborville.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2023/04/plants-vs-zombies-battle-for.html)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
     "name": "Polynomial 2 - Universe of the Music",
     "exe_name": "polynomial2universeofthemusic.exe",
     "hdr_type": "native",
@@ -6620,7 +6211,9 @@
     "support_tier": "autohdr",
     "notes": "Windows 11 Auto HDR ověřeno",
     "steam_id": null,
-    "alternate_exes": []
+    "alternate_exes": [
+      "prey2017.exe"
+    ]
   },
   {
     "name": "Prison Architect 2",
@@ -6713,24 +6306,6 @@
     "alternate_exes": []
   },
   {
-    "name": "PS5 System HDR Peak Brightness Table",
-    "exe_name": "ps5systemhdrpeakbrightnesstable.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/01/ps5-system-hdr-peak-brightness-table.html)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "Psychonauts 2",
-    "exe_name": "psychonauts2.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/08/psychonauts-2-hdr-settings.html)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
     "name": "PUBG Lite",
     "exe_name": "pubglite.exe",
     "hdr_type": "custom",
@@ -6742,8 +6317,8 @@
   {
     "name": "PUBG: BATTLEGROUNDS",
     "exe_name": "pubgbattlegrounds.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
+    "hdr_type": "custom",
+    "support_tier": "manual_fix",
     "notes": "Steam Curator (HDR Games): HDR. Workaround, set bUseHDRDisplayOutput=False to True in the GameUserSettings.ini file.",
     "steam_id": "578080",
     "alternate_exes": []
@@ -6827,34 +6402,9 @@
     "support_tier": "native",
     "notes": "Nativní podpora",
     "steam_id": "1895880",
-    "alternate_exes": []
-  },
-  {
-    "name": "Ratchet &amp; Clank: Rift Apart",
-    "exe_name": "ratchetampclankriftapart.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
-    "steam_id": "1895880",
-    "alternate_exes": []
-  },
-  {
-    "name": "Ratchet and Clank",
-    "exe_name": "ratchetandclank.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/05/ratchet-clank-hdr-settings.html)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "Ratchet and Clank: Rift Apart",
-    "exe_name": "ratchetandclankriftapart.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/02/ratchet-clank-rift-apart-hdr-settings.html)",
-    "steam_id": null,
-    "alternate_exes": []
+    "alternate_exes": [
+      "ratchetampclankriftapart.exe"
+    ]
   },
   {
     "name": "Ready Or Not",
@@ -6875,15 +6425,6 @@
     "alternate_exes": []
   },
   {
-    "name": "ReCore: Definitive Edition",
-    "exe_name": "recoredefinitiveedition.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/11/recore-definitive-edition-hdr-settings.html)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
     "name": "Red Dead Redemption",
     "exe_name": "reddeadredemption.exe",
     "hdr_type": "native",
@@ -6897,7 +6438,7 @@
     "exe_name": "rdr2.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní Game & Cinematic HDR",
+    "notes": "Nativní Game & Cinematic HDR | HDR Gamer: https://www.hdrgamer.com/2022/01/red-dead-redemption-2-hdr-settings.html",
     "steam_id": "1174180",
     "alternate_exes": []
   },
@@ -6915,7 +6456,7 @@
     "exe_name": "redfall.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2023/05/redfall-hdr-settings.html",
     "steam_id": "1294810",
     "alternate_exes": []
   },
@@ -6951,7 +6492,7 @@
     "exe_name": "re2.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Omezená nativní podpora HDR (PCGamingWiki)",
+    "notes": "Omezená nativní podpora HDR (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/06/resident-evil-2-hdr-settings.html",
     "steam_id": "883710",
     "alternate_exes": [
       "residentevil22019.exe"
@@ -6971,7 +6512,7 @@
     "exe_name": "re3.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Omezená nativní podpora HDR (PCGamingWiki)",
+    "notes": "Omezená nativní podpora HDR (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/01/resident-evil-3.html",
     "steam_id": "952060",
     "alternate_exes": [
       "residentevil32020.exe"
@@ -6991,7 +6532,7 @@
     "exe_name": "re4.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Omezená nativní podpora HDR (PCGamingWiki)",
+    "notes": "Omezená nativní podpora HDR (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2023/03/resident-evil-4-hdr-settings.html",
     "steam_id": "2050650",
     "alternate_exes": [
       "residentevil42023.exe"
@@ -7020,7 +6561,7 @@
     "exe_name": "re7.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Omezená nativní podpora HDR (PCGamingWiki)",
+    "notes": "Omezená nativní podpora HDR (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/01/resident-evil-7-biohazard-hdr-settings.html",
     "steam_id": "418370",
     "alternate_exes": [
       "re7trial.exe",
@@ -7050,17 +6591,8 @@
     "exe_name": "re8.exe",
     "hdr_type": "native",
     "support_tier": "limited",
-    "notes": "RE Engine nativní HDR",
+    "notes": "RE Engine nativní HDR | HDR Gamer: https://www.hdrgamer.com/2022/01/resident-evil-village-ps5-hdr-peak.html",
     "steam_id": "1196590",
-    "alternate_exes": []
-  },
-  {
-    "name": "Resogun",
-    "exe_name": "resogun.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/07/resogun-hdr-settings.html)",
-    "steam_id": null,
     "alternate_exes": []
   },
   {
@@ -7095,7 +6627,7 @@
     "exe_name": "returnal-win64-shipping.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2022/02/returnal-ps5-hdr-settings.html",
     "steam_id": "1649240",
     "alternate_exes": []
   },
@@ -7131,7 +6663,7 @@
     "exe_name": "ride4.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Steam Curator (HDR Games): HDR. Native support.",
+    "notes": "Steam Curator (HDR Games): HDR. Native support. | HDR Gamer: https://www.hdrgamer.com/2022/07/ride-4-hdr-settings.html",
     "steam_id": "1259980",
     "alternate_exes": []
   },
@@ -7208,7 +6740,7 @@
     "alternate_exes": []
   },
   {
-    "name": "Rock of Ages II: Bigger &amp; Boulder",
+    "name": "Rock of Ages II: Bigger & Boulder",
     "exe_name": "rockofagesiibiggerampboulder.exe",
     "hdr_type": "custom",
     "support_tier": "manual_fix",
@@ -7219,8 +6751,8 @@
   {
     "name": "Rocket League",
     "exe_name": "rocketleague.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
+    "hdr_type": "autohdr",
+    "support_tier": "autohdr",
     "notes": "Podporuje Microsoft Windows Auto HDR",
     "steam_id": null,
     "alternate_exes": []
@@ -7284,7 +6816,7 @@
     "exe_name": "stalker2-win64-shipping.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní Unreal Engine 5 HDR",
+    "notes": "Nativní Unreal Engine 5 HDR | HDR Gamer: https://www.hdrgamer.com/2025/01/stalker-2-heart-of-chornobyl-hdr.html",
     "steam_id": "1643320",
     "alternate_exes": [
       "stalker2.exe"
@@ -7295,7 +6827,7 @@
     "exe_name": "saintsrow.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/09/saints-row-hdr-settings.html",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -7304,7 +6836,7 @@
     "exe_name": "saintsrowthethirdremastered.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/07/saints-row-third-remastered-hdr-settings.html",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -7367,7 +6899,7 @@
     "exe_name": "sotgame.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2022/07/sea-of-thieves-hdr-settings.html",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -7376,7 +6908,7 @@
     "exe_name": "sekiro.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Omezená podpora (vyžaduje fullscreen v nativním rozlišení)",
+    "notes": "Omezená podpora (vyžaduje fullscreen v nativním rozlišení) | HDR Gamer: https://www.hdrgamer.com/2022/01/sekiro-shadows-die-twice.html",
     "steam_id": "814380",
     "alternate_exes": []
   },
@@ -7421,7 +6953,7 @@
     "exe_name": "hellblade2-win64-shipping.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Unreal Engine 5 nativní HDR",
+    "notes": "Unreal Engine 5 nativní HDR | HDR Gamer: https://www.hdrgamer.com/2024/05/senuas-saga-hellblade-ii-hdr-settings.html",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -7435,20 +6967,11 @@
     "alternate_exes": []
   },
   {
-    "name": "Shadow of the Colossus",
-    "exe_name": "shadowofthecolossus.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/02/shadow-of-colossus-hdr-settings.html)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
     "name": "Shadow of the Tomb Raider",
     "exe_name": "sottr.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2022/01/shadow-of-tomb-raider.html",
     "steam_id": "750920",
     "alternate_exes": []
   },
@@ -7516,15 +7039,6 @@
     "alternate_exes": []
   },
   {
-    "name": "Sid Meier&#39;s Civilization VII",
-    "exe_name": "sidmeier39scivilizationvii.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
     "name": "Sid Meier's Civilization VI",
     "exe_name": "sidmeierscivilizationvi.exe",
     "hdr_type": "autohdr",
@@ -7535,10 +7049,10 @@
   },
   {
     "name": "Sid Meier's Civilization VII",
-    "exe_name": "sidmeierscivilizationvii.exe",
+    "exe_name": "sidmeier39scivilizationvii.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Steam Curator (HDR Games): HDR. Native support.",
+    "notes": "Nativní HDR podpora (PCGamingWiki)",
     "steam_id": "1295660",
     "alternate_exes": []
   },
@@ -7577,7 +7091,7 @@
     "exe_name": "skullandbones.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2024/02/skull-and-bones-hdr-settings.html",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -7667,7 +7181,7 @@
     "exe_name": "sniperelite5.exe",
     "hdr_type": "native",
     "support_tier": "limited",
-    "notes": "Omezená nativní podpora HDR (PCGamingWiki)",
+    "notes": "Omezená nativní podpora HDR (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/05/sniper-elite-5-hdr-settings.html",
     "steam_id": "1029690",
     "alternate_exes": []
   },
@@ -7876,7 +7390,7 @@
     "exe_name": "starwarsbattlefrontii2017.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/04/star-wars-battlefront-ii-hdr-settings.html",
     "steam_id": "1237950",
     "alternate_exes": []
   },
@@ -7885,7 +7399,7 @@
     "exe_name": "starwarsjedifallenorder.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2022/01/star-wars-jedi-fallen-order.html",
     "steam_id": "1172380",
     "alternate_exes": []
   },
@@ -7894,7 +7408,7 @@
     "exe_name": "jedisurvivor.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2023/04/star-wars-jedi-survivor-hdr-settings.html",
     "steam_id": "1774580",
     "alternate_exes": []
   },
@@ -7930,7 +7444,7 @@
     "exe_name": "starfield.exe",
     "hdr_type": "native",
     "support_tier": "autohdr",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2023/09/starfield-hdr-settings.html",
     "steam_id": "1716740",
     "alternate_exes": []
   },
@@ -7941,15 +7455,6 @@
     "support_tier": "native",
     "notes": "Steam Curator (HDR Games): HDR. Windows Auto HDR.",
     "steam_id": "1202130",
-    "alternate_exes": []
-  },
-  {
-    "name": "State of Decay 2: Juggernaut Edition",
-    "exe_name": "stateofdecay2juggernautedition.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/10/state-of-decay-2-juggernaut-edition-hdr.html)",
-    "steam_id": null,
     "alternate_exes": []
   },
   {
@@ -7964,18 +7469,9 @@
   {
     "name": "Steelrising",
     "exe_name": "steelrising.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
+    "hdr_type": "autohdr",
+    "support_tier": "autohdr",
     "notes": "Podporuje Microsoft Windows Auto HDR",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "Steep",
-    "exe_name": "steep.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2023/03/steep-hdr-settings.html)",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -7984,17 +7480,8 @@
     "exe_name": "stellarblade.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2024/05/stellar-blade-hdr-settings.html",
     "steam_id": "3489700",
-    "alternate_exes": []
-  },
-  {
-    "name": "Stellar Blade Demo",
-    "exe_name": "stellarbladedemo.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2024/03/stellar-blade-demo-hdr-settings.html)",
-    "steam_id": null,
     "alternate_exes": []
   },
   {
@@ -8317,7 +7804,7 @@
     "exe_name": "polaris-win64-shipping.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2024/01/tekken-8-hdr-settings.html",
     "steam_id": "1778820",
     "alternate_exes": [
       "polaris.exe"
@@ -8364,7 +7851,7 @@
     "exe_name": "tetriseffectconnected.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/07/tetris-effect-connected-hdr-settings.html",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -8427,7 +7914,7 @@
     "exe_name": "thecallistoprotocol-win64-shipping.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2022/12/the-callisto-protocol-hdr-settings.html",
     "steam_id": "1544020",
     "alternate_exes": []
   },
@@ -8454,7 +7941,7 @@
     "exe_name": "thecrewmotorfest.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2023/09/the-crew-motorfest-hdr-settings.html",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -8472,7 +7959,7 @@
     "exe_name": "thedarkpicturesanthologyhouseofashes.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Steam Curator (HDR Games): HDR. Native support (DX11).",
+    "notes": "Steam Curator (HDR Games): HDR. Native support (DX11). | HDR Gamer: https://www.hdrgamer.com/2022/10/the-dark-pictures-anthology-house-of.html",
     "steam_id": "1281590",
     "alternate_exes": []
   },
@@ -8481,7 +7968,7 @@
     "exe_name": "thedarkpicturesanthologylittlehope.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Steam Curator (HDR Games): HDR. Native support.",
+    "notes": "Steam Curator (HDR Games): HDR. Native support. | HDR Gamer: https://www.hdrgamer.com/2022/07/the-dark-pictures-anthology-little-hope.html",
     "steam_id": "1194630",
     "alternate_exes": []
   },
@@ -8490,7 +7977,7 @@
     "exe_name": "thedarkpicturesanthologymanofmedan.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Steam Curator (HDR Games): HDR. Native support.",
+    "notes": "Steam Curator (HDR Games): HDR. Native support. | HDR Gamer: https://www.hdrgamer.com/2022/07/dark-pictures-man-of-medan.html",
     "steam_id": "939850",
     "alternate_exes": []
   },
@@ -8499,7 +7986,7 @@
     "exe_name": "thedarkpicturesanthologythedevilinme.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Steam Curator (HDR Games): HDR. Native support.",
+    "notes": "Steam Curator (HDR Games): HDR. Native support. | HDR Gamer: https://www.hdrgamer.com/2022/12/the-dark-pictures-anthology-devil-in-me.html",
     "steam_id": "1567020",
     "alternate_exes": []
   },
@@ -8544,7 +8031,7 @@
     "exe_name": "theelderscrollsonline.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/06/the-elder-scrolls-online-hdr-settings.html",
     "steam_id": "306130",
     "alternate_exes": []
   },
@@ -8657,20 +8144,11 @@
     "alternate_exes": []
   },
   {
-    "name": "The Last Guardian",
-    "exe_name": "thelastguardian.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/02/the-last-guardian-hdr-settings.html)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
     "name": "The Last of Us Part I",
     "exe_name": "tlou-i.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2022/09/the-last-of-us-part-i-hdr-settings.html",
     "steam_id": "1888930",
     "alternate_exes": [
       "tlou-i-l.exe"
@@ -8681,16 +8159,7 @@
     "exe_name": "thelastofuspartiiremastered.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "The Last of Us Remastered",
-    "exe_name": "thelastofusremastered.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/01/the-last-of-us-remastered-hdr-settings.html)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/01/the-last-of-us-part-ii-hdr-peak.html",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -8753,7 +8222,7 @@
     "exe_name": "themedium.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/12/the-medium-ps5-hdr-settings.html",
     "steam_id": "1293160",
     "alternate_exes": []
   },
@@ -8782,15 +8251,6 @@
     "support_tier": "native",
     "notes": "Nativní HDR podpora (PCGamingWiki)",
     "steam_id": "1304930",
-    "alternate_exes": []
-  },
-  {
-    "name": "The Quarry",
-    "exe_name": "thequarry.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2023/03/the-quarry-hdr-settings.html)",
-    "steam_id": null,
     "alternate_exes": []
   },
   {
@@ -8832,19 +8292,10 @@
   {
     "name": "The Surge",
     "exe_name": "thesurge.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
+    "hdr_type": "custom",
+    "support_tier": "manual_fix",
     "notes": "Steam Curator (HDR Games): HDR. Workaround, can be forced using RenoDX.",
     "steam_id": "378540",
-    "alternate_exes": []
-  },
-  {
-    "name": "The Surge 2",
-    "exe_name": "thesurge2.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/08/the-surge-2-hdr-settings.html)",
-    "steam_id": null,
     "alternate_exes": []
   },
   {
@@ -8897,21 +8348,21 @@
     "exe_name": "witcher3.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Next-gen nativní HDR update",
+    "notes": "Next-gen nativní HDR update | HDR Gamer: https://www.hdrgamer.com/2022/04/the-witcher-3-wild-hunt-ps4-hdr-settings.html",
     "steam_id": "292030",
     "alternate_exes": []
   },
   {
     "name": "The Witness",
     "exe_name": "thewitness.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
+    "hdr_type": "autohdr",
+    "support_tier": "autohdr",
     "notes": "Podporuje Microsoft Windows Auto HDR",
     "steam_id": null,
     "alternate_exes": []
   },
   {
-    "name": "They&#39;re Alive!",
+    "name": "They're Alive!",
     "exe_name": "they39realive.exe",
     "hdr_type": "native",
     "support_tier": "limited",
@@ -8956,22 +8407,15 @@
     "alternate_exes": []
   },
   {
-    "name": "Tiny Tina&#39;s Wonderlands",
-    "exe_name": "tinytina39swonderlands.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
     "name": "Tiny Tina's Wonderlands",
     "exe_name": "wonderlands.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2022/07/tiny-tinas-wonderlands-hdr-settings.html",
     "steam_id": "1286680",
-    "alternate_exes": []
+    "alternate_exes": [
+      "tinytina39swonderlands.exe"
+    ]
   },
   {
     "name": "Titanfall 2",
@@ -8992,29 +8436,11 @@
     "alternate_exes": []
   },
   {
-    "name": "Tom Clancy&#39;s Ghost Recon Breakpoint",
+    "name": "Tom Clancy's Ghost Recon Breakpoint",
     "exe_name": "tomclancy39sghostreconbreakpoint.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "Tom Clancy&#39;s The Division 2",
-    "exe_name": "tomclancy39sthedivision2.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "Tom Clancy&#39;s The Division Heartland",
-    "exe_name": "tomclancy39sthedivisionheartland.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/01/tom-clancys-ghost-recon-breakpoint-hdr.html",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -9028,24 +8454,6 @@
     "alternate_exes": []
   },
   {
-    "name": "Tom Clancy's Ghost Recon: Wildlands",
-    "exe_name": "tomclancysghostreconwildlands.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/08/tom-clancys-ghost-recon-wildlands-hdr.html)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "Tom Clancy's Rainbow Six Extraction",
-    "exe_name": "tomclancysrainbowsixextraction.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2023/04/tom-clancys-rainbow-six-extraction-hdr.html)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
     "name": "Tom Clancy's The Division",
     "exe_name": "tomclancysthedivision.exe",
     "hdr_type": "autohdr",
@@ -9055,11 +8463,20 @@
     "alternate_exes": []
   },
   {
-    "name": "Tom Clancy’s Ghost Recon Breakpoint",
-    "exe_name": "tomclancysghostreconbreakpoint.exe",
+    "name": "Tom Clancy's The Division 2",
+    "exe_name": "tomclancy39sthedivision2.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/01/tom-clancys-ghost-recon-breakpoint-hdr.html)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/01/tom-clancys-division-2.html",
+    "steam_id": null,
+    "alternate_exes": []
+  },
+  {
+    "name": "Tom Clancy's The Division Heartland",
+    "exe_name": "tomclancy39sthedivisionheartland.exe",
+    "hdr_type": "native",
+    "support_tier": "native",
+    "notes": "Nativní HDR podpora (PCGamingWiki)",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -9070,15 +8487,6 @@
     "support_tier": "manual_fix",
     "notes": "Steam Curator (HDR Games): HDR. Workaround, can be forced using RenoDX.",
     "steam_id": "235600",
-    "alternate_exes": []
-  },
-  {
-    "name": "Tom Clancy’s The Division 2",
-    "exe_name": "tomclancysthedivision2.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/01/tom-clancys-division-2.html)",
-    "steam_id": null,
     "alternate_exes": []
   },
   {
@@ -9100,29 +8508,20 @@
     "alternate_exes": []
   },
   {
-    "name": "Tony Hawk&#39;s Pro Skater 1 + 2",
+    "name": "Tony Hawk's Pro Skater 1 + 2",
     "exe_name": "tonyhawk39sproskater12.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/02/tony-hawks-pro-skater-1-2-hdr-settings.html",
     "steam_id": null,
     "alternate_exes": []
   },
   {
-    "name": "Tony Hawk&#39;s Pro Skater 3 + 4",
+    "name": "Tony Hawk's Pro Skater 3 + 4",
     "exe_name": "tonyhawk39sproskater34.exe",
     "hdr_type": "native",
     "support_tier": "native",
     "notes": "Nativní HDR podpora (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "Tony Hawk's™ Pro Skater™ 1 + 2",
-    "exe_name": "tonyhawksproskater12.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/02/tony-hawks-pro-skater-1-2-hdr-settings.html)",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -9244,15 +8643,6 @@
     "alternate_exes": []
   },
   {
-    "name": "Uncharted 4: A Thief’s End",
-    "exe_name": "uncharted4athiefsend.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/01/uncharted-4-thiefs-end.html)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
     "name": "Uncharted: Legacy of Thieves",
     "exe_name": "u4.exe",
     "hdr_type": "native",
@@ -9275,7 +8665,7 @@
     "exe_name": "tll.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2022/01/uncharted-lost-legacy.html",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -9289,7 +8679,7 @@
     "alternate_exes": []
   },
   {
-    "name": "Upin &amp; Ipin Universe",
+    "name": "Upin & Ipin Universe",
     "exe_name": "upinampipinuniverse.exe",
     "hdr_type": "native",
     "support_tier": "native",
@@ -9509,7 +8899,7 @@
     "exe_name": "watchdogslegion.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní podpora",
+    "notes": "Nativní podpora | HDR Gamer: https://www.hdrgamer.com/2022/04/watch-dogs-legion-hdr-settings.html",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -9528,15 +8918,6 @@
     "hdr_type": "native",
     "support_tier": "native",
     "notes": "Nativní HDR podpora (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "We Happy Few",
-    "exe_name": "wehappyfew.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/09/we-happy-few-hdr-settings.html)",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -9608,7 +8989,7 @@
     "exe_name": "wolongfallendynasty.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2023/03/wo-long-fallen-dynasty-hdr-settings.html",
     "steam_id": "1448440",
     "alternate_exes": []
   },
@@ -9618,15 +8999,6 @@
     "hdr_type": "custom",
     "support_tier": "autohdr",
     "notes": "Windows 11 Auto HDR ověřeno",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "World of Tanks",
-    "exe_name": "worldoftanks.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/07/world-of-tanks-hdr-settings.html)",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -9660,8 +9032,8 @@
   {
     "name": "Wreckfest",
     "exe_name": "wreckfest.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
+    "hdr_type": "autohdr",
+    "support_tier": "autohdr",
     "notes": "Podporuje Microsoft Windows Auto HDR",
     "steam_id": null,
     "alternate_exes": []
@@ -9690,15 +9062,6 @@
     "hdr_type": "native",
     "support_tier": "native",
     "notes": "Nativní HDR podpora (PCGamingWiki)",
-    "steam_id": null,
-    "alternate_exes": []
-  },
-  {
-    "name": "Xbox HDR Game Calibration Settings",
-    "exe_name": "xboxhdrgamecalibrationsettings.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/05/xbox-hdr-game-calibration-settings.html)",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -9811,7 +9174,7 @@
     "alternate_exes": []
   },
   {
-    "name": "Yakuza Kiwami 3 &amp; Dark Ties",
+    "name": "Yakuza Kiwami 3 & Dark Ties",
     "exe_name": "yakuzakiwami3ampdarkties.exe",
     "hdr_type": "native",
     "support_tier": "native",
@@ -9869,7 +9232,7 @@
     "exe_name": "zombiearmy4deadwar.exe",
     "hdr_type": "native",
     "support_tier": "native",
-    "notes": "Nativní HDR podpora (PCGamingWiki)",
+    "notes": "Nativní HDR podpora (PCGamingWiki) | HDR Gamer: https://www.hdrgamer.com/2022/08/zombie-army-4-dead-war-hdr-settings.html",
     "steam_id": null,
     "alternate_exes": []
   },
@@ -9889,15 +9252,6 @@
     "support_tier": "native",
     "notes": "Steam Curator (HDR Games): HDR. Native support. (Not working with Windows 11)",
     "steam_id": "650510",
-    "alternate_exes": []
-  },
-  {
-    "name": "Zoo Tycoon: Ultimate Animal Collection",
-    "exe_name": "zootycoonultimateanimalcollection.exe",
-    "hdr_type": "native",
-    "support_tier": "native",
-    "notes": "HDR Gamer: Kalibrace a nastavení (https://www.hdrgamer.com/2022/10/zoo-tycoon-ultimate-animal-collection.html)",
-    "steam_id": null,
     "alternate_exes": []
   }
 ]
