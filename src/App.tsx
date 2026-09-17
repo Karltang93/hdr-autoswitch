@@ -22,74 +22,7 @@ import './App.css';
 
 type Tab = 'dashboard' | 'apps' | 'catalog' | 'processes' | 'settings';
 
-const DEFAULT_RECENT_GAMES: RecentGameSession[] = [
-  {
-    exe: 'bodycam.exe',
-    name: 'Bodycam',
-    steam_id: '2406770',
-    launcher: 'Steam',
-    hdr_type: 'native',
-    hdr_tier_label: 'Nativní HDR10',
-    last_switched_at: '14:27',
-    hook_status: 'switched_off',
-    hook_message: 'WinEventHook: HDR zapnuto -> SDR obnoveno',
-  },
-  {
-    exe: 'acs.exe',
-    name: 'Assetto Corsa',
-    steam_id: '244210',
-    launcher: 'Steam',
-    hdr_type: 'mod',
-    hdr_tier_label: 'HDR Mod / Pure',
-    last_switched_at: '13:45',
-    hook_status: 'switched_off',
-    hook_message: 'WinEventHook: HDR zapnuto -> SDR obnoveno',
-  },
-  {
-    exe: 'bf2042.exe',
-    name: 'Battlefield 6',
-    steam_id: '1517290',
-    launcher: 'Steam',
-    hdr_type: 'native',
-    hdr_tier_label: 'Nativní HDR10',
-    last_switched_at: '12:10',
-    hook_status: 'switched_off',
-    hook_message: 'WinEventHook: HDR zapnuto -> SDR obnoveno',
-  },
-  {
-    exe: 'beamng.drive.x64.exe',
-    name: 'BeamNG.drive',
-    steam_id: '284160',
-    launcher: 'Steam',
-    hdr_type: 'autohdr',
-    hdr_tier_label: 'Windows Auto HDR',
-    last_switched_at: '11:05',
-    hook_status: 'switched_off',
-    hook_message: 'WinEventHook: HDR zapnuto -> SDR obnoveno',
-  },
-  {
-    exe: 'enshrouded.exe',
-    name: 'Enshrouded',
-    steam_id: '1203620',
-    launcher: 'Steam',
-    hdr_type: 'native',
-    hdr_tier_label: 'Nativní HDR10',
-    last_switched_at: 'Včera',
-    hook_status: 'switched_off',
-    hook_message: 'WinEventHook: HDR zapnuto -> SDR obnoveno',
-  },
-  {
-    exe: 'forzahorizon5.exe',
-    name: 'Forza Horizon 6',
-    steam_id: '1551360',
-    launcher: 'Steam',
-    hdr_type: 'native',
-    hdr_tier_label: 'Nativní HDR10',
-    last_switched_at: 'Včera',
-    hook_status: 'switched_off',
-    hook_message: 'WinEventHook: HDR zapnuto -> SDR obnoveno',
-  },
-];
+const DEFAULT_RECENT_GAMES: RecentGameSession[] = [];
 
 const IGNORED_SYSTEM_EXES = new Set([
   'snippingtool.exe',
@@ -108,6 +41,18 @@ const IGNORED_SYSTEM_EXES = new Set([
   'hdr-autoswitch.exe',
   'tauri-app.exe',
 ]);
+
+const isMockSession = (item: RecentGameSession): boolean => {
+  return (
+    item.hook_message === 'WinEventHook: HDR zapnuto -> SDR obnoveno' ||
+    item.name === 'Battlefield 6' ||
+    item.name === 'Forza Horizon 6' ||
+    (item.name === 'Bodycam' && item.last_switched_at === '14:27') ||
+    (item.name === 'Assetto Corsa' && item.last_switched_at === '13:45') ||
+    (item.name === 'BeamNG.drive' && item.last_switched_at === '11:05') ||
+    (item.name === 'Enshrouded' && item.last_switched_at === 'Včera')
+  );
+};
 
 const normalizeKey = (str?: string | null) => {
   if (!str) return '';
@@ -143,6 +88,7 @@ function dedupeRecentGameList(list: RecentGameSession[]): RecentGameSession[] {
   const result: RecentGameSession[] = [];
   for (const item of list) {
     if (!item.exe || IGNORED_SYSTEM_EXES.has(item.exe.toLowerCase())) continue;
+    if (isMockSession(item)) continue; // Purge prototype mock data
     const existingIndex = result.findIndex((r) => isSameGame(r, item));
     if (existingIndex >= 0) {
       const existing = result[existingIndex];
@@ -205,10 +151,8 @@ export default function App() {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
           const sanitized = dedupeRecentGameList(parsed);
-          if (sanitized.length > 0) {
-            localStorage.setItem('hdr_recent_games', JSON.stringify(sanitized));
-            return sanitized;
-          }
+          localStorage.setItem('hdr_recent_games', JSON.stringify(sanitized));
+          return sanitized;
         }
       }
     } catch (e) {

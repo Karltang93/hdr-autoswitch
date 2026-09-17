@@ -50,6 +50,7 @@ export interface Translations {
   recentTierAutoHdr: string;
   recentTierMod: string;
   recentHdrOk: string;
+  recentEmpty: string;
 
   // Activity Log
   activityTitle: string;
@@ -223,6 +224,7 @@ const cs: Translations = {
   recentTierAutoHdr: 'AUTO HDR',
   recentTierMod: 'HDR MOD/FIX',
   recentHdrOk: 'HDR10 OK',
+  recentEmpty: 'Zatím nebyly spuštěny žádné HDR hry. Spusťte libovolnou HDR hru a telemetrie se zde automaticky zobrazí.',
 
   activityTitle: 'ZÁZNAM AKTIVITY HOOKU',
   activityInitSystem: 'WinEventHook služba inicializována. Zero CPU režim aktivní.',
@@ -389,6 +391,7 @@ const en: Translations = {
   recentTierAutoHdr: 'AUTO HDR',
   recentTierMod: 'HDR MOD/FIX',
   recentHdrOk: 'HDR10 OK',
+  recentEmpty: 'No HDR games played yet. Launch any HDR-supported game and telemetry will automatically appear here.',
 
   activityTitle: 'HOOK ACTIVITY LOG',
   activityInitSystem: 'WinEventHook service initialized. Zero CPU overhead mode active.',

@@ -29,6 +29,7 @@
 * **No more duplicate cards**: Resolved an issue where games with shipping or launcher binaries (e.g. `bodycam.exe` vs `Bodycam-Win64-Shipping.exe`) showed up multiple times in Recent Games and the library.
 * Automatically correlates shipping binaries with parent titles, preserves and merges Steam IDs, artwork covers, and tags.
 * Automatically deduplicates existing saved game sessions on application launch.
+* **Purged prototype mock demo data**: Removed initial hardcoded placeholder game sessions (Bodycam, Assetto Corsa, etc.) from the telemetry feed and added an elegant empty-state indicator until your first real HDR game is launched.
 
 #### 5. 📐 Wider Default Window Geometry (1120 × 720)
 * Widened the default window size to 1120px to provide a clean, uncompromised layout on high-resolution displays.

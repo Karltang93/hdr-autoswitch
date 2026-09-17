@@ -10,6 +10,7 @@ import {
   Sparkles,
   History,
   Zap,
+  Gamepad2,
 } from 'lucide-react';
 import { HdrLogo } from './HdrLogo';
 import { GlitchButton } from './GlitchButton';
@@ -280,8 +281,24 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </button>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
-          {recentGames.slice(0, 6).map((game) => {
+        {recentGames.length === 0 ? (
+          <div className="p-8 border border-[#f55a6b]/20 bg-[#120d0e]/60 flex flex-col sm:flex-row items-center justify-center gap-3 text-center sm:text-left relative overflow-hidden">
+            <div className="absolute inset-0 scanlines-overlay opacity-15 pointer-events-none" />
+            <div className="p-3 border border-[#f55a6b]/30 bg-[#1a0e10] text-[#f55a6b] shrink-0">
+              <Gamepad2 className="w-6 h-6" />
+            </div>
+            <div className="space-y-0.5">
+              <p className="text-xs text-[#e5e0e1] font-bold font-mono">
+                {t.recentEmpty}
+              </p>
+              <p className="text-[11px] text-[#8a7f81] font-mono">
+                {t.heroSdrSubtext}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
+            {recentGames.slice(0, 6).map((game) => {
             const steamCover = game.steam_id
               ? `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${game.steam_id}/library_600x900.jpg`
               : null;
@@ -384,7 +401,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
               </div>
             );
           })}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Activity Log (Real-time CRT System Event Feed) */}
