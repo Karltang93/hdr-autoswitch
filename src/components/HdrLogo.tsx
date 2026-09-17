@@ -7,19 +7,22 @@ interface HdrLogoProps {
 }
 
 export const HdrLogo: React.FC<HdrLogoProps> = ({
-  className = 'w-8 h-8',
+  className = '',
   active = false,
   size = 32,
 }) => {
   return (
-    <div className={`relative inline-flex items-center justify-center ${className}`}>
+    <div
+      style={{ width: size, height: size }}
+      className={`relative flex items-center justify-center shrink-0 ${className}`}
+    >
       <svg
         viewBox="0 0 100 100"
         width={size}
         height={size}
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
-        className="transition-transform duration-500 hover:scale-110"
+        className="transition-transform duration-500 hover:scale-110 block shrink-0"
       >
         <defs>
           {/* Active HDR Gradients */}

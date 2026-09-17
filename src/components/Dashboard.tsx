@@ -91,7 +91,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <div className="flex items-center gap-5">
             {/* Ambient Aperture Dial with Glitch Border */}
             <div
-              className={`p-3.5 border shrink-0 transition-all duration-300 ${
+              className={`p-3 border shrink-0 flex items-center justify-center aspect-square transition-all duration-300 ${
                 status.is_hdr_active
                   ? 'bg-[#221314] border-[#f55a6b] shadow-[0_0_25px_rgba(245,90,107,0.5)] scale-105'
                   : 'bg-[#170f10] border-[#f55a6b]/40'

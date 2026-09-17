@@ -379,7 +379,7 @@ export default function App() {
           <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
             {/* Brand Logo & Name with Solid Glitch Title Bar */}
             <div className="flex items-center gap-3">
-              <div className="p-1 border border-[#f55a6b]/40 bg-[#180e10]">
+              <div className="p-1.5 border border-[#f55a6b]/40 bg-[#180e10] flex items-center justify-center shrink-0 aspect-square">
                 <HdrLogo size={28} active={status.is_hdr_active} />
               </div>
 
