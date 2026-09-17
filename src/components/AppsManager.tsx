@@ -18,6 +18,8 @@ import {
   X,
   FolderOpen,
   UploadCloud,
+  AlertCircle,
+  RefreshCw,
 } from 'lucide-react';
 import { GlitchButton } from './GlitchButton';
 import { GlitchText } from './GlitchText';
@@ -46,6 +48,42 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
   const [showScanModal, setShowScanModal] = useState(false);
   const [scannedGames, setScannedGames] = useState<HdrApp[]>([]);
   const [selectedToImport, setSelectedToImport] = useState<Record<string, boolean>>({});
+  const [pathStatus, setPathStatus] = useState<Record<string, boolean>>({});
+
+  // Verify paths of apps currently in the user's library
+  useEffect(() => {
+    const paths = config.apps
+      .map((a) => a.path)
+      .filter((p): p is string => !!p && p.trim().length > 0);
+
+    if (paths.length > 0) {
+      invoke<Record<string, boolean>>('verify_game_paths', { paths })
+        .then((status) => setPathStatus(status))
+        .catch((err) => console.error('Failed to verify app paths:', err));
+    }
+  }, [config.apps]);
+
+  const findExistingApp = (item: HdrApp): HdrApp | undefined => {
+    const itemExe = item.exe_name.toLowerCase();
+    const itemName = item.name.toLowerCase();
+    return config.apps.find((a) => {
+      const aExe = a.exe_name.toLowerCase();
+      const aName = a.name.toLowerCase();
+      const matchesExe =
+        aExe === itemExe ||
+        (a.alternate_exes && a.alternate_exes.some((x) => x.toLowerCase() === itemExe));
+      const matchesName = aName === itemName;
+      return matchesExe || matchesName;
+    });
+  };
+
+  const isPathDifferent = (existing: HdrApp, scanned: HdrApp): boolean => {
+    if (!scanned.path) return false;
+    if (!existing.path) return true; // Path missing previously, now found on disk!
+    const normOld = existing.path.replace(/\//g, '\\').toLowerCase().trim();
+    const normNew = scanned.path.replace(/\//g, '\\').toLowerCase().trim();
+    return normOld !== normNew;
+  };
 
   // Manual Add Modal & File Picker
   const [showAddModal, setShowAddModal] = useState(false);
@@ -89,13 +127,17 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
 
       const initialSelected: Record<string, boolean> = {};
       for (const item of detected) {
-        const isAlreadyAdded = config.apps.some(
-          (a) =>
-            a.name.toLowerCase() === item.name.toLowerCase() ||
-            a.exe_name.toLowerCase() === item.exe_name.toLowerCase()
-        );
-        // Pre-select HDR supported games automatically. Leave SDR games unselected by default.
-        initialSelected[item.exe_name] = item.enabled && !isAlreadyAdded;
+        const existing = findExistingApp(item);
+        if (existing) {
+          const pathChanged = isPathDifferent(existing, item);
+          // If game is already tracked:
+          // - If path moved or was newly discovered: PRE-SELECT to update path!
+          // - If already up to date: uncheck by default
+          initialSelected[item.exe_name] = pathChanged;
+        } else {
+          // New game: pre-select HDR games, leave SDR unselected by default
+          initialSelected[item.exe_name] = item.enabled;
+        }
       }
       setSelectedToImport(initialSelected);
       setShowScanModal(true);
@@ -110,7 +152,9 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
   const selectAllHdr = () => {
     const next: Record<string, boolean> = {};
     for (const item of scannedGames) {
-      next[item.exe_name] = item.enabled;
+      if (item.enabled) {
+        next[item.exe_name] = true;
+      }
     }
     setSelectedToImport(next);
   };
@@ -457,13 +501,24 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                 </div>
 
                 {/* Top Badges */}
-                <div className="relative z-10 p-2 flex items-center justify-between">
+                <div className="relative z-10 p-2 flex items-center justify-between flex-wrap gap-1">
                   {getHdrBadge(app.hdr_type)}
-                  {app.launcher && (
-                    <span className="px-1 py-0.2 text-[8px] font-mono text-[#b5a9ac] bg-black/60 border border-white/10 uppercase">
-                      {app.launcher}
-                    </span>
-                  )}
+                  <div className="flex items-center gap-1">
+                    {app.path && pathStatus[app.path] === false && (
+                      <span
+                        className="px-1 py-0.2 text-[8px] font-mono text-rose-300 bg-rose-950/90 border border-rose-500/60 uppercase flex items-center gap-0.5"
+                        title={t.appsPathMissingTooltip}
+                      >
+                        <AlertCircle className="w-2.5 h-2.5" />
+                        {t.appsPathMissing}
+                      </span>
+                    )}
+                    {app.launcher && (
+                      <span className="px-1 py-0.2 text-[8px] font-mono text-[#b5a9ac] bg-black/60 border border-white/10 uppercase">
+                        {app.launcher}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Bottom Overlay & Controls */}
@@ -540,6 +595,15 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                       {app.launcher && (
                         <span className="text-[9px] px-1.5 py-0.2 bg-black border border-white/15 text-[#b5a9ac] uppercase">
                           {app.launcher}
+                        </span>
+                      )}
+                      {app.path && pathStatus[app.path] === false && (
+                        <span
+                          className="text-[9px] px-1.5 py-0.2 bg-rose-950/70 border border-rose-500/50 text-rose-300 font-mono flex items-center gap-1"
+                          title={t.appsPathMissingTooltip}
+                        >
+                          <AlertCircle className="w-3 h-3" />
+                          {t.appsPathMissing}
                         </span>
                       )}
                     </div>
@@ -641,6 +705,10 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                     <div className="space-y-1.5">
                       {hdrGames.map((game) => {
                         const isSelected = !!selectedToImport[game.exe_name];
+                        const existing = findExistingApp(game);
+                        const pathChanged = existing ? isPathDifferent(existing, game) : false;
+                        const isAlreadyInLib = !!existing && !pathChanged;
+
                         return (
                           <div
                             key={game.exe_name}
@@ -656,8 +724,8 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                                 : 'bg-black/40 border-white/10 text-[#8a7f81] hover:border-white/30'
                             }`}
                           >
-                            <div className="space-y-0.5">
-                              <div className="font-bold flex items-center gap-2">
+                            <div className="space-y-0.5 min-w-0 flex-1 pr-2">
+                              <div className="font-bold flex items-center gap-2 flex-wrap">
                                 <span>{game.name}</span>
                                 {game.launcher && (
                                   <span className="text-[9px] px-1 bg-black border border-[#5accf5]/30 text-[#5accf5]">
@@ -667,12 +735,35 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                                 <span className="text-[9px] px-1.5 py-0.2 bg-[#5accf5]/10 border border-[#5accf5]/50 text-[#5accf5] font-mono uppercase">
                                   {game.hdr_type === 'autohdr' ? 'Auto HDR' : 'Native HDR'}
                                 </span>
+
+                                {/* Status Badges */}
+                                {pathChanged && (
+                                  <span className="text-[9px] px-1.5 py-0.2 bg-amber-500/15 border border-amber-500/60 text-amber-300 font-mono font-bold uppercase tracking-wider flex items-center gap-1">
+                                    <RefreshCw className="w-2.5 h-2.5" />
+                                    {t.scanModalStatusPathUpdate}
+                                  </span>
+                                )}
+                                {isAlreadyInLib && (
+                                  <span className="text-[9px] px-1.5 py-0.2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono uppercase">
+                                    ✓ {t.scanModalStatusInLibrary}
+                                  </span>
+                                )}
+                                {!existing && (
+                                  <span className="text-[9px] px-1.5 py-0.2 bg-[#5accf5]/15 border border-[#5accf5]/70 text-[#5accf5] font-mono font-bold uppercase tracking-wider">
+                                    ★ {t.scanModalStatusNew}
+                                  </span>
+                                )}
                               </div>
-                              <div className="text-[10px] text-[#5accf5] font-mono">[{game.exe_name}]</div>
+                              <div className="text-[10px] text-[#5accf5] font-mono truncate">[{game.exe_name}]</div>
+                              {pathChanged && game.path && (
+                                <div className="text-[9px] text-amber-300/80 font-mono truncate" title={game.path}>
+                                  ➔ {t.scanModalNewLocation}: {game.path}
+                                </div>
+                              )}
                             </div>
 
                             <div
-                              className={`w-4 h-4 border flex items-center justify-center transition-colors ${
+                              className={`w-4 h-4 border flex items-center justify-center shrink-0 transition-colors ${
                                 isSelected
                                   ? 'bg-[#5accf5] border-[#5accf5] text-black'
                                   : 'border-[#8a7f81]'
@@ -701,6 +792,10 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                     <div className="space-y-1.5">
                       {sdrGames.map((game) => {
                         const isSelected = !!selectedToImport[game.exe_name];
+                        const existing = findExistingApp(game);
+                        const pathChanged = existing ? isPathDifferent(existing, game) : false;
+                        const isAlreadyInLib = !!existing && !pathChanged;
+
                         return (
                           <div
                             key={game.exe_name}
@@ -716,8 +811,8 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                                 : 'bg-black/40 border-white/10 text-[#8a7f81] hover:border-white/30'
                             }`}
                           >
-                            <div className="space-y-0.5">
-                              <div className="font-bold flex items-center gap-2">
+                            <div className="space-y-0.5 min-w-0 flex-1 pr-2">
+                              <div className="font-bold flex items-center gap-2 flex-wrap">
                                 <span>{game.name}</span>
                                 {game.launcher && (
                                   <span className="text-[9px] px-1 bg-black border border-white/20 text-[#8a7f81]">
@@ -725,14 +820,32 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                                   </span>
                                 )}
                                 <span className="text-[9px] px-1.5 py-0.2 bg-white/5 border border-white/10 text-[#8a7f81] font-mono uppercase">
-                                  SDR / Custom
+                                  SDR
                                 </span>
+
+                                {/* Status Badges for SDR */}
+                                {pathChanged && (
+                                  <span className="text-[9px] px-1.5 py-0.2 bg-amber-500/15 border border-amber-500/60 text-amber-300 font-mono font-bold uppercase tracking-wider flex items-center gap-1">
+                                    <RefreshCw className="w-2.5 h-2.5" />
+                                    {t.scanModalStatusPathUpdate}
+                                  </span>
+                                )}
+                                {isAlreadyInLib && (
+                                  <span className="text-[9px] px-1.5 py-0.2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono uppercase">
+                                    ✓ {t.scanModalStatusInLibrary}
+                                  </span>
+                                )}
                               </div>
-                              <div className="text-[10px] text-[#8a7f81] font-mono">[{game.exe_name}]</div>
+                              <div className="text-[10px] text-[#8a7f81] font-mono truncate">[{game.exe_name}]</div>
+                              {pathChanged && game.path && (
+                                <div className="text-[9px] text-amber-300/80 font-mono truncate" title={game.path}>
+                                  ➔ {t.scanModalNewLocation}: {game.path}
+                                </div>
+                              )}
                             </div>
 
                             <div
-                              className={`w-4 h-4 border flex items-center justify-center transition-colors ${
+                              className={`w-4 h-4 border flex items-center justify-center shrink-0 transition-colors ${
                                 isSelected
                                   ? 'bg-[#f55a6b] border-[#f55a6b] text-black'
                                   : 'border-[#8a7f81]'

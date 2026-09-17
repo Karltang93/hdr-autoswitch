@@ -86,15 +86,49 @@ fn import_detected_games(state: State<'_, AppState>, detected: Vec<HdrApp>) -> R
         if let Some(existing) = conf.apps.iter_mut().find(|a| {
             a.name.to_lowercase() == name_lower
                 || a.exe_name.to_lowercase() == exe_lower
-                || a.alternate_exes.contains(&exe_lower)
+                || a.alternate_exes.iter().any(|alt| alt.to_lowercase() == exe_lower)
         }) {
+            let mut updated = false;
+
             for alt in item.alternate_exes {
-                if !existing.alternate_exes.contains(&alt) && existing.exe_name.to_lowercase() != alt {
+                let alt_lower = alt.to_lowercase();
+                if !existing.alternate_exes.iter().any(|x| x.to_lowercase() == alt_lower)
+                    && existing.exe_name.to_lowercase() != alt_lower
+                {
                     existing.alternate_exes.push(alt);
+                    updated = true;
                 }
             }
-            if existing.path.is_none() {
-                existing.path = item.path;
+
+            // Always update path if item has a valid path and it differs from existing
+            if let Some(new_p) = item.path {
+                let path_changed = match &existing.path {
+                    Some(old_p) => old_p.to_lowercase() != new_p.to_lowercase(),
+                    None => true,
+                };
+                if path_changed {
+                    existing.path = Some(new_p);
+                    updated = true;
+                }
+            }
+
+            if item.launcher.is_some() && existing.launcher != item.launcher {
+                existing.launcher = item.launcher;
+                updated = true;
+            }
+
+            if item.steam_id.is_some() && existing.steam_id != item.steam_id {
+                existing.steam_id = item.steam_id;
+                updated = true;
+            }
+
+            if !existing.enabled {
+                existing.enabled = true;
+                updated = true;
+            }
+
+            if updated {
+                count += 1;
             }
         } else {
             conf.apps.push(item);
@@ -104,6 +138,16 @@ fn import_detected_games(state: State<'_, AppState>, detected: Vec<HdrApp>) -> R
 
     state.config_mgr.update_config(conf)?;
     Ok(count)
+}
+
+#[tauri::command]
+fn verify_game_paths(paths: Vec<String>) -> std::collections::HashMap<String, bool> {
+    let mut map = std::collections::HashMap::new();
+    for p in paths {
+        let exists = std::path::Path::new(&p).exists();
+        map.insert(p, exists);
+    }
+    map
 }
 
 #[tauri::command]
@@ -319,7 +363,8 @@ pub fn run() {
             sync_database,
             get_current_status,
             pick_game_exe,
-            inspect_exe_path
+            inspect_exe_path,
+            verify_game_paths
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

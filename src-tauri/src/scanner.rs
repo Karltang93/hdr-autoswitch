@@ -939,6 +939,52 @@ fn collect_exes(dir: &Path, depth: usize, max_depth: usize, out: &mut Vec<(Strin
 // String & Title Helpers
 // --------------------------------------------------------------------------------------
 
+fn strip_editions(s: &str) -> String {
+    let mut lower = s.to_lowercase();
+    let editions = [
+        "director's cut",
+        "directors cut",
+        "game of the year edition",
+        "goty edition",
+        "goty",
+        "enhanced edition",
+        "definitive edition",
+        "ultimate edition",
+        "digital deluxe edition",
+        "deluxe edition",
+        "complete edition",
+        "royal edition",
+        "anniversary edition",
+        "special edition",
+        "remastered",
+        "remaster",
+        "standard edition",
+        "gold edition",
+        "legendary edition",
+        "vr edition",
+    ];
+    for ed in editions {
+        lower = lower.replace(ed, " ");
+    }
+    lower
+}
+
+fn extract_title_base(title: &str) -> &str {
+    if let Some(pos) = title.find(':') {
+        return &title[..pos];
+    }
+    if let Some(pos) = title.find(" - ") {
+        return &title[..pos];
+    }
+    if let Some(pos) = title.find(" – ") {
+        return &title[..pos];
+    }
+    if let Some(pos) = title.find(" — ") {
+        return &title[..pos];
+    }
+    title
+}
+
 pub fn is_title_match(cat_name: &str, candidate_name: &str) -> bool {
     let norm_cat = normalize_game_title(cat_name);
     let norm_cand = normalize_game_title(candidate_name);
@@ -947,20 +993,34 @@ pub fn is_title_match(cat_name: &str, candidate_name: &str) -> bool {
         return false;
     }
 
+    // 1. Direct equality on normalized titles
     if norm_cat == norm_cand {
         return true;
     }
 
-    // Check before subtitle separator (e.g. ":", "-", "–")
-    let cat_base = normalize_game_title(cat_name.split(&[':', '-', '–'][..]).next().unwrap_or(cat_name));
-    let cand_base = normalize_game_title(candidate_name.split(&[':', '-', '–'][..]).next().unwrap_or(candidate_name));
+    // 2. Direct equality after stripping edition suffixes (e.g. "Director's Cut", "Remastered", "GOTY")
+    let stripped_cat = normalize_game_title(&strip_editions(cat_name));
+    let stripped_cand = normalize_game_title(&strip_editions(candidate_name));
 
-    if cat_base.len() >= 4 && cand_base.len() >= 4 && (cat_base == cand_base || cat_base.contains(&cand_base) || cand_base.contains(&cat_base)) {
+    if !stripped_cat.is_empty() && !stripped_cand.is_empty() && stripped_cat == stripped_cand {
         return true;
     }
 
-    if (norm_cat.len() >= 6 && norm_cand.contains(&norm_cat)) || (norm_cand.len() >= 6 && norm_cat.contains(&norm_cand)) {
-        return true;
+    // 3. One title includes a subtitle (e.g. "The Witcher 3: Wild Hunt"), while the other is just the base ("The Witcher 3").
+    // Never match if both have subtitles with different endings (e.g. "Star Wars: Squadrons" vs "Star Wars: Outlaws")!
+    let cat_base = normalize_game_title(&strip_editions(extract_title_base(cat_name)));
+    let cand_base = normalize_game_title(&strip_editions(extract_title_base(candidate_name)));
+
+    let cat_has_sub = cat_base != stripped_cat;
+    let cand_has_sub = cand_base != stripped_cand;
+
+    if cat_has_sub != cand_has_sub {
+        if cat_has_sub && cat_base.len() >= 4 && cat_base == stripped_cand {
+            return true;
+        }
+        if cand_has_sub && cand_base.len() >= 4 && cand_base == stripped_cat {
+            return true;
+        }
     }
 
     false
@@ -1037,4 +1097,34 @@ fn read_registry_string(root: HKEY, subkey: &str, value_name: &str) -> Result<St
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_assetto_corsa_does_not_match_competizione() {
+        assert!(!is_title_match("Assetto Corsa Competizione", "Assetto Corsa"));
+        assert!(!is_title_match("Assetto Corsa", "Assetto Corsa Competizione"));
+        assert!(is_title_match("Assetto Corsa", "Assetto Corsa"));
+        assert!(is_title_match("Assetto Corsa Competizione", "Assetto Corsa Competizione"));
+    }
+
+    #[test]
+    fn test_editions_and_subtitles() {
+        assert!(is_title_match("Death Stranding Director's Cut", "Death Stranding"));
+        assert!(is_title_match("The Witcher 3: Wild Hunt", "The Witcher 3"));
+        assert!(is_title_match("Cyberpunk 2077: Phantom Liberty", "Cyberpunk 2077"));
+        assert!(is_title_match("Ghost of Tsushima DIRECTOR'S CUT", "Ghost of Tsushima"));
+    }
+
+    #[test]
+    fn test_sequels_do_not_match() {
+        assert!(!is_title_match("Doom Eternal", "Doom"));
+        assert!(!is_title_match("Marvel's Spider-Man Remastered", "Marvel's Spider-Man 2"));
+        assert!(!is_title_match("Alan Wake 2", "Alan Wake"));
+        assert!(!is_title_match("Star Wars: Squadrons", "Star Wars: Outlaws"));
+    }
+}
+
 

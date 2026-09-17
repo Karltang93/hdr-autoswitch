@@ -476,6 +476,41 @@
     "notes": "Vyžaduje úpravu / mod / Special K (PCGamingWiki)"
   },
   {
+    "name": "Assetto Corsa",
+    "exe_name": "acs.exe",
+    "hdr_type": "Custom",
+    "support_tier": "manual_fix",
+    "notes": "Vyžaduje Custom Shaders Patch (CSP) + Pure mod pro HDR"
+  },
+  {
+    "name": "Assetto Corsa",
+    "exe_name": "assettocorsa.exe",
+    "hdr_type": "Custom",
+    "support_tier": "manual_fix",
+    "notes": "Vyžaduje Custom Shaders Patch (CSP) + Pure mod pro HDR"
+  },
+  {
+    "name": "Assetto Corsa",
+    "exe_name": "acs_x86.exe",
+    "hdr_type": "Custom",
+    "support_tier": "manual_fix",
+    "notes": "Vyžaduje Custom Shaders Patch (CSP) + Pure mod pro HDR"
+  },
+  {
+    "name": "Assetto Corsa Competizione",
+    "exe_name": "ac2-win64-shipping.exe",
+    "hdr_type": "Native",
+    "support_tier": "native",
+    "notes": "Nativní HDR podpora v grafickém nastavení (PCGamingWiki)"
+  },
+  {
+    "name": "Assetto Corsa Competizione",
+    "exe_name": "acc.exe",
+    "hdr_type": "Native",
+    "support_tier": "native",
+    "notes": "Nativní HDR podpora v grafickém nastavení (PCGamingWiki)"
+  },
+  {
     "name": "Assetto Corsa Competizione",
     "exe_name": "assettocorsacompetizione.exe",
     "hdr_type": "Native",

@@ -32,41 +32,34 @@ pub fn get_full_catalog() -> Vec<CatalogEntry> {
 
     let embedded: Vec<CatalogEntry> = serde_json::from_str(EMBEDDED_CATALOG_JSON).unwrap_or_default();
 
-    // Try reading cache on disk
+    // Read cache on disk and merge with embedded catalog
     let cache_file = get_cache_path();
+    let mut catalog_map: HashMap<String, CatalogEntry> = HashMap::new();
+
+    // 1. Put all embedded entries from current binary (always fresh & authoritative)
+    for emb in embedded {
+        catalog_map.insert(clean_key(&emb.name), emb);
+    }
+
+    // 2. Merge additional entries from online sync cached on disk
     if cache_file.exists() {
         if let Ok(content) = fs::read_to_string(&cache_file) {
-            if let Ok(mut entries) = serde_json::from_str::<Vec<CatalogEntry>>(&content) {
-                if !entries.is_empty() {
-                    // Verify if cache has autohdr entries. If cache has 0 autohdr entries (e.g. from an older sync), merge them from embedded!
-                    let has_autohdr = entries.iter().any(|e| e.support_tier == "autohdr");
-                    if !has_autohdr {
-                        let mut map: HashMap<String, CatalogEntry> = entries
-                            .into_iter()
-                            .map(|e| (clean_key(&e.name), e))
-                            .collect();
-                        for emb in &embedded {
-                            map.entry(clean_key(&emb.name)).or_insert_with(|| emb.clone());
-                        }
-                        entries = map.into_values().collect();
-                        entries.sort_by(|a, b| a.name.cmp(&b.name));
-                        save_to_cache(&entries);
-                    }
-
-                    if let Ok(mut write_guard) = CACHED_CATALOG.write() {
-                        *write_guard = Some(entries.clone());
-                    }
-                    return entries;
+            if let Ok(cached_entries) = serde_json::from_str::<Vec<CatalogEntry>>(&content) {
+                for cached in cached_entries {
+                    catalog_map.entry(clean_key(&cached.name)).or_insert(cached);
                 }
             }
         }
     }
 
-    // Fallback to embedded catalog
+    let mut entries: Vec<CatalogEntry> = catalog_map.into_values().collect();
+    entries.sort_by(|a, b| a.name.cmp(&b.name));
+
     if let Ok(mut write_guard) = CACHED_CATALOG.write() {
-        *write_guard = Some(embedded.clone());
+        *write_guard = Some(entries.clone());
     }
-    embedded
+
+    entries
 }
 
 pub fn save_to_cache(entries: &[CatalogEntry]) {

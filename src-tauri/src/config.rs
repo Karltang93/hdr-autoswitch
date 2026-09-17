@@ -149,6 +149,7 @@ impl ConfigManager {
                             let lower = app.name.to_lowercase();
                             let sid = match lower.as_str() {
                                 s if s.contains("bodycam") => Some("2406770"),
+                                s if s.contains("competizione") => Some("805550"),
                                 s if s.contains("assetto corsa") => Some("244210"),
                                 s if s.contains("beamng") => Some("284160"),
                                 s if s.contains("enshrouded") => Some("1203620"),
@@ -375,6 +376,7 @@ impl ConfigManager {
                 let lower = app.name.to_lowercase();
                 let sid = match lower.as_str() {
                     s if s.contains("bodycam") => Some("2406770"),
+                    s if s.contains("competizione") => Some("805550"),
                     s if s.contains("assetto corsa") => Some("244210"),
                     s if s.contains("beamng") => Some("284160"),
                     s if s.contains("enshrouded") => Some("1203620"),

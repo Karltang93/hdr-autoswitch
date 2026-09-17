@@ -92,9 +92,15 @@ export interface Translations {
   scanModalError: string;
   scanModalSectionHdr: (count: number) => string;
   scanModalSectionSdr: (count: number) => string;
+  scanModalStatusNew: string;
+  scanModalStatusInLibrary: string;
+  scanModalStatusPathUpdate: string;
+  scanModalNewLocation: string;
   scanModalSelectAllHdr: string;
   scanModalSelectAll: string;
   scanModalDeselectAll: string;
+  appsPathMissing: string;
+  appsPathMissingTooltip: string;
 
   // Manual Add Modal & Drag & Drop
   manualModalTitle: string;
@@ -271,10 +277,16 @@ const cs: Translations = {
   scanModalSuccess: (count) => `Úspěšně přidáno ${count} nových her do sledování!`,
   scanModalError: 'Chyba při prohledávání disků.',
   scanModalSectionHdr: (count) => `HRY S PODPOROU HDR (${count}) — AUTOMATICKY AKTIVNÍ`,
-  scanModalSectionSdr: (count) => `OSTATNÍ NAINSTALOVANÉ HRY (${count}) — SDR / MOŽNOST AUTO HDR`,
+  scanModalSectionSdr: (count) => `OSTATNÍ NAINSTALOVANÉ HRY (${count}) — SDR (LZE VYUŽÍT RTX HDR / MODY)`,
+  scanModalStatusNew: 'NOVÁ HRA',
+  scanModalStatusInLibrary: 'V KNIHOVNĚ',
+  scanModalStatusPathUpdate: 'AKTUALIZOVAT CESTU',
+  scanModalNewLocation: 'Nové umístění',
   scanModalSelectAllHdr: 'VYBRAT HDR',
   scanModalSelectAll: 'VYBRAT VŠE',
   scanModalDeselectAll: 'ODZNAČIT VŠE',
+  appsPathMissing: 'SOUBOR NENALEZEN',
+  appsPathMissingTooltip: 'Soubor nebyl nalezen na zadané cestě. Hra mohla být přesunuta na jiný disk nebo odinstalována. Spusťte Skenovat hry v PC pro aktualizaci.',
 
   manualModalTitle: 'PŘIDAT HRU RUČNĚ',
   manualModalName: 'NÁZEV HRY',
@@ -447,10 +459,16 @@ const en: Translations = {
   scanModalSuccess: (count) => `Successfully imported ${count} new games to HDR library!`,
   scanModalError: 'Failed to scan storage drives.',
   scanModalSectionHdr: (count) => `HDR SUPPORTED GAMES (${count}) — ENABLED BY DEFAULT`,
-  scanModalSectionSdr: (count) => `OTHER INSTALLED GAMES (${count}) — SDR / AUTO HDR`,
+  scanModalSectionSdr: (count) => `OTHER INSTALLED GAMES (${count}) — SDR (COMPATIBLE WITH RTX HDR / MODS)`,
+  scanModalStatusNew: 'NEW',
+  scanModalStatusInLibrary: 'IN LIBRARY',
+  scanModalStatusPathUpdate: 'UPDATE PATH',
+  scanModalNewLocation: 'New location',
   scanModalSelectAllHdr: 'SELECT HDR',
   scanModalSelectAll: 'SELECT ALL',
   scanModalDeselectAll: 'DESELECT ALL',
+  appsPathMissing: 'FILE NOT FOUND',
+  appsPathMissingTooltip: 'File not found at specified path. Game may have been moved to another drive or uninstalled. Run Scan PC for games to update.',
 
   manualModalTitle: 'ADD GAME MANUALLY',
   manualModalName: 'GAME TITLE',
