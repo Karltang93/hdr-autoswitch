@@ -115,6 +115,8 @@ Primary-monitor labels use the Windows GDI primary-source metadata, not display-
 
 A registered recovery source that changes or becomes unreadable retires the current settings context and blocks automatic authority before recovery inventory is refreshed. Malformed, unknown, or expired candidate IDs are rejected without changing authority.
 
+The Windows upgrade/startup foundation (`legacy_upgrade`) is compiled and regression-tested but inactive; its NSIS/MSI templates in `src-tauri\windows` are staged without being selected. Layer 4 will atomically activate the templates, early installer-helper dispatch, predecessor checks, and canonical autostart transactions, remove the old autostart plugin, and add the installer-contract integration check. Existing application behavior and installer selection are unchanged.
+
 Run the isolated store regressions on Windows with the Rust MSVC toolchain and cached Cargo dependencies:
 ```powershell
 cargo test --manifest-path .\src-tauri\Cargo.toml --lib --offline --locked --quiet -j 2 config_
