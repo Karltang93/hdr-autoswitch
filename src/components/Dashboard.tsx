@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { MonitorInfo, HdrStatePayload, AppConfig, ActivityLogEntry, RecentGameSession } from '../types';
+import { MonitorInfo, HdrStatePayload, AppConfig, ActivityLogEntry, RecentGameSession, TargetMonitor, ManualSetResult } from '../types';
 import { invoke } from '@tauri-apps/api/core';
+import { activityMessage, describeHdrScope } from '../telemetryText';
 import {
   Monitor,
   ShieldCheck,
@@ -24,9 +25,10 @@ interface DashboardProps {
   activityLogs: ActivityLogEntry[];
   recentGames: RecentGameSession[];
   onRefreshMonitors: () => void;
-  onManualToggle: (enable: boolean) => void;
+  onManualToggle: () => void;
   onNavigateToApps: () => void;
-  onUpdateConfig: (newConfig: AppConfig) => void;
+  controlAvailable: boolean;
+  onControlError: (error: string | null) => void;
   isDark: boolean;
 }
 
@@ -39,40 +41,41 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onRefreshMonitors,
   onManualToggle,
   onNavigateToApps,
+  controlAvailable,
+  onControlError,
 }) => {
   const { t } = useI18n();
   const [toggling, setToggling] = useState(false);
 
-  const handleToggle = async () => {
+  const handleSet = async (scope: TargetMonitor, enable: boolean) => {
     setToggling(true);
+    onControlError(null);
     try {
-      const nextState = !status.is_hdr_active;
-      await invoke('toggle_all_hdr', { enable: nextState });
-      onManualToggle(nextState);
-      setTimeout(onRefreshMonitors, 500);
+      const result = await invoke<ManualSetResult>('set_hdr', { scope, enable });
+      const failures = result.outcomes.filter((item) => item.outcome === 'failed' || item.outcome === 'outcome_unknown');
+      if (failures.length > 0) {
+        onControlError(failures.map((item) =>
+          `${item.display_name ?? item.device_path ?? t.settingsAllMonitors}: ${item.message ?? item.outcome}`
+        ).join('; '));
+      }
     } catch (err) {
-      console.error('Failed to toggle HDR:', err);
+      onControlError(String(err));
     } finally {
+      onManualToggle();
       setToggling(false);
     }
   };
 
-  const handleToggleMonitor = async (m: MonitorInfo) => {
-    if (!m.is_hdr_supported) return;
-    try {
-      await invoke('set_monitor_hdr', {
-        adapterLow: m.adapter_id_low,
-        adapterHigh: m.adapter_id_high,
-        targetId: m.target_id,
-        enable: !m.is_hdr_enabled,
-      });
-      setTimeout(onRefreshMonitors, 600);
-    } catch (err) {
-      console.error('Failed to toggle monitor HDR:', err);
+  const handleSetMonitor = (monitor: MonitorInfo, enable: boolean) => {
+    if (!monitor.device_path || monitor.identity_error || !monitor.is_hdr_supported) {
+      onControlError(t.configMonitorIdentityError);
+      return;
     }
+    void handleSet({ kind: 'monitor', device_path: monitor.device_path, display_name: monitor.name }, enable);
   };
 
   const hdrSupportedMonitors = monitors.filter((m) => m.is_hdr_supported);
+  const scope = describeHdrScope(status, t);
 
   return (
     <div className="space-y-6 font-mono">
@@ -114,7 +117,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       status.is_hdr_active ? 'bg-[#0f0b0b] animate-status-pulse' : 'bg-[#5accf5]'
                     }`}
                   />
-                  {status.is_hdr_active ? t.heroHdrRec2020 : t.heroSdrBt709}
+                  {scope.mode === 'hdr' ? t.heroHdrRec2020 : scope.mode === 'sdr' ? t.heroSdrBt709 : scope.badge}
                 </span>
 
                 {status.switched_by_app && (
@@ -130,7 +133,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
               <h2 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
                 <GlitchText
-                  text={status.is_hdr_active ? t.heroHdrActiveTitle : t.heroSdrTitle}
+                  text={scope.title}
                   scrambleOnHover={true}
                 />
               </h2>
@@ -154,21 +157,21 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </div>
           </div>
 
-          {/* Large tactile glitch toggle button */}
-          <div className="shrink-0 flex items-center">
+          <div className="shrink-0 flex flex-col gap-2">
             <GlitchButton
-              label={
-                toggling
-                  ? t.heroSwitching
-                  : status.is_hdr_active
-                  ? t.heroTurnOffHdr
-                  : t.heroTurnOnHdr
-              }
-              variant={status.is_hdr_active ? 'outline' : 'primary'}
+              label={toggling ? t.heroSwitching : t.configAllOn}
+              variant="primary"
               icon={<Zap className="w-4 h-4 fill-current" />}
               size="lg"
-              disabled={toggling}
-              onClick={handleToggle}
+              disabled={toggling || !controlAvailable}
+              onClick={() => handleSet({ kind: 'all' }, true)}
+            />
+            <GlitchButton
+              label={toggling ? t.heroSwitching : t.configAllOff}
+              variant="outline"
+              size="lg"
+              disabled={toggling || !controlAvailable}
+              onClick={() => handleSet({ kind: 'all' }, false)}
             />
           </div>
         </div>
@@ -196,12 +199,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {monitors.map((m) => {
-            const isTarget =
-              config.target_monitor === 'all' || config.target_monitor === m.id;
+            const isTarget = m.is_selected;
 
             return (
               <div
-                key={m.id}
+                key={`${m.adapter_id_low}:${m.adapter_id_high}:${m.target_id}`}
                 className={`p-4 border transition-all relative ${
                   m.is_hdr_enabled
                     ? 'bg-[#180e10] border-[#f55a6b] neon-glow-coral'
@@ -210,7 +212,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               >
                 <div className="absolute inset-0 scanlines-overlay opacity-20 pointer-events-none" />
 
-                <div className="flex items-start justify-between relative z-10">
+                <div className="flex flex-wrap items-start justify-between gap-3 relative z-10">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h4 className="font-bold text-sm text-white truncate max-w-[220px]" title={m.name}>
@@ -245,15 +247,25 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   </div>
 
                   <div className="flex items-center gap-2">
-                    {m.is_hdr_supported && (
+                    {m.is_hdr_supported && <>
                       <GlitchButton
-                        label={m.is_hdr_enabled ? t.displaysHdrOn : t.displaysSdr}
+                        label={t.heroTurnOnHdr}
                         variant={m.is_hdr_enabled ? 'primary' : 'outline'}
                         size="sm"
-                        onClick={() => handleToggleMonitor(m)}
+                        disabled={toggling || !controlAvailable || !m.device_path || !!m.identity_error}
+                        onClick={() => handleSetMonitor(m, true)}
                       />
-                    )}
+                      <GlitchButton
+                        label={t.heroTurnOffHdr}
+                        variant={!m.is_hdr_enabled ? 'primary' : 'outline'}
+                        size="sm"
+                        disabled={toggling || !controlAvailable || !m.device_path || !!m.identity_error}
+                        onClick={() => handleSetMonitor(m, false)}
+                      />
+                    </>}
                   </div>
+                  {m.identity_error && <p className="mt-2 text-xs text-amber-300" role="alert">{m.identity_error}</p>}
+                  {m.state_error && <p className="mt-2 text-xs text-amber-300" role="alert">{m.state_error}</p>}
                 </div>
               </div>
             );
@@ -434,7 +446,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     : 'bg-emerald-400'
                 }`}
               />
-              <span className="text-[#d8cfd1] truncate">&gt; {log.message}</span>
+              <span className="text-[#d8cfd1] truncate">&gt; {activityMessage(log.message, t)}</span>
             </div>
           ))}
         </div>

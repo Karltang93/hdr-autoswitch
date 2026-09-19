@@ -1,7 +1,7 @@
-use crate::config_v2::TargetMonitor;
-use crate::display_v2::{
-    self as display, DisplayBackend, DisplayFailure, FailureKind, MonitorInfo, MonitorOutcome,
-    NativeAttempt, NativePurpose, OutcomeKind, ScopeHdrState, TargetStatus,
+use crate::config::TargetMonitor;
+use crate::display::{
+    self, DisplayBackend, DisplayFailure, FailureKind, MonitorInfo, MonitorOutcome, NativeAttempt,
+    NativePurpose, OutcomeKind, ScopeHdrState, TargetStatus,
 };
 use std::collections::VecDeque;
 
@@ -648,8 +648,8 @@ impl<B: DisplayBackend> HdrController<B> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::display_v2::tests::{monitor, MockDisplay};
-    use crate::display_v2::NativeError;
+    use crate::display::tests::{monitor, MockDisplay};
+    use crate::display::NativeError;
     use std::cell::Cell;
     use std::rc::Rc;
 

@@ -85,17 +85,18 @@ pub fn get_full_catalog() -> Vec<CatalogEntry> {
     entries
 }
 
-pub fn save_to_cache(entries: &[CatalogEntry]) {
+pub fn save_to_cache(entries: &[CatalogEntry]) -> Result<(), String> {
     let cache_file = get_cache_path();
     if let Some(parent) = cache_file.parent() {
-        let _ = fs::create_dir_all(parent);
+        fs::create_dir_all(parent).map_err(|error| format!("Cannot create catalog cache: {error}"))?;
     }
-    if let Ok(json) = serde_json::to_string_pretty(entries) {
-        let _ = fs::write(&cache_file, json);
-    }
-    if let Ok(mut write_guard) = CACHED_CATALOG.write() {
-        *write_guard = Some(entries.to_vec());
-    }
+    let json = serde_json::to_string_pretty(entries).map_err(|error| error.to_string())?;
+    fs::write(&cache_file, json).map_err(|error| format!("Cannot save catalog cache: {error}"))?;
+    let mut write_guard = CACHED_CATALOG
+        .write()
+        .map_err(|_| "Catalog cache lock is poisoned.".to_string())?;
+    *write_guard = Some(entries.to_vec());
+    Ok(())
 }
 
 #[allow(dead_code)]
@@ -180,6 +181,7 @@ pub async fn fetch_online_database() -> Result<Vec<CatalogEntry>, String> {
         .timeout(std::time::Duration::from_secs(12))
         .build()
         .map_err(|e| e.to_string())?;
+    let mut fetched = false;
 
     // 1. Try PCGamingWiki MediaWiki Cargo Query for HDR games
     let mut pcgw_fetched = Vec::new();
@@ -217,6 +219,7 @@ pub async fn fetch_online_database() -> Result<Vec<CatalogEntry>, String> {
     }
 
     if !pcgw_fetched.is_empty() {
+        fetched = true;
         for (name, supported) in pcgw_fetched {
             let key = clean_key(&name);
             let (tier, hdr_type, notes) = match supported.as_str() {
@@ -273,13 +276,14 @@ pub async fn fetch_online_database() -> Result<Vec<CatalogEntry>, String> {
             if let Ok(json_data) = res.json::<serde_json::Value>().await {
                 if let Some(wikitext) = json_data.pointer("/parse/wikitext/*").and_then(|v| v.as_str()) {
                     parse_pcgw_autohdr_wikitext(wikitext, &mut catalog_map);
+                    fetched |= !wikitext.trim().is_empty();
                 }
             }
         }
     }
 
     // 3. Fallback: If both failed, try GitHub repository raw JSON
-    if catalog_map.len() < 200 {
+    if !fetched {
         let gh_url = "https://raw.githubusercontent.com/Soptik1290/hdr-autoswitch/main/database/hdr_games.json";
         if let Ok(res) = client
             .get(gh_url)
@@ -289,6 +293,7 @@ pub async fn fetch_online_database() -> Result<Vec<CatalogEntry>, String> {
         {
             if res.status().is_success() {
                 if let Ok(entries) = res.json::<Vec<CatalogEntry>>().await {
+                    fetched = !entries.is_empty();
                     for entry in entries {
                         catalog_map.insert(clean_key(&entry.name), entry);
                     }
@@ -297,9 +302,13 @@ pub async fn fetch_online_database() -> Result<Vec<CatalogEntry>, String> {
         }
     }
 
+    if !fetched {
+        return Err("No online catalog source succeeded. The existing catalog was not replaced.".into());
+    }
+
     let mut result: Vec<CatalogEntry> = catalog_map.into_values().collect();
     result.sort_by(|a, b| a.name.cmp(&b.name));
-    save_to_cache(&result);
+    save_to_cache(&result)?;
 
     Ok(result)
 }

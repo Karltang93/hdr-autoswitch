@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { HdrApp, HdrType, AppConfig, PickedGameInfo } from '../types';
+import { HdrApp, HdrType, AppConfig, PickedGameInfo, ScanResult } from '../types';
+import type { MutationOrigin } from '../configState';
+import { configClient } from '../useConfig';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import {
@@ -27,17 +29,15 @@ import { useI18n } from '../i18n';
 
 interface AppsManagerProps {
   config: AppConfig;
-  onUpdateConfig: (newConfig: AppConfig) => void;
   onNavigateToCatalog: () => void;
   isDark: boolean;
 }
 
 export const AppsManager: React.FC<AppsManagerProps> = ({
   config,
-  onUpdateConfig,
   onNavigateToCatalog,
 }) => {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [search, setSearch] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedLauncher, setSelectedLauncher] = useState<string>('all');
@@ -47,6 +47,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
   // Scan modal
   const [showScanModal, setShowScanModal] = useState(false);
   const [scannedGames, setScannedGames] = useState<HdrApp[]>([]);
+  const [scanOrigin, setScanOrigin] = useState<MutationOrigin | null>(null);
   const [selectedToImport, setSelectedToImport] = useState<Record<string, boolean>>({});
   const [pathStatus, setPathStatus] = useState<Record<string, boolean>>({});
 
@@ -96,25 +97,17 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
 
   const handleToggleApp = async (exeName: string, enabled: boolean) => {
     try {
-      await invoke('toggle_app', { exeName, enabled });
-      const updatedApps = config.apps.map((a) =>
-        a.exe_name.toLowerCase() === exeName.toLowerCase() ? { ...a, enabled } : a
-      );
-      onUpdateConfig({ ...config, apps: updatedApps });
+      await configClient.mutate('toggle_app', { exeName, enabled });
     } catch (err) {
-      console.error('Failed to toggle app:', err);
+      configClient.reportError(err);
     }
   };
 
   const handleDeleteApp = async (exeName: string) => {
     try {
-      await invoke('remove_app', { exeName });
-      const updatedApps = config.apps.filter(
-        (a) => a.exe_name.toLowerCase() !== exeName.toLowerCase()
-      );
-      onUpdateConfig({ ...config, apps: updatedApps });
+      await configClient.mutate('remove_app', { exeName });
     } catch (err) {
-      console.error('Failed to remove app:', err);
+      configClient.reportError(err);
     }
   };
 
@@ -122,7 +115,16 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
     setIsScanning(true);
     setScanMessage(null);
     try {
-      const detected: HdrApp[] = await invoke('scan_installed_games');
+      const origin = configClient.captureOrigin();
+      const result = await invoke<ScanResult>('scan_installed_games', {
+        expectedContext: origin.contextToken,
+        expectedLibraryGeneration: origin.libraryGeneration,
+      });
+      const detected = result.games;
+      setScanOrigin({
+        contextToken: result.context_token,
+        libraryGeneration: result.library_generation,
+      });
       setScannedGames(detected);
 
       const initialSelected: Record<string, boolean> = {};
@@ -143,6 +145,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
       setShowScanModal(true);
     } catch (err) {
       console.error('Failed to scan installed games:', err);
+      configClient.reportError(err);
       setScanMessage(t.scanModalError);
     } finally {
       setIsScanning(false);
@@ -173,7 +176,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
 
   const handleBrowseExe = async () => {
     try {
-      const picked: PickedGameInfo | null = await invoke('pick_game_exe');
+      const picked: PickedGameInfo | null = await invoke('pick_game_exe', { language: lang });
       if (picked) {
         setNewName(picked.name);
         setNewExe(picked.exe_name);
@@ -227,16 +230,15 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
     }
 
     try {
-      const addedCount: number = await invoke('import_detected_games', {
+      if (!scanOrigin) throw new Error(t.scanModalError);
+      await configClient.mutate('import_detected_games', {
         detected: toImport,
-      });
-      const refreshed: AppConfig = await invoke('get_config');
-      onUpdateConfig(refreshed);
+      }, scanOrigin);
       setShowScanModal(false);
-      setScanMessage(t.scanModalSuccess(addedCount));
+      setScanMessage(t.scanModalSuccess(toImport.length));
       setTimeout(() => setScanMessage(null), 4500);
     } catch (err) {
-      console.error('Failed to import games:', err);
+      configClient.reportError(err);
     }
   };
 
@@ -256,9 +258,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
     };
 
     try {
-      await invoke('add_custom_app', { app: newApp });
-      const refreshedConfig: AppConfig = await invoke('get_config');
-      onUpdateConfig(refreshedConfig);
+      await configClient.mutate('add_custom_app', { app: newApp });
       setShowAddModal(false);
       setNewName('');
       setNewExe('');
@@ -266,7 +266,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
       setIsHdrMatched(false);
       setNewType('native');
     } catch (err) {
-      console.error('Failed to add custom app:', err);
+      configClient.reportError(err);
     }
   };
 
@@ -394,7 +394,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                 ? 'bg-[#f55a6b] text-[#0f0b0b]'
                 : 'text-[#8a7f81] hover:text-white'
             }`}
-            title="Grid"
+            title={t.appsGridView}
           >
             <LayoutGrid className="w-3.5 h-3.5" />
           </button>
@@ -405,7 +405,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                 ? 'bg-[#f55a6b] text-[#0f0b0b]'
                 : 'text-[#8a7f81] hover:text-white'
             }`}
-            title="List"
+            title={t.appsListView}
           >
             <ListIcon className="w-3.5 h-3.5" />
           </button>
@@ -947,7 +947,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Silent Hill 2 / Cyberpunk 2077"
+                  placeholder={t.manualNamePlaceholder}
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                   className="w-full px-3 py-2 text-xs border border-[#f55a6b]/30 bg-[#120d0e] focus:border-[#f55a6b] text-white focus:outline-none"
@@ -970,7 +970,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                   <input
                     type="text"
                     required
-                    placeholder="e.g. SHProto-Win64-Shipping.exe"
+                    placeholder={t.manualExePlaceholder}
                     value={newExe}
                     onChange={(e) => setNewExe(e.target.value)}
                     className="w-full px-3 py-2 text-xs border border-[#f55a6b]/30 bg-[#120d0e] focus:border-[#f55a6b] text-white focus:outline-none font-mono"

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { RunningProcessInfo, AppConfig, HdrApp } from '../types';
 import { invoke } from '@tauri-apps/api/core';
+import { configClient } from '../useConfig';
 import { RefreshCw, Search, Plus, Check, AppWindow } from 'lucide-react';
 import { GlitchButton } from './GlitchButton';
 import { GlitchText } from './GlitchText';
@@ -8,13 +9,11 @@ import { useI18n } from '../i18n';
 
 interface RunningProcessesProps {
   config: AppConfig;
-  onUpdateConfig: (newConfig: AppConfig) => void;
   isDark: boolean;
 }
 
 export const RunningProcesses: React.FC<RunningProcessesProps> = ({
   config,
-  onUpdateConfig,
 }) => {
   const { t } = useI18n();
   const [processes, setProcesses] = useState<RunningProcessInfo[]>([]);
@@ -49,11 +48,9 @@ export const RunningProcesses: React.FC<RunningProcessesProps> = ({
     };
 
     try {
-      await invoke('add_custom_app', { app: newApp });
-      const refreshed: AppConfig = await invoke('get_config');
-      onUpdateConfig(refreshed);
+      await configClient.mutate('add_custom_app', { app: newApp });
     } catch (err) {
-      console.error('Failed to add app:', err);
+      configClient.reportError(err);
     } finally {
       setAddingExe(null);
     }

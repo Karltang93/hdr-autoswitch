@@ -1,4 +1,4 @@
-use crate::config_v2::{
+use crate::config::{
     decode_legacy, AppConfig, ConfigMode, HdrApp, HdrType, RecoveryCandidate, SwitchMethod,
     TargetMonitor,
 };
@@ -1728,7 +1728,7 @@ fn move_absent(_: &Path, _: &Path) -> Result<(), String> {
 #[cfg(all(test, windows))]
 mod tests {
     use super::*;
-    use crate::config_v2::{HdrApp, HdrType, TargetMonitor};
+    use crate::config::{HdrApp, HdrType, TargetMonitor};
     use tempfile::TempDir;
 
     struct Fixture {

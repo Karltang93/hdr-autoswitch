@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import gsap from 'gsap';
 import {
   MonitorInfo,
-  AppConfig,
+  ConfigSnapshot,
   HdrStatePayload,
   ActivityLogEntry,
   RecentGameSession,
@@ -14,6 +14,9 @@ import { AppsManager } from './components/AppsManager';
 import { CatalogBrowser } from './components/CatalogBrowser';
 import { RunningProcesses } from './components/RunningProcesses';
 import { Settings } from './components/Settings';
+import { ConfigNotice } from './components/ConfigNotice';
+import { configClient, useConfig } from './useConfig';
+import { describeHdrScope } from './telemetryText';
 import { HdrLogo } from './components/HdrLogo';
 import { GlitchNavItem } from './components/GlitchNavItem';
 import { Sun, Moon, Globe } from 'lucide-react';
@@ -119,30 +122,41 @@ export default function App() {
 
   const t = dictionaries[lang];
 
+  useEffect(() => {
+    document.documentElement.lang = lang;
+    invoke('set_ui_language', { language: lang }).catch(configClient.reportError);
+  }, [lang]);
+
   const [monitors, setMonitors] = useState<MonitorInfo[]>([]);
-  const [config, setConfig] = useState<AppConfig>({
-    target_monitor: 'all',
-    alt_tab_delay_seconds: 2,
-    exit_only_hdr: true,
-    notifications_enabled: true,
-    autostart: false,
-    start_minimized: false,
-    auto_detect_new_games: true,
-    auto_sync_database: true,
-    switch_method: 'native',
-    blacklist: [],
-    apps: [],
-  });
+  const { snapshot, pending } = useConfig();
+  const config = snapshot?.mode === 'ready' ? snapshot.settings : null;
+  const monitorRequest = useRef(0);
+  const statusRequest = useRef(0);
+  const [statusLoaded, setStatusLoaded] = useState(false);
+  const [controlError, setControlError] = useState<string | null>(null);
+  const [monitorError, setMonitorError] = useState<string | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const loggedObservation = useRef<string | null>(null);
 
   const [status, setStatus] = useState<HdrStatePayload>({
     is_hdr_active: false,
+    scope_hdr_state: 'unknown',
     current_app_name: null,
     current_exe: null,
     switched_by_app: false,
     steam_id: null,
     launcher: null,
     hdr_type: null,
+    warning: null,
+    target_status: 'automation_paused',
+    active_target: null,
+    target_deferred: false,
+    any_hdr_active: false,
+    inventory_stale: true,
+    uncertain_targets: [],
+    operation_outcomes: [],
   });
+  const scopePresentation = describeHdrScope(status, t);
 
   const [recentGames, setRecentGames] = useState<RecentGameSession[]>(() => {
     try {
@@ -164,22 +178,22 @@ export default function App() {
   const [activityLogs, setActivityLogs] = useState<ActivityLogEntry[]>([
     {
       id: '1',
-      timestamp: new Date().toLocaleTimeString(),
-      message: 'WinEventHook služba inicializována. Zero CPU režim aktivní.',
+      timestamp: new Date().toISOString(),
+      message: { kind: 'init_system' },
       type: 'system',
     },
     {
       id: '2',
-      timestamp: new Date().toLocaleTimeString(),
-      message: 'Sledování popředí oken běží — bleskový přechod HDR10 připraven.',
+      timestamp: new Date().toISOString(),
+      message: { kind: 'init_detect' },
       type: 'info',
     },
   ]);
 
-  const addLog = (message: string, type: ActivityLogEntry['type']) => {
+  const addLog = (message: ActivityLogEntry['message'], type: ActivityLogEntry['type']) => {
     const entry: ActivityLogEntry = {
       id: Math.random().toString(36).substring(2, 9),
-      timestamp: new Date().toLocaleTimeString(),
+      timestamp: new Date().toISOString(),
       message,
       type,
     };
@@ -187,136 +201,136 @@ export default function App() {
   };
 
   const refreshMonitors = async () => {
+    const request = ++monitorRequest.current;
     try {
       const list: MonitorInfo[] = await invoke('get_monitors');
-      setMonitors(list);
+      if (request === monitorRequest.current) {
+        setMonitors(list);
+        setMonitorError(null);
+      }
     } catch (err) {
-      console.error('Failed to get monitors:', err);
-    }
-  };
-
-  const refreshConfig = async () => {
-    try {
-      const conf: AppConfig = await invoke('get_config');
-      setConfig(conf);
-    } catch (err) {
-      console.error('Failed to get config:', err);
+      if (request === monitorRequest.current) {
+        setMonitors([]);
+        setMonitorError(String(err));
+      }
     }
   };
 
   const refreshStatus = async () => {
+    const request = ++statusRequest.current;
     try {
       const stat: HdrStatePayload = await invoke('get_current_status');
-      setStatus((prev) => ({
-        ...prev,
-        is_hdr_active: stat.is_hdr_active,
-      }));
+      if (request === statusRequest.current) {
+        setStatus(stat);
+        setStatusLoaded(true);
+        setStatusError(null);
+      }
     } catch (err) {
-      console.error('Failed to get current status:', err);
+      if (request === statusRequest.current) {
+        setStatusLoaded(false);
+        setStatusError(String(err));
+      }
     }
   };
 
   useEffect(() => {
     refreshMonitors();
-    refreshConfig();
-    refreshStatus();
+    let active = true;
 
     // Listen for live HDR status changes from Rust WinEventHook
     const unlistenPromise = listen<HdrStatePayload>('hdr-status-changed', (event) => {
       const newStatus = event.payload;
+      ++statusRequest.current;
       setStatus(newStatus);
+      setStatusLoaded(true);
+      setStatusError(null);
       refreshMonitors();
 
-      const currentTime = new Date().toLocaleTimeString('cs-CZ', {
-        hour: '2-digit',
-        minute: '2-digit',
-      });
+      if (describeHdrScope(newStatus, dictionaries.en).mode === 'unknown') return;
+      const observation = JSON.stringify([
+        newStatus.scope_hdr_state, newStatus.current_exe, newStatus.switched_by_app,
+      ]);
+      if (loggedObservation.current === observation) return;
+      loggedObservation.current = observation;
+      const currentTime = new Date().toISOString();
 
-      if (newStatus.is_hdr_active) {
+      if (newStatus.scope_hdr_state === 'mixed') {
+        addLog({ kind: 'mixed' }, 'info');
+      } else if (newStatus.scope_hdr_state === 'hdr') {
         addLog(
-          newStatus.current_app_name
-            ? `WinEventHook zachytil okno: ${newStatus.current_app_name} -> HDR aktivováno`
-            : 'HDR aktivováno ručně.',
+          newStatus.current_app_name && newStatus.switched_by_app
+            ? { kind: 'game_hdr', appName: newStatus.current_app_name }
+            : { kind: 'hdr_active' },
           'hdr_on'
         );
-
-        // Update Recent Games telemetry (only for actual games detected by hook)
-        if (
-          newStatus.switched_by_app &&
-          newStatus.current_exe &&
-          !IGNORED_SYSTEM_EXES.has(newStatus.current_exe.toLowerCase())
-        ) {
-          setRecentGames((prev) => {
-            const candidate = {
-              exe: newStatus.current_exe,
-              name: newStatus.current_app_name,
-              steam_id: newStatus.steam_id,
-            };
-
-            const existing = prev.find((g) => isSameGame(g, candidate));
-
-            const resolvedSteamId =
-              newStatus.steam_id ||
-              existing?.steam_id ||
-              undefined;
-
-            const resolvedLauncher =
-              newStatus.launcher ||
-              existing?.launcher ||
-              (resolvedSteamId ? 'Steam' : undefined);
-
-            const resolvedHdrType =
-              newStatus.hdr_type ||
-              existing?.hdr_type ||
-              'native';
-
-            const resolvedTierLabel =
-              existing?.hdr_tier_label ||
-              (resolvedHdrType === 'autohdr'
-                ? 'Windows Auto HDR'
-                : resolvedHdrType === 'mod'
-                ? 'HDR Mod / Fix'
-                : 'Nativní HDR10');
-
-            const updatedSession: RecentGameSession = {
-              exe: newStatus.current_exe!,
-              name: newStatus.current_app_name || existing?.name || newStatus.current_exe!,
-              steam_id: resolvedSteamId,
-              launcher: resolvedLauncher,
-              hdr_type: resolvedHdrType,
-              hdr_tier_label: resolvedTierLabel,
-              last_switched_at: currentTime,
-              hook_status: 'active',
-              hook_message: 'WinEventHook zachytil okno -> HDR zapnuto',
-            };
-
-            const filtered = prev.filter(
-              (g) =>
-                !isSameGame(g, updatedSession) &&
-                !IGNORED_SYSTEM_EXES.has(g.exe.toLowerCase())
-            );
-
-            const newList = [updatedSession, ...filtered].slice(0, 10);
-            try {
-              localStorage.setItem('hdr_recent_games', JSON.stringify(newList));
-            } catch (e) {
-              console.error(e);
-            }
-            return newList;
-          });
-        }
       } else {
-        addLog('WinEventHook: Návrat do SDR (okno opuštěno).', 'hdr_off');
+        addLog({ kind: 'sdr' }, 'hdr_off');
+      }
 
-        // Mark active game as switched_off
+      // Update Recent Games telemetry (only for actual games detected by hook)
+      if (
+        newStatus.switched_by_app &&
+        newStatus.current_exe &&
+        !IGNORED_SYSTEM_EXES.has(newStatus.current_exe.toLowerCase())
+      ) {
+        setRecentGames((prev) => {
+          const candidate = {
+            exe: newStatus.current_exe,
+            name: newStatus.current_app_name,
+            steam_id: newStatus.steam_id,
+          };
+
+          const existing = prev.find((g) => isSameGame(g, candidate));
+
+          const resolvedSteamId =
+            newStatus.steam_id ||
+            existing?.steam_id ||
+            undefined;
+
+          const resolvedLauncher =
+            newStatus.launcher ||
+            existing?.launcher ||
+            (resolvedSteamId ? 'Steam' : undefined);
+
+          const resolvedHdrType =
+            newStatus.hdr_type ||
+            existing?.hdr_type ||
+            'native';
+
+          const updatedSession: RecentGameSession = {
+            exe: newStatus.current_exe!,
+            name: newStatus.current_app_name || existing?.name || newStatus.current_exe!,
+            steam_id: resolvedSteamId,
+            launcher: resolvedLauncher,
+            hdr_type: resolvedHdrType,
+            last_switched_at: currentTime,
+            hook_status: 'active',
+          };
+
+          const filtered = prev.filter(
+            (g) =>
+              !isSameGame(g, updatedSession) &&
+              !IGNORED_SYSTEM_EXES.has(g.exe.toLowerCase())
+          );
+
+          const newList = [updatedSession, ...filtered].slice(0, 10);
+          try {
+            localStorage.setItem('hdr_recent_games', JSON.stringify(newList));
+          } catch (e) {
+            console.error(e);
+          }
+          return newList;
+        });
+      } else if (!newStatus.switched_by_app) {
+        // This records released automatic control, not every display becoming SDR.
         setRecentGames((prev) => {
           const newList = prev.map((g, idx) =>
             idx === 0 && g.hook_status === 'active'
               ? {
-                  ...g,
-                  hook_status: 'switched_off' as const,
-                  hook_message: `Hook zafungoval: Návrat do SDR (${currentTime})`,
-                }
+                ...g,
+                hook_status: 'switched_off' as const,
+                hook_message: undefined,
+              }
               : g
           );
           try {
@@ -329,14 +343,29 @@ export default function App() {
       }
     });
 
-    // Listen for apps updates (e.g. background auto-scan or hook auto-enrollment)
-    const unlistenAppsPromise = listen('apps-updated', () => {
-      refreshConfig();
+    const unlistenConfigPromise = listen<ConfigSnapshot>('config-changed', (event) => {
+      configClient.acceptEvent(event.payload);
+      void refreshMonitors();
     });
+    const unlistenControlPromise = listen<string | null>('controller-error', (event) => {
+      setControlError(event.payload);
+    });
+    const unlistenNavigationPromise = listen('navigate-settings', () => setActiveTab('settings'));
+    unlistenControlPromise.catch(configClient.reportError);
+    unlistenNavigationPromise.catch(configClient.reportError);
+    unlistenConfigPromise.then(() => {
+      if (active) void configClient.refresh();
+    }).catch(configClient.reportError);
+    unlistenPromise.then(() => {
+      if (active) void refreshStatus();
+    }).catch(configClient.reportError);
 
     return () => {
-      unlistenPromise.then((unlisten) => unlisten());
-      unlistenAppsPromise.then((unlisten) => unlisten());
+      active = false;
+      unlistenPromise.then((unlisten) => unlisten()).catch(configClient.reportError);
+      unlistenConfigPromise.then((unlisten) => unlisten()).catch(configClient.reportError);
+      unlistenControlPromise.then((unlisten) => unlisten()).catch(configClient.reportError);
+      unlistenNavigationPromise.then((unlisten) => unlisten()).catch(configClient.reportError);
     };
   }, []);
 
@@ -351,7 +380,7 @@ export default function App() {
         gsap.ticker.wake();
         refreshMonitors();
         refreshStatus();
-        refreshConfig();
+        void configClient.refresh();
       }
     };
 
@@ -376,7 +405,7 @@ export default function App() {
               : 'bg-white/95 border-[#f55a6b]/30 shadow-xs'
           }`}
         >
-          <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+          <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
             {/* Brand Logo & Name with Solid Glitch Title Bar */}
             <div className="flex items-center gap-3">
               <div className="p-1.5 border border-[#f55a6b]/40 bg-[#180e10] flex items-center justify-center shrink-0 aspect-square">
@@ -403,7 +432,9 @@ export default function App() {
                         : 'bg-[#5accf5]'
                     }`}
                   />
-                  <span>{status.is_hdr_active ? t.hdrActive : t.sdrStandby}</span>
+                  <span>{!statusLoaded || !config || snapshot?.controller_issue
+                    ? t.configStatusUnknown
+                    : scopePresentation.badge}</span>
                 </div>
               </div>
             </div>
@@ -419,7 +450,7 @@ export default function App() {
               />
               <GlitchNavItem
                 label={t.navApps}
-                count={config.apps.length}
+                count={config?.apps.length ?? 0}
                 isActive={activeTab === 'apps'}
                 onClick={() => setActiveTab('apps')}
                 width={lang === 'en' ? 140 : 145}
@@ -481,62 +512,70 @@ export default function App() {
 
       {/* Main Content Body */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-6">
-        {activeTab === 'dashboard' && (
+        <ConfigNotice onSettings={() => setActiveTab('settings')} />
+        {[controlError, monitorError, statusError].filter(Boolean).map((error, index) =>
+          <p key={index} role="alert" className="mb-4 p-3 border border-amber-400/50 text-amber-200 text-xs">{t.configError} {error}</p>
+        )}
+        {status.warning && <p role="alert" className="mb-4 p-3 border border-amber-400/50 text-amber-200 text-xs">{status.warning}</p>}
+        {status.target_deferred && status.active_target && <p className="mb-4 text-xs text-[#5accf5]">
+          {t.configActiveTarget}: {status.active_target.kind === 'all'
+            ? t.settingsAllMonitors
+            : status.active_target.kind === 'monitor' ? status.active_target.display_name : t.configConfirmTarget}.
+          {' '}{t.configTargetHint}
+        </p>}
+        <fieldset disabled={pending} className={`min-w-0 ${pending ? 'pointer-events-none opacity-70' : ''}`}>
+        {config && activeTab === 'dashboard' && (
           <Dashboard
             status={status}
             monitors={monitors}
             config={config}
             activityLogs={activityLogs}
             recentGames={recentGames}
-            onRefreshMonitors={refreshMonitors}
-            onManualToggle={(enable) => {
-              setStatus((prev) => ({ ...prev, is_hdr_active: enable }));
-              addLog(
-                enable
-                  ? 'HDR zapnuto ručně přes ovládací panel.'
-                  : 'HDR vypnuto ručně.',
-                enable ? 'hdr_on' : 'hdr_off'
-              );
+            onRefreshMonitors={() => {
+              void refreshMonitors();
+              void refreshStatus();
+            }}
+            onManualToggle={() => {
+              void refreshStatus();
+              void refreshMonitors();
             }}
             onNavigateToApps={() => setActiveTab('apps')}
-            onUpdateConfig={setConfig}
+            onControlError={setControlError}
+            controlAvailable={statusLoaded && !snapshot?.controller_issue && config.switch_method === 'native'}
             isDark={isDark}
           />
         )}
 
-        {activeTab === 'apps' && (
+        {config && activeTab === 'apps' && (
           <AppsManager
             config={config}
-            onUpdateConfig={setConfig}
             isDark={isDark}
             onNavigateToCatalog={() => setActiveTab('catalog')}
           />
         )}
 
-        {activeTab === 'catalog' && (
+        {config && activeTab === 'catalog' && (
           <CatalogBrowser
             config={config}
-            onUpdateConfig={setConfig}
             isDark={isDark}
           />
         )}
 
-        {activeTab === 'processes' && (
+        {config && activeTab === 'processes' && (
           <RunningProcesses
             config={config}
-            onUpdateConfig={setConfig}
             isDark={isDark}
           />
         )}
 
-        {activeTab === 'settings' && (
+        {config && activeTab === 'settings' && (
           <Settings
             config={config}
             monitors={monitors}
-            onUpdateConfig={setConfig}
             isDark={isDark}
           />
         )}
+        </fieldset>
       </main>
     </div>
   </I18nContext.Provider>

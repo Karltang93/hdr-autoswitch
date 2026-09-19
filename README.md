@@ -65,8 +65,9 @@ Unlike conventional tools that continuously poll running processes in background
 
 ### 🖥️ 7. Native Win32 DisplayConfig API & Per-Monitor Targeting
 * Interacts directly with GPU display drivers via native Windows `QueryDisplayConfig` / `SetDisplayConfig` APIs.
-* Operates independently of Xbox Game Bar and without simulated keyboard shortcuts (`Win + Alt + B` fallback is also available).
-* Choose whether to toggle all connected HDR displays simultaneously or bind switching exclusively to your primary OLED gaming monitor.
+* Operates independently of Xbox Game Bar, without simulated keyboard shortcuts or an unscoped keyboard fallback.
+* Choose all connected HDR displays or a specific display. The selection uses the Windows device-interface path, not an adapter address that changes after a reboot.
+* A disconnected, ambiguous, or unidentifiable selected display stays selected and unavailable. The app never substitutes another display or silently changes the selection to All.
 
 ### 🌐 8. Bilingual Interface & System Tray
 * Automatically detects system language: launches in **Czech** for Czech/Slovak systems and **English** for all others, with an instant 1-click header toggle (`CZ` / `EN`).
@@ -85,6 +86,69 @@ Download the latest installer (`.exe` setup or `.msi`) from the [**Releases Page
 3. The app will detect your connected displays automatically.
 4. Click **"Scan PC for Games"** on the My Games tab to populate your library.
 
+### Monitor selection, settings migration, and recovery
+
+Settings are now machine-local. The directory is resolved using Tauri's
+`app_local_data_dir`; on a standard Windows profile the file is
+`%LOCALAPPDATA%\com.soptik.hdr-autoswitch\config-v2.json`. Settings shows the actual
+resolved path. Updates using the same application identifier use this location.
+The `controller.lock` file protects the running controller across schema versions;
+its presence alone does not mean another instance is running.
+
+On first launch after upgrading, explicitly **Import older settings** from
+`%APPDATA%\HDRAutoSwitch\config.json`. The original file is left untouched.
+Your game library and preferences are retained, but a previously selected
+individual monitor must be selected again because the old runtime ID was not
+persistent. An imported **Shortcut** preference pauses automatic switching until
+you explicitly enable **Native HDR control**. There is no automatic keyboard
+fallback: a native error is reported without toggling other displays.
+
+Display identity is stable for the same Windows device instance/connection. Moving
+a cable to another port, replacing a GPU, or reinstalling a driver can require
+selecting the monitor again. Friendly names are labels, not identity matches.
+Target edits apply to the next game activation; an active session retains its
+original target and All retains its original membership.
+
+Primary-monitor labels use the Windows GDI primary-source metadata, not display-path ordering. Cloned targets sharing a primary source share its label. Missing or failed primary metadata is logged and omits the label without invalidating monitor identity or HDR state; HDR control still resolves only by durable monitor identity.
+
+Saves use a flushed, validated staging file, preserved checkpoints, and Windows
+file replacement. Failed or uncertain saves are reported, not presented as
+**Saved**. Unreadable files and unresolved transaction artifacts pause automation
+and expose recovery choices instead of silently writing defaults. **Restore**
+and the explicitly confirmed **Reset** preserve original evidence and start a
+new settings history. A future schema is read-only and cannot be downgraded with
+these controls. Close the app before editing its files; live external edits are
+unsupported.
+
+Persisted schema-2 settings, app rows, and monitor targets use strict typed decoding at every document and journal-candidate entry point. All canonical fields must be present, including nullable metadata and journal install sources (explicit `null` remains valid); unknown nested fields are rejected without rewriting the evidence or advertising malformed recovery sources. Legacy import alone retains its recognized defaults, aliases, and permissive compatibility behavior.
+
+A registered recovery source that changes or becomes unreadable retires the
+current settings context and blocks automatic authority before recovery inventory
+is refreshed. Malformed, unknown, or expired candidate IDs are rejected without
+changing authority.
+
+Automatic cleanup only reverses changes the app verified that it made. It leaves
+pre-existing HDR and observed manual/external overrides alone. An unverified
+native result remains unresolved until an explicit, verified per-display (or All)
+**On**/**Off** action, including an already-satisfied request. Refresh does not
+grant ownership, and a disconnected cleanup is not queued for reconnection.
+There is no crash-time HDR restoration journal.
+
+Before upgrading, use **Quit** in the old application's tray menu; closing its
+window only hides it. The new startup guard and installer handoff check the
+identified installed predecessor and owned startup registrations rather than
+killing every process named `tauri-app.exe`. An unresolved conflict pauses all
+HDR writes. After quitting the predecessor, use **Recheck HDR controller**.
+Launching a legacy portable controller later alongside the new app is unsupported.
+
+Upgrade with the **same installer format and installation directory** as the
+existing installation. Cross-format migration, SYSTEM installs, and elevation
+using another account are deliberately refused. Autostart requires a registered
+installation; portable/development copies cannot register themselves. Existing
+Windows Startup Apps disable choices are preserved rather than overridden.
+
+The NSIS uninstaller checks every bundled-file deletion and verifies absence before removing shortcuts or installation ownership. Failure can leave some resources removed and startup disabled; it preserves registration and restores missing cleanup executables without overwriting existing files. Recovery copies remain in the reported temporary recovery directory if a retry or manual repair is needed. Automatic restoration stages a complete copy in an exclusively created directory under the installation before a same-volume, no-overwrite rename. This works with an E: installation and C: temporary backups, and copy failures cannot leave a partial registered executable. Only empty, owned staging directories are removed automatically. If access or locks block restoration, restore only missing original executable paths from the complete recovery copies (not `.restore` staging files) before retrying the registered uninstaller normally (without NSIS `_?=`); an in-place reinstall cannot bypass missing ownership paths. Keep the reported recovery/staging directories until cleanup succeeds, then remove those scoped directories. Unrelated files and user settings are never recursively removed.
+
 ---
 
 ## 🛠️ Tech Stack & Architecture
@@ -102,30 +166,9 @@ Download the latest installer (`.exe` setup or `.msi`) from the [**Releases Page
 ## 💻 Developer Quickstart
 
 ### Prerequisites
-* [Node.js](https://nodejs.org/) (v20+ LTS recommended)
+* [Node.js](https://nodejs.org/) (v22.18+ or v24 LTS, including native TypeScript support for tests)
 * [Rust](https://www.rust-lang.org/) (stable toolchain)
 * Windows 10 (build 19041+) or Windows 11 with an HDR-capable display
-
-### Settings Storage and Native HDR Foundations
-The schema-2 transactional store (`config_v2`, `config_storage`) and the stable-identity, native-only verified HDR foundation (`display_v2`, `hdr_controller`) are compiled and regression-tested, but remain inactive until caller integration. The HDR controller preserves frozen activation scopes, application ownership, manual overrides, uncertain outcomes, and bounded cleanup. The application still uses the original `config`, `display`, `MonitorService`, tray/runtime code, and autostart plugin; the new Tauri actor is not integrated yet.
-
-Persisted schema-2 settings, app rows, and monitor targets use strict typed decoding at every document and journal-candidate entry point. All canonical fields must be present, including nullable metadata and journal install sources (explicit `null` remains valid); unknown nested fields are rejected without rewriting the evidence or advertising malformed recovery sources. Legacy import alone retains its recognized defaults, aliases, and permissive compatibility behavior.
-
-Primary-monitor labels use the Windows GDI primary-source metadata, not display-path ordering. Cloned targets sharing a primary source share its label. Missing or failed primary metadata is logged and omits the label without invalidating monitor identity or HDR state; HDR control still resolves only by durable monitor identity.
-
-A registered recovery source that changes or becomes unreadable retires the current settings context and blocks automatic authority before recovery inventory is refreshed. Malformed, unknown, or expired candidate IDs are rejected without changing authority.
-
-The Windows upgrade/startup foundation (`legacy_upgrade`) is compiled and regression-tested but inactive; its NSIS/MSI templates in `src-tauri\windows` are staged without being selected. Layer 4 will atomically activate the templates, early installer-helper dispatch, predecessor checks, and canonical autostart transactions, remove the old autostart plugin, and add the installer-contract integration check. Existing application behavior and installer selection are unchanged.
-
-The staged NSIS uninstaller checks every bundled-file deletion and verifies absence before removing shortcuts or installation ownership. Failure can leave some resources removed and startup disabled; it preserves registration and restores missing cleanup executables without overwriting existing files. Recovery copies remain in the reported temporary recovery directory if a retry or manual repair is needed. Automatic restoration stages a complete copy in an exclusively created directory under the installation before a same-volume, no-overwrite rename. This works with an E: installation and C: temporary backups, and copy failures cannot leave a partial registered executable. Only empty, owned staging directories are removed automatically. If access or locks block restoration, restore only missing original executable paths from the complete recovery copies (not `.restore` staging files) before retrying the registered uninstaller normally (without NSIS `_?=`); an in-place reinstall cannot bypass missing ownership paths. Keep the reported recovery/staging directories until cleanup succeeds, then remove those scoped directories. Unrelated files and user settings are never recursively removed.
-
-Run the isolated NSIS source/model regressions with `node --test .\scripts\test-nsis-uninstall.mjs`. These checks simulate sharing locks, missing files, readback failures, and recovery without executing an installer or touching Windows metadata. Template compilation and disposable-VM uninstall/upgrade qualification remain separate release gates.
-
-Run the isolated store regressions on Windows with the Rust MSVC toolchain and cached Cargo dependencies:
-```powershell
-cargo test --manifest-path .\src-tauri\Cargo.toml --lib --offline --locked --quiet -j 2 config_
-```
-These tests use temporary directories, not the installed application's settings, and do not launch the application or change HDR state.
 
 ### Development Mode
 ```bash
@@ -148,6 +191,34 @@ npm run tauri build
 Output files will be generated in:
 - `src-tauri/target/release/bundle/nsis/HDR Auto-Switch_1.0.4_x64-setup.exe`
 - `src-tauri/target/release/bundle/msi/HDR Auto-Switch_1.0.4_x64_en-US.msi`
+
+### Checks without changing real HDR or installed settings
+
+```powershell
+npm ci
+npm run build
+npm test
+cargo test --manifest-path .\src-tauri\Cargo.toml --lib
+```
+
+Rust tests use temporary settings directories and mocked display operations.
+The Node tests cover mutation ordering/history fences and mixed, unavailable,
+and deferred HDR scope rendering.
+
+Run the isolated NSIS source/model regressions with `node --test .\scripts\test-nsis-uninstall.mjs`. These checks simulate sharing locks, missing files, readback failures, and recovery without executing an installer or touching Windows metadata. Template compilation and disposable-VM uninstall/upgrade qualification remain separate release gates.
+
+For browser-only UI checks, run `npm run dev` and open
+`http://localhost:1420/tests/ui-fixture.html`. This uses Tauri's IPC mocks and
+synthetic settings/displays, not the native application. The fixture accepts
+`?mode=first_run`, `?mode=import_available`, `?mode=recovery_required`,
+`?mode=unsupported_schema`, and `?failSave=1`. It is not included in the production
+bundle. `?mixed=1` exercises an All scope containing both HDR and SDR displays.
+
+These checks do not certify real-monitor reboot/hotplug behavior, power-loss
+durability, or NSIS/MSI upgrades of installed older releases. Those scenarios need
+separate Windows VM/hardware release validation. The display query and setter
+remain separate Windows operations, so native topology changes cannot be made
+fully atomic by the application.
 
 ---
 
