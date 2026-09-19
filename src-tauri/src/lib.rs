@@ -15,11 +15,15 @@ mod tray;
 use background::BackgroundWork;
 use config::{ConfigManager, ConfigMode, ConfigSnapshot};
 use monitor_hook::MonitorService;
+use std::path::PathBuf;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex,
 };
 use tauri::{AppHandle, Emitter, Manager, RunEvent, WindowEvent};
+
+const SAFE_TEST_ISSUE: &str =
+    "Safe test mode is active. HDR control, autostart changes, and background work are disabled.";
 
 struct AppState {
     config_mgr: Arc<ConfigManager>,
@@ -27,6 +31,7 @@ struct AppState {
     config_actions: Mutex<()>,
     background: BackgroundWork,
     stopping: AtomicBool,
+    safe_test_mode: bool,
 }
 
 impl AppState {
@@ -47,13 +52,39 @@ impl AppState {
     }
 }
 
+#[cfg(debug_assertions)]
+fn safe_test_paths() -> Result<Option<(PathBuf, PathBuf)>, String> {
+    let Some(root) = std::env::var_os("HDR_AUTOSWITCH_SAFE_TEST_DIR") else {
+        return Ok(None);
+    };
+    let root = PathBuf::from(root);
+    if !root.is_absolute() {
+        return Err("HDR_AUTOSWITCH_SAFE_TEST_DIR must be an absolute path.".into());
+    }
+    let local_dir = root.join("local");
+    std::fs::create_dir_all(&local_dir)
+        .map_err(|error| format!("Create safe test settings directory: {error}"))?;
+    Ok(Some((local_dir, root.join("legacy-config.json"))))
+}
+
+#[cfg(not(debug_assertions))]
+fn safe_test_paths() -> Result<Option<(PathBuf, PathBuf)>, String> {
+    Ok(None)
+}
+
 fn emit_config(app: &AppHandle, snapshot: &ConfigSnapshot) {
     if let Err(error) = app.emit("config-changed", snapshot) {
         eprintln!("Cannot notify the UI of canonical configuration: {error}");
     }
 }
 
-fn reconcile_controller(manager: &ConfigManager) -> Result<ConfigSnapshot, String> {
+fn reconcile_controller(
+    manager: &ConfigManager,
+    safe_test_mode: bool,
+) -> Result<ConfigSnapshot, String> {
+    if safe_test_mode {
+        return manager.set_controller_issue(Some(SAFE_TEST_ISSUE.into()));
+    }
     let issue = match legacy_upgrade::check_predecessor() {
         Err(error) => Some(error),
         Ok(()) => {
@@ -103,17 +134,23 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {
-            let local_dir = app.path().app_local_data_dir()?;
-            let legacy_path = app
-                .path()
-                .data_dir()?
-                .join("HDRAutoSwitch")
-                .join("config.json");
+            let safe_test_paths = safe_test_paths().map_err(std::io::Error::other)?;
+            let safe_test_mode = safe_test_paths.is_some();
+            let (local_dir, legacy_path) = match safe_test_paths {
+                Some(paths) => paths,
+                None => (
+                    app.path().app_local_data_dir()?,
+                    app.path()
+                        .data_dir()?
+                        .join("HDRAutoSwitch")
+                        .join("config.json"),
+                ),
+            };
             let config_mgr = Arc::new(
                 ConfigManager::load(local_dir, legacy_path).map_err(std::io::Error::other)?,
             );
             let snapshot =
-                reconcile_controller(&config_mgr).map_err(std::io::Error::other)?;
+                reconcile_controller(&config_mgr, safe_test_mode).map_err(std::io::Error::other)?;
             if let Some(window) = app.get_webview_window("main") {
                 window.set_icon(tauri::include_image!("icons/128x128.png"))?;
                 let minimized = std::env::args().any(|arg| arg == "--minimized")
@@ -132,19 +169,26 @@ pub fn run() {
             }
             tray::setup_tray(app.handle())?;
             let monitor_service = MonitorService::new(config_mgr.clone(), app.handle().clone());
-            let background = BackgroundWork::start(
-                &config_mgr,
-                monitor_service.clone(),
-                app.handle().clone(),
-            );
+            let background = if safe_test_mode {
+                BackgroundWork::disabled()
+            } else {
+                BackgroundWork::start(
+                    &config_mgr,
+                    monitor_service.clone(),
+                    app.handle().clone(),
+                )
+            };
             app.manage(AppState {
                 config_mgr,
                 monitor_service: monitor_service.clone(),
                 config_actions: Mutex::new(()),
                 background,
                 stopping: AtomicBool::new(false),
+                safe_test_mode,
             });
-            monitor_service.start_hook();
+            if !safe_test_mode {
+                monitor_service.start_hook();
+            }
             Ok(())
         })
         .on_window_event(|window, event| {

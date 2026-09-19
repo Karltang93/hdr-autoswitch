@@ -77,6 +77,9 @@ fn require_context(state: &AppState, expected: &str) -> Result<ConfigSnapshot, S
 }
 
 fn check_predecessor(app: &AppHandle, state: &AppState) -> Result<(), String> {
+    if state.safe_test_mode {
+        return Ok(());
+    }
     if let Err(error) = legacy_upgrade::check_predecessor() {
         let snapshot = state.config_mgr.set_controller_issue(Some(error.clone()))?;
         emit_config(app, &snapshot);
@@ -103,6 +106,9 @@ pub async fn set_hdr(
     enable: bool,
 ) -> Result<ManualSetResult, String> {
     state.ensure_admission()?;
+    if state.safe_test_mode {
+        return Err(crate::SAFE_TEST_ISSUE.into());
+    }
     state.monitor_service.manual_set(scope, enable)?.resolve().await
 }
 
@@ -129,6 +135,9 @@ pub fn patch_settings(
         .lock()
         .map_err(|_| "Settings action lock is poisoned")?;
     require_context(&state, &expected_context)?;
+    if state.safe_test_mode && patch.autostart.is_some() {
+        return Err(crate::SAFE_TEST_ISSUE.into());
+    }
     let result = match patch.autostart {
         Some(enabled) => {
             check_predecessor(&app, &state)?;
@@ -154,7 +163,7 @@ fn change_history(
     require_origin(state, expected_context)?;
     check_predecessor(app, state)?;
     let result = change();
-    let reconciliation = crate::reconcile_controller(&state.config_mgr);
+    let reconciliation = crate::reconcile_controller(&state.config_mgr, state.safe_test_mode);
     let result = match result {
         Ok(_) => reconciliation,
         Err(error) => {
@@ -228,7 +237,7 @@ pub fn recheck_controller(
     publish(
         &app,
         &state,
-        crate::reconcile_controller(&state.config_mgr),
+        crate::reconcile_controller(&state.config_mgr, state.safe_test_mode),
     )
 }
 

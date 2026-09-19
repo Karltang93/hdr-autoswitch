@@ -1545,6 +1545,62 @@ mod tests {
     }
 
     #[test]
+    fn safe_test_mode_blocks_manual_control_without_granting_consent() {
+        for mode in [
+            ConfigMode::FirstRun,
+            ConfigMode::ImportAvailable,
+            ConfigMode::RecoveryRequired,
+            ConfigMode::UnsupportedSchema,
+            ConfigMode::Ready,
+            ConfigMode::Unavailable,
+        ] {
+            let fixture = manual_fixture(mode);
+            let before = fixture.manager.snapshot().unwrap();
+            let blocked = crate::reconcile_controller(&fixture.manager, true).unwrap();
+            assert_eq!(blocked.controller_issue.as_deref(), Some(crate::SAFE_TEST_ISSUE));
+            assert_eq!(
+                manual_admission(&blocked, true),
+                ManualControl::Blocked { reason: crate::SAFE_TEST_ISSUE.into() }
+            );
+            assert_eq!(
+                automatic_pause(&blocked, "game.exe", &blocked.context_token).as_deref(),
+                Some(crate::SAFE_TEST_ISSUE)
+            );
+            let (service, receiver) = idle_service(fixture.manager.clone());
+            for scope in [
+                TargetMonitor::All,
+                TargetMonitor::Monitor {
+                    device_path: "chosen".into(),
+                    display_name: "Chosen display".into(),
+                },
+            ] {
+                for enabled in [true, false] {
+                    assert_eq!(
+                        service.manual_set(scope.clone(), enabled).err().as_deref(),
+                        Some(crate::SAFE_TEST_ISSUE)
+                    );
+                }
+            }
+            assert!(receiver.try_recv().is_err());
+            let mut authority = fixture.authority(OperationKind::Manual);
+            for enabled in [true, false] {
+                let mut attempt = mock_attempt();
+                attempt.requested_hdr = enabled;
+                let error = authority
+                    .authorize(&attempt, &mut || panic!("Safe test mode issued native HDR"))
+                    .unwrap_err();
+                assert_eq!(error.kind, FailureKind::AuthorityDenied);
+                assert_eq!(error.message, crate::SAFE_TEST_ISSUE);
+            }
+            assert_eq!(fixture.manager.snapshot().unwrap(), blocked);
+            assert_eq!(blocked.settings, before.settings);
+            assert_eq!(blocked.mode, before.mode);
+            assert_eq!(blocked.revision, before.revision);
+            assert_eq!(blocked.context_token, before.context_token);
+        }
+    }
+
+    #[test]
     fn manual_requests_enqueue_in_click_order_without_waiting_for_the_actor() {
         let fixture = GateFixture::new();
         let (service, receiver) = idle_service(fixture.manager.clone());
