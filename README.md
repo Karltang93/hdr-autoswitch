@@ -31,8 +31,12 @@ Windows HDR looks breathtaking in games and movies, but running desktop apps and
 
 ## ✨ Key Features
 
-### ⚡ 1. True 0.0% CPU Overhead (No Polling)
-Unlike conventional tools that continuously poll running processes in background loops (`while True` or `setInterval`), HDR Auto-Switch registers a zero-overhead OS event hook (`SetWinEventHook` with `EVENT_SYSTEM_FOREGROUND`). Your CPU remains 100% asleep until a window focus event actually occurs.
+### ⚡ 1. Event-Driven Switching with a Missed-Event Watchdog
+HDR Auto-Switch uses the native `SetWinEventHook` `EVENT_SYSTEM_FOREGROUND`
+notification as its primary trigger. A lightweight once-per-second watchdog only
+compares the current foreground process ID and runs the full controller logic when
+that ID changes, recovering if Windows drops a foreground event after startup or
+resume.
 
 ### 🔍 2. Automated Multi-Drive Game Scanner
 * **Deep Multi-Drive Discovery**: Automatically scans all connected storage drives (`C:`, `D:`, `E:`, etc.) via Steam's `libraryfolders.vdf` and `appmanifest_*.acf` manifests, Epic Games Launcher manifests (`%ProgramData%\Epic`), GOG Galaxy, and Windows Registry.
