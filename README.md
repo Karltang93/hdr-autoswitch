@@ -106,6 +106,15 @@ Download the latest installer (`.exe` setup or `.msi`) from the [**Releases Page
 * [Rust](https://www.rust-lang.org/) (stable toolchain)
 * Windows 10 (build 19041+) or Windows 11 with an HDR-capable display
 
+### Settings Storage Foundation
+The schema-2 transactional store is compiled as `config_v2` and `config_storage`, but is not activated until caller integration. The application still uses the original `config` module and autostart plugin.
+
+Run the isolated store regressions on Windows with the Rust MSVC toolchain and cached Cargo dependencies:
+```powershell
+cargo test --manifest-path .\src-tauri\Cargo.toml --lib --offline --quiet -j 2 config_
+```
+These tests use temporary directories, not the installed application's settings, and do not launch the application or change HDR state.
+
 ### Development Mode
 ```bash
 # Clone the repository
