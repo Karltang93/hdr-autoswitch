@@ -174,6 +174,12 @@ pub(crate) struct StorageReport {
 }
 
 #[derive(Debug)]
+pub(crate) enum RestoreSourceError {
+    UnknownCandidate,
+    Blocked(String),
+}
+
+#[derive(Debug)]
 pub(crate) enum StoreOutcome {
     Committed {
         document: Document,
@@ -748,14 +754,19 @@ impl Storage {
         Ok(candidates)
     }
 
-    pub fn restore_source(&self, id: &str) -> Result<(AppConfig, InstallSource), String> {
-        validate_uuid(id).map_err(|_| "Unknown or expired recovery candidate")?;
+    pub fn restore_source(
+        &self,
+        id: &str,
+    ) -> Result<(AppConfig, InstallSource), RestoreSourceError> {
+        validate_uuid(id).map_err(|_| RestoreSourceError::UnknownCandidate)?;
         let candidate = self
             .candidates
             .get(id)
-            .ok_or("Unknown or expired recovery candidate")?;
-        self.exact(&candidate.name, &candidate.bytes)?;
-        let document = Document::decode(candidate.bytes.clone()).map_err(|e| e.to_string())?;
+            .ok_or(RestoreSourceError::UnknownCandidate)?;
+        self.exact(&candidate.name, &candidate.bytes)
+            .map_err(RestoreSourceError::Blocked)?;
+        let document = Document::decode(candidate.bytes.clone())
+            .map_err(|e| RestoreSourceError::Blocked(e.to_string()))?;
         Ok((
             document.envelope.settings,
             InstallSource::Artifact {

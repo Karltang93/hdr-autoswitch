@@ -1,5 +1,5 @@
 use crate::config_storage::{
-    read_optional, Document, InstallSource, Storage, StorageReport, StoreOutcome,
+    read_optional, Document, InstallSource, RestoreSourceError, Storage, StorageReport, StoreOutcome,
 };
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -556,7 +556,15 @@ impl ConfigManager {
                 )
             }
             InstallRequest::Restore(id) => {
-                let (settings, source) = writer.storage.restore_source(id)?;
+                let (settings, source) = match writer.storage.restore_source(id) {
+                    Ok(source) => source,
+                    Err(RestoreSourceError::UnknownCandidate) => {
+                        return Err("Unknown or expired recovery candidate".into());
+                    }
+                    Err(RestoreSourceError::Blocked(error)) => {
+                        return self.block(&mut writer, error);
+                    }
+                };
                 (settings, Some(source), false)
             }
             InstallRequest::Reset => (AppConfig::default(), None, false),
@@ -692,6 +700,15 @@ mod tests {
             assert_eq!(first.mode, ConfigMode::FirstRun);
             let ready = manager.initialize(&first.context_token).unwrap();
             (manager, ready)
+        }
+
+        fn candidate_path(&self, manager: &ConfigManager, id: &str) -> PathBuf {
+            let writer = manager.writer.lock().unwrap();
+            let (_, source) = writer.storage.restore_source(id).unwrap();
+            let InstallSource::Artifact { name, .. } = source else {
+                panic!("Expected a registered recovery artifact");
+            };
+            self.local().join(name)
         }
     }
 
@@ -977,6 +994,155 @@ mod tests {
                 assert_eq!(artifact_bytes(&fixture), original);
                 assert!(!fixture.main().exists());
             }
+        }
+    }
+
+    #[test]
+    fn restore_source_conflicts_retire_authority_and_preserve_evidence() {
+        for future_schema in [true, false] {
+            let fixture = Fixture::new();
+            let (manager, initial) = fixture.ready();
+            let latest = manager
+                .patch(
+                    &initial.context_token,
+                    SettingsPatch {
+                        autostart: Some(true),
+                        ..SettingsPatch::default()
+                    },
+                )
+                .unwrap();
+            let candidate = &latest.candidates[0].id;
+            let path = fixture.candidate_path(&manager, candidate);
+            let replacement = if future_schema {
+                br#"{"schema_version":3}"#.to_vec()
+            } else {
+                fs::read(fixture.main()).unwrap()
+            };
+            fs::write(&path, &replacement).unwrap();
+            let original = artifact_bytes(&fixture);
+
+            let error = manager
+                .restore(&latest.context_token, candidate)
+                .unwrap_err();
+            let blocked = manager.snapshot().unwrap();
+            assert_eq!(
+                blocked.mode,
+                if future_schema {
+                    ConfigMode::UnsupportedSchema
+                } else {
+                    ConfigMode::RecoveryRequired
+                }
+            );
+            assert_eq!(blocked.settings, latest.settings);
+            assert_eq!(blocked.store_id, latest.store_id);
+            assert_eq!(blocked.revision, latest.revision);
+            assert_eq!(blocked.library_generation, latest.library_generation);
+            assert_ne!(blocked.context_token, latest.context_token);
+            assert!(
+                blocked.control_epoch.parse::<u64>().unwrap()
+                    > latest.control_epoch.parse().unwrap()
+            );
+            assert!(blocked.issue.as_ref().unwrap().contains(&error));
+            assert!(blocked.candidates.iter().all(|candidate| {
+                latest.candidates.iter().all(|prior| prior.id != candidate.id)
+            }));
+            let mut called = false;
+            assert!(manager
+                .mutate(&latest.context_token, None, false, |_| {
+                    called = true;
+                    Ok(())
+                })
+                .is_err());
+            assert!(!called);
+            assert_eq!(artifact_bytes(&fixture), original);
+
+            drop(manager);
+            assert_eq!(fixture.load().snapshot().unwrap().mode, blocked.mode);
+            assert_eq!(artifact_bytes(&fixture), original);
+        }
+    }
+
+    #[test]
+    fn restore_source_read_failures_retire_authority_without_writing() {
+        use std::os::windows::fs::OpenOptionsExt;
+
+        let fixture = Fixture::new();
+        let (manager, initial) = fixture.ready();
+        let latest = manager
+            .patch(
+                &initial.context_token,
+                SettingsPatch {
+                    autostart: Some(true),
+                    ..SettingsPatch::default()
+                },
+            )
+            .unwrap();
+        let candidate = &latest.candidates[0].id;
+        let path = fixture.candidate_path(&manager, candidate);
+        let original = artifact_bytes(&fixture);
+        let deny_read = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(0)
+            .open(path)
+            .unwrap();
+
+        let error = manager
+            .restore(&latest.context_token, candidate)
+            .unwrap_err();
+        let blocked = manager.snapshot().unwrap();
+        assert_eq!(blocked.mode, ConfigMode::RecoveryRequired);
+        assert_eq!(blocked.settings, latest.settings);
+        assert_eq!(blocked.store_id, latest.store_id);
+        assert_eq!(blocked.revision, latest.revision);
+        assert_ne!(blocked.context_token, latest.context_token);
+        assert!(
+            blocked.control_epoch.parse::<u64>().unwrap()
+                > latest.control_epoch.parse().unwrap()
+        );
+        assert!(blocked.candidates.is_empty());
+        assert!(blocked.issue.as_ref().unwrap().contains(&error));
+
+        drop(deny_read);
+        assert_eq!(artifact_bytes(&fixture), original);
+        drop(manager);
+        assert_eq!(fixture.load().snapshot().unwrap().mode, ConfigMode::Ready);
+        assert_eq!(artifact_bytes(&fixture), original);
+    }
+
+    #[test]
+    fn restore_unknown_and_expired_candidates_leave_authority_unchanged() {
+        let fixture = Fixture::new();
+        let (manager, initial) = fixture.ready();
+        let edited = manager
+            .patch(
+                &initial.context_token,
+                SettingsPatch {
+                    autostart: Some(true),
+                    ..SettingsPatch::default()
+                },
+            )
+            .unwrap();
+        let expired = &edited.candidates[0].id;
+        let latest = manager
+            .patch(
+                &edited.context_token,
+                SettingsPatch {
+                    start_minimized: Some(true),
+                    ..SettingsPatch::default()
+                },
+            )
+            .unwrap();
+        let original = artifact_bytes(&fixture);
+        let unknown = Uuid::new_v4().to_string();
+        for candidate in [r"..\other-settings.json", &unknown, expired] {
+            assert_eq!(
+                manager
+                    .restore(&latest.context_token, candidate)
+                    .unwrap_err(),
+                "Unknown or expired recovery candidate"
+            );
+            assert_eq!(manager.snapshot().unwrap(), latest);
+            assert_eq!(artifact_bytes(&fixture), original);
         }
     }
 

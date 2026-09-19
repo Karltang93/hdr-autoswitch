@@ -109,9 +109,11 @@ Download the latest installer (`.exe` setup or `.msi`) from the [**Releases Page
 ### Settings Storage Foundation
 The schema-2 transactional store is compiled as `config_v2` and `config_storage`, but is not activated until caller integration. The application still uses the original `config` module and autostart plugin.
 
+A registered recovery source that changes or becomes unreadable retires the current settings context and blocks automatic authority before recovery inventory is refreshed. Malformed, unknown, or expired candidate IDs are rejected without changing authority.
+
 Run the isolated store regressions on Windows with the Rust MSVC toolchain and cached Cargo dependencies:
 ```powershell
-cargo test --manifest-path .\src-tauri\Cargo.toml --lib --offline --quiet -j 2 config_
+cargo test --manifest-path .\src-tauri\Cargo.toml --lib --offline --locked --quiet -j 2 config_
 ```
 These tests use temporary directories, not the installed application's settings, and do not launch the application or change HDR state.
 
@@ -143,4 +145,3 @@ Output files will be generated in:
 
 Distributed under the [MIT License](LICENSE).  
 Developed with ❤️ for the PC and OLED gaming community.
-
