@@ -3,6 +3,7 @@ import { HdrApp, HdrType, AppConfig, PickedGameInfo, ScanResult } from '../types
 import type { MutationOrigin } from '../configState';
 import { configClient } from '../useConfig';
 import { findLibraryApp } from '../libraryState';
+import { launcherName } from '../catalogNotes';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import {
@@ -505,7 +506,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                     )}
                     {app.launcher && (
                       <span className="px-1 py-0.2 text-[8px] font-mono text-[#b5a9ac] bg-black/60 border border-white/10 uppercase">
-                        {app.launcher}
+                        {launcherName(app.launcher, lang)}
                       </span>
                     )}
                   </div>
@@ -584,7 +585,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                       {getHdrBadge(app.hdr_type)}
                       {app.launcher && (
                         <span className="text-[9px] px-1.5 py-0.2 bg-black border border-white/15 text-[#b5a9ac] uppercase">
-                          {app.launcher}
+                          {launcherName(app.launcher, lang)}
                         </span>
                       )}
                       {app.path && pathStatus[app.path] === false && (
@@ -719,7 +720,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                                 <span>{game.name}</span>
                                 {game.launcher && (
                                   <span className="text-[9px] px-1 bg-black border border-[#5accf5]/30 text-[#5accf5]">
-                                    {game.launcher}
+                                    {launcherName(game.launcher, lang)}
                                   </span>
                                 )}
                                 <span className="text-[9px] px-1.5 py-0.2 bg-[#5accf5]/10 border border-[#5accf5]/50 text-[#5accf5] font-mono uppercase">
@@ -806,7 +807,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                                 <span>{game.name}</span>
                                 {game.launcher && (
                                   <span className="text-[9px] px-1 bg-black border border-white/20 text-[#8a7f81]">
-                                    {game.launcher}
+                                    {launcherName(game.launcher, lang)}
                                   </span>
                                 )}
                                 <span className="text-[9px] px-1.5 py-0.2 bg-white/5 border border-white/10 text-[#8a7f81] font-mono uppercase">
@@ -853,7 +854,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
 
               <div className="flex items-center justify-between border-t border-[#f55a6b]/30 pt-3">
                 <div className="text-xs text-[#8a7f81]">
-                  {selectedCount} vybráno / selected
+                  {t.scanModalSelected(selectedCount)}
                 </div>
                 <div className="flex items-center gap-3">
                   <GlitchButton

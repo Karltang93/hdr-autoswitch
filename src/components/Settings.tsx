@@ -126,7 +126,7 @@ export const Settings: React.FC<SettingsProps> = ({
                   : 'bg-[#0f0b0b] text-[#8a7f81] border-[#f55a6b]/30 hover:text-white'
               }`}
             >
-              English (EN)
+              {t.settingsEnglish}
             </button>
             <button
               onClick={() => setLang('cs')}
@@ -136,7 +136,7 @@ export const Settings: React.FC<SettingsProps> = ({
                   : 'bg-[#0f0b0b] text-[#8a7f81] border-[#f55a6b]/30 hover:text-white'
               }`}
             >
-              Čeština (CZ)
+              {t.settingsCzech}
             </button>
           </div>
         </div>
@@ -218,7 +218,7 @@ export const Settings: React.FC<SettingsProps> = ({
                 <span>{t.settingsPolicyExitOnly}</span>
               </div>
               <span className="text-[10px] px-2 py-0.5 border border-emerald-500/40 text-emerald-400 bg-emerald-500/10 font-bold">
-                0% BLIKÁNÍ / 0% LAG
+                {t.settingsNoFlicker}
               </span>
             </div>
             <p className="text-[11px] text-[#8a7f81] mt-1.5 pl-4">
