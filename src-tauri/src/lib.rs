@@ -132,7 +132,11 @@ pub fn run() {
             }
             tray::setup_tray(app.handle())?;
             let monitor_service = MonitorService::new(config_mgr.clone(), app.handle().clone());
-            let background = BackgroundWork::start(&config_mgr, app.handle().clone());
+            let background = BackgroundWork::start(
+                &config_mgr,
+                monitor_service.clone(),
+                app.handle().clone(),
+            );
             app.manage(AppState {
                 config_mgr,
                 monitor_service: monitor_service.clone(),

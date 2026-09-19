@@ -1,6 +1,6 @@
 use crate::{
     config::{ConfigManager, ConfigMode, ConfigSnapshot},
-    database, emit_config, library, scanner,
+    database, emit_config, library, monitor_hook::MonitorService, scanner,
 };
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -26,25 +26,31 @@ fn ready_snapshot(config: &Weak<ConfigManager>) -> Option<ConfigSnapshot> {
     }
 }
 
-fn publish_result(
-    app: &AppHandle,
+pub(crate) fn publish_result(
     manager: &ConfigManager,
+    monitor_service: &MonitorService,
     result: Result<ConfigSnapshot, String>,
+    emit: impl FnOnce(&ConfigSnapshot),
 ) {
     match result {
-        Ok(snapshot) => emit_config(app, &snapshot),
+        Ok(snapshot) => emit(&snapshot),
         Err(error) => {
             eprintln!("Background result was not committed: {error}");
             match manager.snapshot() {
-                Ok(snapshot) => emit_config(app, &snapshot),
+                Ok(snapshot) => emit(&snapshot),
                 Err(error) => eprintln!("Cannot publish background configuration state: {error}"),
             }
         }
     }
+    monitor_service.config_committed();
 }
 
 impl BackgroundWork {
-    pub fn start(manager: &Arc<ConfigManager>, app: AppHandle) -> Self {
+    pub fn start(
+        manager: &Arc<ConfigManager>,
+        monitor_service: Arc<MonitorService>,
+        app: AppHandle,
+    ) -> Self {
         let config = Arc::downgrade(manager);
         let cancelled = Arc::new(AtomicBool::new(false));
         let stop = cancelled.clone();
@@ -82,7 +88,9 @@ impl BackgroundWork {
                                 settings.last_sync_timestamp = Some(now);
                                 Ok(())
                             });
-                        publish_result(&app, &manager, result);
+                        publish_result(&manager, &monitor_service, result, |snapshot| {
+                            emit_config(&app, snapshot)
+                        });
                     }
                     Ok(_) => return,
                     Err(error) => eprintln!("Online catalog synchronization failed: {error}"),
@@ -121,7 +129,9 @@ impl BackgroundWork {
                     Ok(())
                 },
             );
-            publish_result(&app, &manager, result);
+            publish_result(&manager, &monitor_service, result, |snapshot| {
+                emit_config(&app, snapshot)
+            });
         });
         Self {
             cancelled,

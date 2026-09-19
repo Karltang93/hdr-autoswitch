@@ -127,6 +127,9 @@ current settings context and blocks automatic authority before recovery inventor
 is refreshed. Malformed, unknown, or expired candidate IDs are rejected without
 changing authority.
 
+Background library updates and recovery-state changes notify the controller
+without waiting for a foreground-window change.
+
 Automatic cleanup only reverses changes the app verified that it made. It leaves
 pre-existing HDR and observed manual/external overrides alone. An unverified
 native result remains unresolved until an explicit, verified per-display (or All)

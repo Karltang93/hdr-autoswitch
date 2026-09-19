@@ -1345,6 +1345,33 @@ mod tests {
                 shutdown_budget: Arc::new(AtomicUsize::new(SHUTDOWN_ATTEMPT_BUDGET)),
             }
         }
+
+        fn ready(&self) -> ConfigSnapshot {
+            let first = self.manager.snapshot().unwrap();
+            let ready = self.manager.initialize(&first.context_token).unwrap();
+            self.manager
+                .mutate(&ready.context_token, None, true, |settings| {
+                    settings.apps = ready_snapshot().settings.apps;
+                    Ok(())
+                })
+                .unwrap()
+        }
+    }
+
+    fn idle_service() -> (MonitorService, Receiver<Command>) {
+        let (sender, receiver) = channel();
+        let service = MonitorService {
+            events: EventSink {
+                sender,
+                admitted: Arc::new(AtomicBool::new(true)),
+                foreground_pending: Arc::new(AtomicBool::new(false)),
+                config_pending: Arc::new(AtomicBool::new(false)),
+                hook_available: Arc::new(AtomicBool::new(true)),
+                shutdown_budget: Arc::new(AtomicUsize::new(SHUTDOWN_ATTEMPT_BUDGET)),
+            },
+            threads: Mutex::new(Threads::default()),
+        };
+        (service, receiver)
     }
 
     fn mock_attempt() -> NativeAttempt {
@@ -1476,15 +1503,8 @@ mod tests {
 
     #[test]
     fn producer_hints_are_coalesced_and_stop_after_admission_closes() {
-        let (sender, receiver) = channel();
-        let events = EventSink {
-            sender,
-            admitted: Arc::new(AtomicBool::new(true)),
-            foreground_pending: Arc::new(AtomicBool::new(false)),
-            config_pending: Arc::new(AtomicBool::new(false)),
-            hook_available: Arc::new(AtomicBool::new(true)),
-            shutdown_budget: Arc::new(AtomicUsize::new(SHUTDOWN_ATTEMPT_BUDGET)),
-        };
+        let (service, receiver) = idle_service();
+        let events = &service.events;
         events.foreground();
         events.foreground();
         assert!(matches!(
@@ -1493,9 +1513,82 @@ mod tests {
         ));
         assert!(receiver.try_recv().is_err());
         events.foreground_pending.store(false, Ordering::Release);
+        service.config_committed();
+        service.config_committed();
+        assert!(matches!(receiver.try_recv(), Ok(Command::ConfigCommitted)));
+        assert!(receiver.try_recv().is_err());
+        events.config_pending.store(false, Ordering::Release);
         events.admitted.store(false, Ordering::Release);
         events.foreground();
+        service.config_committed();
         assert!(receiver.try_recv().is_err());
+    }
+
+    #[test]
+    fn background_enrichment_wakes_controller_without_a_foreground_event() {
+        let fixture = GateFixture::new();
+        let before = fixture.ready();
+        let (service, receiver) = idle_service();
+        let foreground_exe = "game-dx12.exe";
+        assert!(automatic_pause(&before, foreground_exe, &before.context_token).is_some());
+        let mut detected = before.settings.apps[0].clone();
+        detected.exe_name = foreground_exe.into();
+        let result = fixture.manager.mutate(
+            &before.context_token,
+            Some(&before.library_generation),
+            true,
+            |settings| {
+                crate::library::enrich_existing(settings, &[detected]);
+                Ok(())
+            },
+        );
+        let committed = result.as_ref().unwrap().clone();
+        let mut emitted = None;
+        crate::background::publish_result(&fixture.manager, &service, result, |snapshot| {
+            emitted = Some(snapshot.clone());
+            assert!(receiver.try_recv().is_err());
+        });
+        assert_eq!(emitted, Some(committed.clone()));
+        assert!(matches!(receiver.try_recv(), Ok(Command::ConfigCommitted)));
+        assert!(receiver.try_recv().is_err());
+        assert!(!service.events.foreground_pending.load(Ordering::Acquire));
+        let current = fixture.manager.snapshot().unwrap();
+        assert_eq!(current, committed);
+        assert!(automatic_pause(&current, foreground_exe, &before.context_token).is_none());
+    }
+
+    #[test]
+    fn background_recovery_wakes_controller_after_failed_commit() {
+        let fixture = GateFixture::new();
+        let before = fixture.ready();
+        let (service, receiver) = idle_service();
+        assert!(automatic_pause(&before, "game.exe", &before.context_token).is_none());
+        let conflicting_bytes = b"unreadable settings";
+        std::fs::write(&before.config_path, conflicting_bytes).unwrap();
+        let result = fixture.manager.mutate(
+            &before.context_token,
+            None,
+            false,
+            |settings| {
+                settings.last_sync_timestamp = Some(123);
+                Ok(())
+            },
+        );
+        assert!(result.is_err());
+        let current = fixture.manager.snapshot().unwrap();
+        assert_eq!(current.mode, ConfigMode::RecoveryRequired);
+        assert_ne!(current.context_token, before.context_token);
+        let mut emitted = None;
+        crate::background::publish_result(&fixture.manager, &service, result, |snapshot| {
+            emitted = Some(snapshot.clone());
+            assert!(receiver.try_recv().is_err());
+        });
+        assert_eq!(emitted, Some(current.clone()));
+        assert!(matches!(receiver.try_recv(), Ok(Command::ConfigCommitted)));
+        assert!(receiver.try_recv().is_err());
+        assert!(!service.events.foreground_pending.load(Ordering::Acquire));
+        assert!(automatic_pause(&current, "game.exe", &before.context_token).is_some());
+        assert_eq!(std::fs::read(&before.config_path).unwrap(), conflicting_bytes);
     }
 
     #[test]
