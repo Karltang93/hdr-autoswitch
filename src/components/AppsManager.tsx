@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { HdrApp, HdrType, AppConfig, PickedGameInfo, ScanResult } from '../types';
 import type { MutationOrigin } from '../configState';
 import { configClient } from '../useConfig';
+import { findLibraryApp } from '../libraryState';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import {
@@ -64,19 +65,8 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
     }
   }, [config.apps]);
 
-  const findExistingApp = (item: HdrApp): HdrApp | undefined => {
-    const itemExe = item.exe_name.toLowerCase();
-    const itemName = item.name.toLowerCase();
-    return config.apps.find((a) => {
-      const aExe = a.exe_name.toLowerCase();
-      const aName = a.name.toLowerCase();
-      const matchesExe =
-        aExe === itemExe ||
-        (a.alternate_exes && a.alternate_exes.some((x) => x.toLowerCase() === itemExe));
-      const matchesName = aName === itemName;
-      return matchesExe || matchesName;
-    });
-  };
+  const findExistingApp = (item: HdrApp): HdrApp | undefined =>
+    findLibraryApp(config.apps, item);
 
   const isPathDifferent = (existing: HdrApp, scanned: HdrApp): boolean => {
     if (!scanned.path) return false;

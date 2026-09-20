@@ -25,6 +25,13 @@ export const GlitchText: React.FC<GlitchTextProps> = ({
 
   useEffect(() => {
     setDisplayText(text);
+    setIsGlitching(false);
+    return () => {
+      if (intervalRef.current !== null) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
   }, [text]);
 
   const startGlitch = () => {

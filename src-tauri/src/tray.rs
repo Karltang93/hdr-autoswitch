@@ -5,8 +5,8 @@ use crate::{
     show_main_window, AppState,
 };
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Mutex,
+    atomic::{AtomicBool, AtomicU64, Ordering},
+    Arc, Mutex,
 };
 use tauri::{
     menu::{MenuBuilder, MenuItem, MenuItemBuilder},
@@ -21,6 +21,35 @@ struct TrayLabels {
     czech: AtomicBool,
     attention_badge: AtomicBool,
     latest_status: Mutex<Option<HdrStatePayload>>,
+}
+
+type PresentationAction = Box<dyn FnOnce() + Send>;
+
+#[derive(Default)]
+struct ManualPresentation {
+    latest_request: AtomicU64,
+    closed: AtomicBool,
+}
+
+impl ManualPresentation {
+    fn begin(&self) -> Result<u64, String> {
+        if self.closed.load(Ordering::Acquire) {
+            return Err("The HDR controller is shutting down".into());
+        }
+        self.latest_request
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| current.checked_add(1))
+            .map(|previous| previous + 1)
+            .map_err(|_| "Manual HDR request sequence exhausted".into())
+    }
+
+    fn is_current(&self, request: u64) -> bool {
+        !self.closed.load(Ordering::Acquire)
+            && self.latest_request.load(Ordering::Acquire) == request
+    }
+
+    fn close(&self) {
+        self.closed.store(true, Ordering::Release);
+    }
 }
 
 fn labels(czech: bool) -> [&'static str; 5] {
@@ -230,26 +259,13 @@ pub fn set_language(app: &AppHandle, czech: bool) -> Result<(), String> {
     render_status(app, &state)
 }
 
-fn report_control_error(app: &AppHandle, error: String) {
-    eprintln!("Tray HDR request failed: {error}");
-    let handle = app.clone();
-    if let Err(error) = app.run_on_main_thread(move || {
-        show_main_window(&handle);
-        if let Err(error) = handle.emit("controller-error", Some(error)) {
-            eprintln!("Cannot display tray HDR error: {error}");
-        }
-    }) {
-        eprintln!("Cannot schedule tray HDR error: {error}");
-    }
-}
-
 fn manual_enabled(status: Option<&HdrStatePayload>) -> bool {
     status.is_some_and(|status| {
         status.manual_control == ManualControl::Available && !status.inventory_stale
     })
 }
 
-fn report_manual_result(app: &AppHandle, result: Result<ManualSetResult, String>) {
+fn manual_result_error(result: Result<ManualSetResult, String>) -> Option<String> {
     match result {
         Ok(result) => {
             let errors: Vec<String> = result.outcomes.iter()
@@ -258,20 +274,79 @@ fn report_manual_result(app: &AppHandle, result: Result<ManualSetResult, String>
                     .unwrap_or_else(|| format!("{:?}", outcome.outcome)))
                 .collect();
             if result.outcomes.is_empty() {
-                report_control_error(app, "No display result was returned.".into());
+                Some("No display result was returned.".into())
             } else if !errors.is_empty() {
-                report_control_error(app, errors.join("; "));
-            } else if let Err(error) = app.emit("controller-error", Option::<String>::None) {
-                eprintln!("Cannot notify the UI of verified manual HDR: {error}");
+                Some(errors.join("; "))
+            } else {
+                None
             }
         }
-        Err(error) => report_control_error(app, error),
+        Err(error) => Some(error),
     }
 }
 
-fn manual_all(app: &AppHandle, enable: bool) {
+fn dispatch_manual_result(
+    presentation: Arc<ManualPresentation>,
+    request: u64,
+    result: Result<ManualSetResult, String>,
+    present: impl FnOnce(Option<String>) + Send + 'static,
+    schedule: impl FnOnce(PresentationAction) -> Result<(), String>,
+) -> Result<(), String> {
+    let error = manual_result_error(result);
+    if let Some(error) = &error {
+        eprintln!("Tray HDR request failed: {error}");
+    }
+    if !presentation.is_current(request) {
+        return Ok(());
+    }
+    schedule(Box::new(move || {
+        // A newer click may arrive after this UI callback was queued.
+        if presentation.is_current(request) {
+            present(error);
+        }
+    }))
+}
+
+fn report_manual_result(
+    app: &AppHandle,
+    presentation: Arc<ManualPresentation>,
+    request: u64,
+    result: Result<ManualSetResult, String>,
+) {
+    let handle = app.clone();
+    if let Err(error) = dispatch_manual_result(
+        presentation,
+        request,
+        result,
+        move |error| {
+            if handle.try_state::<AppState>().is_some_and(|state| state.ensure_admission().is_err()) {
+                return;
+            }
+            if error.is_some() {
+                show_main_window(&handle);
+            }
+            if let Err(error) = handle.emit("controller-error", error) {
+                eprintln!("Cannot display tray HDR result: {error}");
+            }
+        },
+        |action| app.run_on_main_thread(action).map_err(|error| error.to_string()),
+    ) {
+        eprintln!("Cannot schedule tray HDR result: {error}");
+    }
+}
+
+fn manual_all(app: &AppHandle, enable: bool, presentation: &Arc<ManualPresentation>) {
+    let sequence = match presentation.begin() {
+        Ok(sequence) => sequence,
+        Err(error) => {
+            eprintln!("Cannot admit tray HDR request: {error}");
+            return;
+        }
+    };
     let Some(state) = app.try_state::<AppState>() else {
-        report_control_error(app, "HDR control has not initialized.".into());
+        report_manual_result(
+            app, presentation.clone(), sequence, Err("HDR control has not initialized.".into()),
+        );
         return;
     };
     let request = state.ensure_admission()
@@ -279,18 +354,20 @@ fn manual_all(app: &AppHandle, enable: bool) {
     let request = match request {
         Ok(request) => request,
         Err(error) => {
-            report_control_error(app, error);
+            report_manual_result(app, presentation.clone(), sequence, Err(error));
             return;
         }
     };
     // Enqueue on the callback thread, then wait elsewhere: click order is actor order.
     let handle = app.clone();
+    let presentation = presentation.clone();
     tauri::async_runtime::spawn(async move {
-        report_manual_result(&handle, request.resolve().await);
+        report_manual_result(&handle, presentation, sequence, request.resolve().await);
     });
 }
 
 pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
+    let manual_presentation = Arc::new(ManualPresentation::default());
     let czech = matches!(unsafe { GetUserDefaultUILanguage() } & 0x3ff, 0x05 | 0x1b);
     let text = labels(czech);
     let on_item = MenuItemBuilder::with_id("hdr_on_all", text[0]).enabled(false).build(app)?;
@@ -317,9 +394,9 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         .tooltip("HDR Auto-Switch")
         .menu(&menu)
         .show_menu_on_left_click(false)
-        .on_menu_event(|app, event| match event.id().as_ref() {
-            "hdr_on_all" => manual_all(app, true),
-            "hdr_off_all" => manual_all(app, false),
+        .on_menu_event(move |app, event| match event.id().as_ref() {
+            "hdr_on_all" => manual_all(app, true, &manual_presentation),
+            "hdr_off_all" => manual_all(app, false, &manual_presentation),
             "show" => show_main_window(app),
             "show_settings" => {
                 show_main_window(app);
@@ -328,6 +405,7 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             "exit" => {
+                manual_presentation.close();
                 if let Some(state) = app.try_state::<AppState>() {
                     state.shutdown();
                 }
@@ -372,6 +450,115 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::display::{MonitorOutcome, OutcomeKind};
+
+    #[derive(Default)]
+    struct Presented {
+        error: Option<String>,
+        opened_windows: usize,
+    }
+
+    fn manual_reply(enable: bool, uncertain: bool) -> Result<ManualSetResult, String> {
+        Ok(ManualSetResult {
+            outcomes: vec![MonitorOutcome {
+                device_path: Some("fixture-display".into()),
+                display_name: Some("Fixture display".into()),
+                requested_hdr: enable,
+                outcome: if uncertain { OutcomeKind::OutcomeUnknown } else { OutcomeKind::Changed },
+                failure: None,
+                message: uncertain.then(|| "Unverified native result".into()),
+                previous_hdr: Some(!enable),
+                observed_hdr: (!uncertain).then_some(enable),
+                previous_hdr_user_enabled: Some(!enable),
+                observed_hdr_user_enabled: (!uncertain).then_some(enable),
+                attempts: 1,
+            }],
+            partial: uncertain,
+            status: status(if uncertain {
+                ScopeHdrState::Unknown
+            } else if enable {
+                ScopeHdrState::Hdr
+            } else {
+                ScopeHdrState::Sdr
+            }),
+        })
+    }
+
+    fn queue_result(
+        presentation: &Arc<ManualPresentation>,
+        request: u64,
+        result: Result<ManualSetResult, String>,
+        presented: &Arc<Mutex<Presented>>,
+        queue: &mut Vec<PresentationAction>,
+    ) {
+        let presented = presented.clone();
+        dispatch_manual_result(
+            presentation.clone(),
+            request,
+            result,
+            move |error| {
+                let mut state = presented.lock().unwrap();
+                state.opened_windows += usize::from(error.is_some());
+                state.error = error;
+            },
+            |action| {
+                queue.push(action);
+                Ok(())
+            },
+        ).unwrap();
+    }
+
+    #[test]
+    fn reversed_manual_completions_cannot_replace_the_newest_success_or_error() {
+        for newest_fails in [false, true] {
+            let presentation = Arc::new(ManualPresentation::default());
+            let old = presentation.begin().unwrap();
+            let newest = presentation.begin().unwrap();
+            let presented = Arc::new(Mutex::new(Presented::default()));
+            let mut queue = Vec::new();
+            queue_result(&presentation, newest, manual_reply(false, newest_fails), &presented, &mut queue);
+            queue_result(&presentation, old, manual_reply(true, !newest_fails), &presented, &mut queue);
+            assert_eq!(queue.len(), 1);
+            queue.pop().unwrap()();
+            let state = presented.lock().unwrap();
+            assert_eq!(state.error.is_some(), newest_fails);
+            assert_eq!(state.opened_windows, usize::from(newest_fails));
+        }
+    }
+
+    #[test]
+    fn queued_manual_effects_recheck_version_when_the_ui_callback_executes() {
+        for newest_fails in [false, true] {
+            let presentation = Arc::new(ManualPresentation::default());
+            let old = presentation.begin().unwrap();
+            let presented = Arc::new(Mutex::new(Presented::default()));
+            let mut queue = Vec::new();
+            queue_result(&presentation, old, manual_reply(true, !newest_fails), &presented, &mut queue);
+            let newest = presentation.begin().unwrap();
+            queue_result(&presentation, newest, manual_reply(false, newest_fails), &presented, &mut queue);
+            assert_eq!(queue.len(), 2);
+            queue.pop().unwrap()();
+            queue.pop().unwrap()();
+            let state = presented.lock().unwrap();
+            assert_eq!(state.error.is_some(), newest_fails);
+            assert_eq!(state.opened_windows, usize::from(newest_fails));
+        }
+    }
+
+    #[test]
+    fn shutdown_retires_queued_manual_presentation_and_blocks_new_requests() {
+        let presentation = Arc::new(ManualPresentation::default());
+        let request = presentation.begin().unwrap();
+        let presented = Arc::new(Mutex::new(Presented::default()));
+        let mut queue = Vec::new();
+        queue_result(&presentation, request, manual_reply(true, true), &presented, &mut queue);
+        presentation.close();
+        assert!(presentation.begin().is_err());
+        queue.pop().unwrap()();
+        let state = presented.lock().unwrap();
+        assert_eq!(state.opened_windows, 0);
+        assert!(state.error.is_none());
+    }
 
     #[test]
     fn selected_language_controls_every_tray_action_label() {

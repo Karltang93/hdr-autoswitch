@@ -1,13 +1,14 @@
 use crate::config::{AppConfig, HdrApp};
 
 fn same_game(existing: &HdrApp, item: &HdrApp) -> bool {
-    if existing.exe_name.eq_ignore_ascii_case(&item.exe_name)
-        || existing.name.eq_ignore_ascii_case(&item.name)
-    {
+    if existing.exe_name.eq_ignore_ascii_case(&item.exe_name) {
         return true;
     }
     if matches!((&existing.steam_id, &item.steam_id), (Some(left), Some(right)) if left != right) {
         return false;
+    }
+    if existing.name.eq_ignore_ascii_case(&item.name) {
+        return true;
     }
     std::iter::once(&existing.exe_name)
         .chain(&existing.alternate_exes)
@@ -229,6 +230,48 @@ mod tests {
         right.alternate_exes.push("launcher.exe".into());
         assert!(!same_game(&left, &right));
         assert!(!same_game(&right, &left));
+    }
+
+    #[test]
+    fn same_title_with_conflicting_steam_ids_preserves_independent_rows() {
+        let mut existing = game("Shared title", "a.exe");
+        existing.steam_id = Some("100".into());
+        existing.path = Some(r"D:\Original\a.exe".into());
+        existing.enabled = false;
+        let mut incoming = game("Shared title", "b.exe");
+        incoming.steam_id = Some("200".into());
+        incoming.path = Some(r"E:\Different\b.exe".into());
+        for import in [false, true] {
+            let mut config = AppConfig::default();
+            config.apps = vec![existing.clone()];
+            if import {
+                import_games(&mut config, vec![incoming.clone()]).unwrap();
+            } else {
+                add_app(&mut config, incoming.clone()).unwrap();
+            }
+            assert_eq!(config.apps, vec![existing.clone(), incoming.clone()]);
+            assert!(!enrich_existing(&mut config, &[incoming.clone()]));
+            assert_eq!(config.apps[0], existing);
+        }
+    }
+
+    #[test]
+    fn adding_a_catalog_alias_enables_but_preserves_the_canonical_primary_and_path() {
+        let mut existing = game("Fixture game", "renderer.exe");
+        existing.steam_id = Some("100".into());
+        existing.path = Some(r"D:\Original\renderer.exe".into());
+        existing.enabled = false;
+        let mut incoming = game("Fixture game", "game.exe");
+        incoming.steam_id = Some("100".into());
+        let mut config = AppConfig::default();
+        config.apps = vec![existing.clone()];
+        add_app(&mut config, incoming).unwrap();
+        assert_eq!(config.apps.len(), 1);
+        assert_eq!(config.apps[0].exe_name, existing.exe_name);
+        assert_eq!(config.apps[0].path, existing.path);
+        assert_eq!(config.apps[0].steam_id, existing.steam_id);
+        assert_eq!(config.apps[0].alternate_exes, vec!["game.exe"]);
+        assert!(config.apps[0].enabled);
     }
 
     #[test]

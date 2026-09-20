@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { CatalogEntry, AppConfig, HdrApp, SupportTier } from '../types';
 import { invoke } from '@tauri-apps/api/core';
 import { configClient } from '../useConfig';
+import { findTrackedApp } from '../libraryState';
 import {
   Search,
   CheckCircle2,
@@ -150,10 +151,6 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
     }
   };
 
-  const isGameTracked = (exe: string) => {
-    return config.apps.some((a) => a.exe_name.toLowerCase() === exe.toLowerCase());
-  };
-
   const countForTier = (tier: string) => {
     if (tier === 'all') return catalog.length;
     return catalog.filter((i) => i.support_tier === tier).length;
@@ -244,7 +241,7 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
       ) : (
         <div className="space-y-2">
           {filtered.map((item) => {
-            const tracked = isGameTracked(item.exe_name);
+            const tracked = findTrackedApp(config.apps, item);
 
             return (
               <div
@@ -283,7 +280,7 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
                       variant="outline"
                       size="sm"
                       icon={<Check className="w-3.5 h-3.5 text-emerald-400" />}
-                      onClick={() => handleRemoveGame(item.exe_name)}
+                      onClick={() => handleRemoveGame(tracked.exe_name)}
                     />
                   ) : (
                     <GlitchButton

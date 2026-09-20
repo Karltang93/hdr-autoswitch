@@ -1,12 +1,14 @@
 import { mockIPC, mockWindows } from '@tauri-apps/api/mocks';
 import { emit } from '@tauri-apps/api/event';
 import { manualScopeAvailable } from '../src/displayState.ts';
+import { findLibraryApp } from '../src/libraryState.ts';
 
 const options = new URLSearchParams(location.search);
 localStorage.setItem('hdr_lang', options.get('lang') === 'cs' ? 'cs' : 'en');
 localStorage.removeItem('hdr_recent_games');
 mockWindows('main');
 const mode = options.get('mode') ?? 'ready';
+const aliasMerge = options.get('aliasMerge') === '1';
 const settings = {
   target_monitor: options.get('mixed') === '1' ? { kind: 'all' } : mode === 'import_available'
     ? { kind: 'needs_confirmation', legacy_runtime_id: 'old-runtime-id' }
@@ -20,7 +22,10 @@ const settings = {
   auto_sync_database: false,
   switch_method: mode === 'import_available' || options.get('consent') === 'pending' ? 'shortcut' : 'native',
   blacklist: [],
-  apps: [],
+  apps: aliasMerge ? [{
+    name: 'Fixture game', exe_name: 'renderer.exe', enabled: false, hdr_type: 'native',
+    steam_id: '100', alternate_exes: [], path: 'D:\\Fixture\\renderer.exe',
+  }] : [],
 };
 let snapshot = {
   mode, settings, store_id: 'fixture-history', revision: '1', control_epoch: '1',
@@ -56,7 +61,8 @@ if (options.get('unknown') === '1') {
   monitors[0].is_hdr_enabled = false;
 }
 const games = [{
-  name: 'Fixture game', exe_name: 'fixture.exe', hdr_type: 'native', enabled: true,
+  name: 'Fixture game', exe_name: aliasMerge ? 'game.exe' : 'fixture.exe', hdr_type: 'native', enabled: true,
+  steam_id: aliasMerge ? '100' : null,
   alternate_exes: [], launcher: 'Média',
 }];
 const commands = [];
@@ -139,9 +145,26 @@ mockIPC(async (command, args = {}) => {
       context_token: snapshot.context_token, library_generation: snapshot.library_generation,
       games: structuredClone(games),
     };
-    case 'add_custom_app':
-      snapshot.settings.apps.push(args.app);
+    case 'add_custom_app': {
+      const existing = findLibraryApp(snapshot.settings.apps, args.app);
+      if (existing) {
+        for (const exe of [args.app.exe_name, ...(args.app.alternate_exes ?? [])]) {
+          if (exe.toLowerCase() !== existing.exe_name.toLowerCase()
+            && !existing.alternate_exes.some((alias) => alias.toLowerCase() === exe.toLowerCase())) {
+            existing.alternate_exes.push(exe.toLowerCase());
+          }
+        }
+        existing.name = args.app.name;
+        existing.enabled = args.app.enabled;
+        existing.hdr_type = args.app.hdr_type;
+        for (const field of ['path', 'steam_id', 'launcher']) {
+          if (args.app[field] != null) existing[field] = args.app[field];
+        }
+      } else {
+        snapshot.settings.apps.push({ ...args.app, alternate_exes: args.app.alternate_exes ?? [] });
+      }
       return commit(true);
+    }
     case 'import_detected_games':
       if (args.expectedLibraryGeneration !== snapshot.library_generation) throw new Error('Stale fixture scan');
       snapshot.settings.apps.push(...args.detected);
@@ -153,7 +176,10 @@ mockIPC(async (command, args = {}) => {
       snapshot.settings.apps.find((game) => game.exe_name === args.exeName).enabled = args.enabled;
       return commit(true);
     case 'verify_game_paths': return {};
-    case 'get_running_processes': return [];
+    case 'get_running_processes': return aliasMerge ? [{
+      pid: 123, name: 'Fixture game', exe_name: 'game.exe',
+      title: 'Fixture renderer', path: 'D:\\Fixture\\game.exe',
+    }] : [];
     case 'pick_game_exe': return null;
     case 'sync_database': return games.length;
     case 'set_hdr': {

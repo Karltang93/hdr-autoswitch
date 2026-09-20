@@ -138,6 +138,8 @@ Controller conflicts, shutdown, or unreadable control authority block manual
 actions, and every request still validates native display identity and HDR state.
 Automatic activation requires ready settings, Native consent, and an eligible
 game; cleanup of changes already owned by the app is a separate operation.
+Tray requests retain click order. Only the latest request can present a result,
+including when a previously queued UI callback runs after a newer request.
 
 Ruční nativní **Zapnout**/**Vypnout** platí jen pro výslovně zvolený displej nebo
 **Vše**, i při pozastavené automatizaci během prvního spuštění, obnovy,
@@ -232,6 +234,10 @@ synthetic settings/displays, not the native application. The fixture accepts
 `?mode=first_run`, `?mode=import_available`, `?mode=recovery_required`,
 `?mode=unsupported_schema`, and `?failSave=1`. It is not included in the production
 bundle. `?mixed=1` exercises an All scope containing both HDR and SDR displays.
+`?aliasMerge=1` starts with a disabled `renderer.exe` library row: adding the
+catalog's `game.exe` enables that canonical row and records the alias. Catalog
+removal targets `renderer.exe`, and the running-process view recognizes the
+enabled alias rather than offering a duplicate Add.
 
 These checks do not certify real-monitor reboot/hotplug behavior, power-loss
 durability, or NSIS/MSI upgrades of installed older releases. Those scenarios need
