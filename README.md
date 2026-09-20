@@ -4,7 +4,7 @@
 
 ![HDR Auto-Switch Banner](docs/screenshot.png)
 
-**Automatic, zero-overhead HDR display switcher for Windows 10 and 11.**  
+**Automatic, lightweight HDR display switcher for Windows 10 and 11.**\
 *No more manual `Win + Alt + B` or monitor blackouts before and after every gaming session.*
 
 [![Version](https://img.shields.io/badge/Version-v1.0.5-5accf5?style=for-the-badge)](https://github.com/Soptik1290/hdr-autoswitch/releases/tag/v1.0.5)
@@ -75,7 +75,7 @@ resume.
 
 ### 🌐 8. Bilingual Interface & System Tray
 * Automatically detects system language: launches in **Czech** for Czech/Slovak systems and **English** for all others, with an instant 1-click header toggle (`CZ` / `EN`).
-* Silent autostart on Windows boot and minimization to system tray with zero memory footprint.
+* Silent autostart on Windows boot and minimization to the system tray.
 * Spacious, modern **1280 × 720** cyberpunk UI with monospace typography (`Kode Mono`) and optional GSAP CRT scanlines.
 
 ---
@@ -180,7 +180,7 @@ The NSIS uninstaller checks every bundled-file deletion and verifies absence bef
 
 | Layer | Technology | Details |
 |---|---|---|
-| **Runtime** | [Tauri v2](https://v2.tauri.app/) | Lightweight native desktop framework with zero-webview memory mode |
+| **Runtime** | [Tauri v2](https://v2.tauri.app/) | Lightweight native desktop framework |
 | **Backend** | Rust 2021 | `windows-rs` (Win32 DisplayConfig & WinEventHook), `rfd` (Native dialogs), `reqwest` |
 | **Frontend** | React 19, TypeScript | Strict type checking, Vite 8, Tailwind CSS v4 |
 | **Animation** | GSAP | SVG displacement filters, text scramble, and CRT scanlines |
