@@ -859,6 +859,56 @@ mod tests {
     }
 
     #[test]
+    fn strict_v2_legacy_omissions_still_import_to_complete_canonical_settings() {
+        for target in ["all", "legacy-display-id"] {
+            let fixture = Fixture::new();
+            let bytes = serde_json::to_vec(&serde_json::json!({
+                "target_monitor": target,
+                "alt_tab_delay_seconds": 9,
+                "notifications_enabled": false,
+                "autostart": true,
+                "switch_method": "Shortcut",
+                "blacklist": ["custom.exe"],
+                "apps": [{
+                    "name": "Legacy game",
+                    "exe_name": "legacy-game.exe",
+                    "enabled": true,
+                    "hdr_type": "AutoHDR",
+                    "unknown_legacy_app_field": true,
+                }],
+                "unknown_legacy_setting": true,
+            }))
+            .unwrap();
+            fs::write(fixture.legacy(), &bytes).unwrap();
+            let manager = fixture.load();
+            let preview = manager.snapshot().unwrap();
+            assert_eq!(preview.mode, ConfigMode::ImportAvailable);
+            let imported = manager.import_legacy(&preview.context_token).unwrap();
+            assert_eq!(imported.mode, ConfigMode::Ready);
+            assert_eq!(imported.settings, preview.settings);
+            assert_eq!(imported.settings.switch_method, SwitchMethod::Shortcut);
+            assert_eq!(imported.settings.apps[0].hdr_type, HdrType::AutoHdr);
+            assert!(imported.settings.auto_detect_new_games);
+            assert!(imported.settings.auto_sync_database);
+            assert!(imported.settings.exit_only_hdr);
+            assert!(!imported.settings.start_minimized);
+            assert_eq!(imported.settings.last_sync_timestamp, None);
+            assert_eq!(imported.settings.apps[0].path, None);
+            assert_eq!(imported.settings.apps[0].steam_id, None);
+            assert_eq!(imported.settings.apps[0].launcher, None);
+            assert!(imported.settings.apps[0].alternate_exes.is_empty());
+            let persisted: crate::config_storage::Envelope =
+                serde_json::from_slice(&fs::read(fixture.main()).unwrap()).unwrap();
+            assert_eq!(persisted.settings, imported.settings);
+            assert_eq!(fs::read(fixture.legacy()).unwrap(), bytes);
+            drop(manager);
+            let reloaded = fixture.load().snapshot().unwrap();
+            assert_eq!(reloaded.mode, ConfigMode::Ready);
+            assert_eq!(reloaded.settings, imported.settings);
+        }
+    }
+
+    #[test]
     fn loading_never_saves_or_silently_reimports_and_a_lock_filename_is_harmless() {
         let fixture = Fixture::new();
         let manager = fixture.load();

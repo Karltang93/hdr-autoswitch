@@ -1,5 +1,8 @@
-use crate::config_v2::{decode_legacy, AppConfig, ConfigMode, RecoveryCandidate};
-use serde::{Deserialize, Serialize};
+use crate::config_v2::{
+    decode_legacy, AppConfig, ConfigMode, HdrApp, HdrType, RecoveryCandidate, SwitchMethod,
+    TargetMonitor,
+};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
@@ -10,6 +13,121 @@ const MAIN: &str = "config-v2.json";
 const PREFIX: &str = "config-v2.";
 const SCHEMA: u64 = 2;
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PersistedSettings {
+    target_monitor: PersistedTargetMonitor,
+    alt_tab_delay_seconds: u64,
+    notifications_enabled: bool,
+    autostart: bool,
+    start_minimized: bool,
+    auto_detect_new_games: bool,
+    auto_sync_database: bool,
+    #[serde(deserialize_with = "deserialize_present_option")]
+    last_sync_timestamp: Option<u64>,
+    exit_only_hdr: bool,
+    switch_method: SwitchMethod,
+    blacklist: Vec<String>,
+    apps: Vec<PersistedApp>,
+}
+
+impl From<PersistedSettings> for AppConfig {
+    fn from(settings: PersistedSettings) -> Self {
+        Self {
+            target_monitor: settings.target_monitor.into(),
+            alt_tab_delay_seconds: settings.alt_tab_delay_seconds,
+            notifications_enabled: settings.notifications_enabled,
+            autostart: settings.autostart,
+            start_minimized: settings.start_minimized,
+            auto_detect_new_games: settings.auto_detect_new_games,
+            auto_sync_database: settings.auto_sync_database,
+            last_sync_timestamp: settings.last_sync_timestamp,
+            exit_only_hdr: settings.exit_only_hdr,
+            switch_method: settings.switch_method,
+            blacklist: settings.blacklist,
+            apps: settings.apps.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PersistedApp {
+    name: String,
+    exe_name: String,
+    enabled: bool,
+    hdr_type: HdrType,
+    #[serde(deserialize_with = "deserialize_present_option")]
+    path: Option<String>,
+    alternate_exes: Vec<String>,
+    #[serde(deserialize_with = "deserialize_present_option")]
+    steam_id: Option<String>,
+    #[serde(deserialize_with = "deserialize_present_option")]
+    launcher: Option<String>,
+}
+
+impl From<PersistedApp> for HdrApp {
+    fn from(app: PersistedApp) -> Self {
+        Self {
+            name: app.name,
+            exe_name: app.exe_name,
+            enabled: app.enabled,
+            hdr_type: app.hdr_type,
+            path: app.path,
+            alternate_exes: app.alternate_exes,
+            steam_id: app.steam_id,
+            launcher: app.launcher,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+enum PersistedTargetMonitor {
+    All {},
+    Monitor {
+        device_path: String,
+        display_name: String,
+    },
+    NeedsConfirmation {
+        legacy_runtime_id: String,
+    },
+}
+
+impl From<PersistedTargetMonitor> for TargetMonitor {
+    fn from(target: PersistedTargetMonitor) -> Self {
+        match target {
+            PersistedTargetMonitor::All {} => Self::All,
+            PersistedTargetMonitor::Monitor {
+                device_path,
+                display_name,
+            } => Self::Monitor {
+                device_path,
+                display_name,
+            },
+            PersistedTargetMonitor::NeedsConfirmation { legacy_runtime_id } => {
+                Self::NeedsConfirmation { legacy_runtime_id }
+            }
+        }
+    }
+}
+
+fn deserialize_settings<'de, D>(deserializer: D) -> Result<AppConfig, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    PersistedSettings::deserialize(deserializer).map(Into::into)
+}
+
+// deserialize_with prevents Serde from treating a missing Option field as an implicit null.
+fn deserialize_present_option<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Option::deserialize(deserializer)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Envelope {
@@ -17,6 +135,7 @@ pub(crate) struct Envelope {
     pub store_id: String,
     pub revision: String,
     pub transaction_id: String,
+    #[serde(deserialize_with = "deserialize_settings")]
     pub settings: AppConfig,
 }
 
@@ -212,6 +331,7 @@ enum Operation {
         predecessor: Vec<u8>,
     },
     Install {
+        #[serde(deserialize_with = "deserialize_present_option")]
         source: Option<InstallSource>,
         preserved: Vec<PreservedFile>,
     },
@@ -1608,6 +1728,7 @@ fn move_absent(_: &Path, _: &Path) -> Result<(), String> {
 #[cfg(all(test, windows))]
 mod tests {
     use super::*;
+    use crate::config_v2::{HdrApp, HdrType, TargetMonitor};
     use tempfile::TempDir;
 
     struct Fixture {
@@ -1658,6 +1779,329 @@ mod tests {
             let entry = entry.unwrap();
             read_optional(&entry.path()).ok().flatten().as_deref() == Some(bytes)
         })
+    }
+
+    fn schema_targets() -> [TargetMonitor; 3] {
+        [
+            TargetMonitor::All,
+            TargetMonitor::Monitor {
+                device_path: r"\\?\DISPLAY#schema-test".into(),
+                display_name: "Schema test display".into(),
+            },
+            TargetMonitor::NeedsConfirmation {
+                legacy_runtime_id: "legacy-display-id".into(),
+            },
+        ]
+    }
+
+    fn schema_document(target_monitor: TargetMonitor) -> Document {
+        Document::fresh(AppConfig {
+            target_monitor,
+            apps: vec![HdrApp {
+                name: "Schema test game".into(),
+                exe_name: "schema-game.exe".into(),
+                enabled: true,
+                hdr_type: HdrType::AutoHdr,
+                path: None,
+                alternate_exes: Vec::new(),
+                steam_id: None,
+                launcher: None,
+            }],
+            ..AppConfig::default()
+        })
+        .unwrap()
+    }
+
+    fn without_field(
+        value: &serde_json::Value,
+        object: &str,
+        field: &str,
+    ) -> serde_json::Value {
+        let mut value = value.clone();
+        assert!(value
+            .pointer_mut(object)
+            .unwrap()
+            .as_object_mut()
+            .unwrap()
+            .remove(field)
+            .is_some());
+        value
+    }
+
+    fn with_unknown_field(value: &serde_json::Value, object: &str) -> serde_json::Value {
+        let mut value = value.clone();
+        assert!(value
+            .pointer_mut(object)
+            .unwrap()
+            .as_object_mut()
+            .unwrap()
+            .insert("unknown_v2_field".into(), serde_json::json!({"keep": true}))
+            .is_none());
+        value
+    }
+
+    fn stored_evidence(storage: &Storage) -> BTreeMap<String, Vec<u8>> {
+        let mut files: BTreeMap<_, _> = storage
+            .entries()
+            .unwrap()
+            .into_iter()
+            .map(|(name, _)| {
+                let bytes = storage.required(&name).unwrap();
+                (name, bytes)
+            })
+            .collect();
+        if let Some(bytes) = read_optional(&storage.main_path()).unwrap() {
+            files.insert(MAIN.into(), bytes);
+        }
+        files
+    }
+
+    fn load_main_without_rewriting(bytes: &[u8]) -> StorageReport {
+        let fixture = Fixture::new();
+        let mut storage = fixture.open();
+        write_new(&storage.main_path(), bytes).unwrap();
+        let before = stored_evidence(&storage);
+        let report = storage.load();
+        assert_eq!(stored_evidence(&storage), before);
+        report
+    }
+
+    #[test]
+    fn strict_v2_requires_all_settings_app_and_target_fields() {
+        let mut accepted = Vec::new();
+        for target in schema_targets() {
+            let document = schema_document(target);
+            let value = serde_json::to_value(&document.envelope).unwrap();
+            for object in ["/settings", "/settings/apps/0", "/settings/target_monitor"] {
+                for field in value.pointer(object).unwrap().as_object().unwrap().keys() {
+                    let missing = without_field(&value, object, field);
+                    let bytes = serde_json::to_vec(&missing).unwrap();
+                    let report = load_main_without_rewriting(&bytes);
+                    if Document::decode(bytes).is_ok()
+                        || report.mode != ConfigMode::RecoveryRequired
+                        || report.document.is_some()
+                        || !report.candidates.is_empty()
+                    {
+                        accepted.push(format!("{object}/{field}: {:?}", report.mode));
+                    }
+                }
+            }
+        }
+        assert!(accepted.is_empty(), "Accepted missing fields: {accepted:?}");
+    }
+
+    #[test]
+    fn strict_v2_requires_nullable_fields_even_in_journal_candidates() {
+        let document = schema_document(TargetMonitor::All);
+        let value = serde_json::to_value(&document.envelope).unwrap();
+        let mut nullable_fields = Vec::new();
+        let mut accepted = Vec::new();
+        for object in ["/settings", "/settings/apps/0"] {
+            for (field, field_value) in value.pointer(object).unwrap().as_object().unwrap() {
+                if !field_value.is_null() {
+                    continue;
+                }
+                nullable_fields.push(format!("{object}/{field}"));
+                let missing = without_field(&value, object, field);
+                let journal = serde_json::json!({
+                    "protocol_version": 1,
+                    "candidate": missing,
+                    "operation": { "kind": "install", "source": null, "preserved": [] },
+                });
+                if serde_json::from_value::<Intent>(journal).is_ok() {
+                    accepted.push(format!("{object}/{field}"));
+                }
+            }
+        }
+        assert!(!nullable_fields.is_empty());
+        assert!(accepted.is_empty(), "Accepted absent nullable fields: {accepted:?}");
+    }
+
+    #[test]
+    fn strict_v2_rejects_unknown_nested_settings_app_and_target_fields() {
+        let mut accepted = Vec::new();
+        for target in schema_targets() {
+            let document = schema_document(target);
+            let value = serde_json::to_value(&document.envelope).unwrap();
+            for object in ["/settings", "/settings/apps/0", "/settings/target_monitor"] {
+                let bytes = serde_json::to_vec(&with_unknown_field(&value, object)).unwrap();
+                let report = load_main_without_rewriting(&bytes);
+                if Document::decode(bytes).is_ok()
+                    || report.mode != ConfigMode::RecoveryRequired
+                    || report.document.is_some()
+                    || !report.candidates.is_empty()
+                {
+                    accepted.push(format!("{object}: {:?}", report.mode));
+                }
+            }
+        }
+        assert!(accepted.is_empty(), "Accepted unknown fields: {accepted:?}");
+    }
+
+    #[test]
+    fn strict_v2_complete_documents_and_explicit_nulls_round_trip() {
+        for target in schema_targets() {
+            for populated in [false, true] {
+                let mut settings = schema_document(target.clone()).envelope.settings;
+                if populated {
+                    settings.last_sync_timestamp = Some(123456);
+                    settings.apps[0].path = Some(r"C:\Games\schema-game.exe".into());
+                    settings.apps[0].steam_id = Some("123".into());
+                    settings.apps[0].launcher = Some("Test launcher".into());
+                }
+                let fixture = Fixture::new();
+                let mut storage = fixture.open();
+                let document = committed(storage.install(settings.clone(), None, true));
+                let decoded = Document::decode(document.bytes.clone()).unwrap();
+                assert_eq!(decoded.envelope, document.envelope);
+                assert_eq!(decoded.bytes, document.bytes);
+                let intent = Intent {
+                    protocol_version: 1,
+                    candidate: document.envelope.clone(),
+                    operation: Operation::Install {
+                        source: None,
+                        preserved: Vec::new(),
+                    },
+                };
+                let decoded: Intent = serde_json::from_slice(&json_bytes(&intent).unwrap()).unwrap();
+                decoded.validate().unwrap();
+                let before = stored_evidence(&storage);
+                let report = storage.load();
+                assert_eq!(report.mode, ConfigMode::Ready);
+                assert_eq!(report.document.unwrap().envelope.settings, settings);
+                assert_eq!(stored_evidence(&storage), before);
+            }
+        }
+    }
+
+    #[test]
+    fn strict_v2_artifacts_cannot_be_advertised_or_installed_as_recovery_sources() {
+        for role in ["checkpoint", "stage", "source", "quarantine", "displaced", "unknown"] {
+            let previous = schema_document(TargetMonitor::All);
+            let current = changed(&previous);
+            let value = serde_json::to_value(&previous.envelope).unwrap();
+            for malformed in [
+                without_field(&value, "/settings", "last_sync_timestamp"),
+                with_unknown_field(&value, "/settings/apps/0"),
+            ] {
+                let fixture = Fixture::new();
+                let mut storage = fixture.open();
+                let name = match role {
+                    "checkpoint" => checkpoint_name(
+                        &previous.envelope.transaction_id,
+                        &current.envelope.transaction_id,
+                    ),
+                    "stage" => stage_name(&previous.envelope.transaction_id),
+                    "displaced" => displaced_name(&previous.envelope.transaction_id),
+                    _ => format!("config-v2.{role}-{}.json", Uuid::new_v4()),
+                };
+                let bytes = serde_json::to_vec(&malformed).unwrap();
+                write_new(&storage.path(&name), &bytes).unwrap();
+                if matches!(role, "checkpoint" | "source") {
+                    write_new(&storage.main_path(), &current.bytes).unwrap();
+                }
+                let before = stored_evidence(&storage);
+                let report = storage.load();
+                assert_eq!(report.mode, ConfigMode::RecoveryRequired, "{role}");
+                assert!(storage.candidates.values().all(|candidate| candidate.name != name));
+                let source = InstallSource::Artifact { name, bytes };
+                assert!(source_settings(&source).is_err(), "{role}");
+                assert!(matches!(
+                    storage.install(previous.envelope.settings.clone(), Some(source), false),
+                    StoreOutcome::Blocked(_)
+                ), "{role}");
+                assert_eq!(stored_evidence(&storage), before, "{role}");
+            }
+        }
+    }
+
+    #[test]
+    fn strict_v2_journal_candidates_and_nullable_source_must_be_complete() {
+        let document = schema_document(TargetMonitor::All);
+        let intent = Intent {
+            protocol_version: 1,
+            candidate: document.envelope.clone(),
+            operation: Operation::Install {
+                source: None,
+                preserved: Vec::new(),
+            },
+        };
+        let value = serde_json::to_value(&intent).unwrap();
+        for malformed in [
+            without_field(&value, "/candidate/settings", "auto_detect_new_games"),
+            without_field(&value, "/candidate/settings", "last_sync_timestamp"),
+            without_field(&value, "/candidate/settings/apps/0", "path"),
+            with_unknown_field(&value, "/candidate/settings"),
+            with_unknown_field(&value, "/candidate/settings/apps/0"),
+            with_unknown_field(&value, "/candidate/settings/target_monitor"),
+            without_field(&value, "/operation", "source"),
+        ] {
+            let fixture = Fixture::new();
+            let mut storage = fixture.open();
+            write_new(&storage.main_path(), &document.bytes).unwrap();
+            write_new(
+                &storage.path(&intent_name(&document.envelope.transaction_id)),
+                &serde_json::to_vec(&malformed).unwrap(),
+            )
+            .unwrap();
+            let before = stored_evidence(&storage);
+            let report = storage.load();
+            assert_eq!(report.mode, ConfigMode::RecoveryRequired);
+            assert!(report.document.is_none());
+            assert_eq!(stored_evidence(&storage), before);
+        }
+    }
+
+    #[test]
+    fn strict_v2_journal_predecessors_and_artifact_sources_cannot_bypass_validation() {
+        let previous = schema_document(TargetMonitor::All);
+        let value = serde_json::to_value(&previous.envelope).unwrap();
+        for malformed in [
+            without_field(&value, "/settings", "last_sync_timestamp"),
+            with_unknown_field(&value, "/settings/apps/0"),
+        ] {
+            for replacing in [false, true] {
+                let fixture = Fixture::new();
+                let mut storage = fixture.open();
+                let candidate = if replacing {
+                    changed(&previous)
+                } else {
+                    Document::fresh(previous.envelope.settings.clone()).unwrap()
+                };
+                let bytes = serde_json::to_vec(&malformed).unwrap();
+                let operation = if replacing {
+                    let checkpoint = checkpoint_name(
+                        &previous.envelope.transaction_id,
+                        &candidate.envelope.transaction_id,
+                    );
+                    write_new(&storage.path(&checkpoint), &bytes).unwrap();
+                    Operation::Replace { predecessor: bytes }
+                } else {
+                    let name = storage.fresh_name("source").unwrap();
+                    write_new(&storage.path(&name), &bytes).unwrap();
+                    Operation::Install {
+                        source: Some(InstallSource::Artifact { name, bytes }),
+                        preserved: Vec::new(),
+                    }
+                };
+                let intent = Intent {
+                    protocol_version: 1,
+                    candidate: candidate.envelope.clone(),
+                    operation,
+                };
+                write_new(&storage.main_path(), &candidate.bytes).unwrap();
+                write_new(
+                    &storage.path(&completed_name(&candidate.envelope.transaction_id)),
+                    &json_bytes(&intent).unwrap(),
+                )
+                .unwrap();
+                let before = stored_evidence(&storage);
+                let report = storage.load();
+                assert_eq!(report.mode, ConfigMode::RecoveryRequired);
+                assert!(report.document.is_none());
+                assert_eq!(stored_evidence(&storage), before);
+            }
+        }
     }
 
     #[test]
