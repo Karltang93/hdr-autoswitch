@@ -1,4 +1,4 @@
-use crate::config_v2::{
+use crate::config::{
     decode_legacy, AppConfig, ConfigMode, HdrApp, HdrType, RecoveryCandidate, SwitchMethod,
     TargetMonitor,
 };
@@ -896,6 +896,14 @@ impl Storage {
         ))
     }
 
+    pub fn verify_unchanged(&self, predecessor: &Document) -> Result<(), String> {
+        self.ensure_no_active_artifacts()?;
+        if let Some(issue) = self.unsupported_artifacts(&self.entries()?)? {
+            return Err(issue);
+        }
+        self.exact(MAIN, &predecessor.bytes)
+    }
+
     pub fn commit(&mut self, predecessor: &Document, candidate: Document) -> StoreOutcome {
         match self.commit_inner(predecessor, candidate) {
             Ok(outcome) => outcome,
@@ -1728,7 +1736,7 @@ fn move_absent(_: &Path, _: &Path) -> Result<(), String> {
 #[cfg(all(test, windows))]
 mod tests {
     use super::*;
-    use crate::config_v2::{HdrApp, HdrType, TargetMonitor};
+    use crate::config::{HdrApp, HdrType, TargetMonitor};
     use tempfile::TempDir;
 
     struct Fixture {

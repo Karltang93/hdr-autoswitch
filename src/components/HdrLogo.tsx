@@ -1,22 +1,26 @@
 import React from 'react';
+import type { HdrStatePayload } from '../types';
 
 interface HdrLogoProps {
   className?: string;
-  active?: boolean;
+  mode?: HdrStatePayload['scope_hdr_state'];
   size?: number;
 }
 
 export const HdrLogo: React.FC<HdrLogoProps> = ({
   className = '',
-  active = false,
+  mode = 'unknown',
   size = 32,
 }) => {
+  const active = mode === 'hdr';
+  const tone = mode === 'mixed' ? '#fbbf24' : mode === 'unknown' ? '#94a3b8' : '#38bdf8';
   return (
     <div
       style={{ width: size, height: size }}
       className={`relative flex items-center justify-center shrink-0 ${className}`}
     >
       <svg
+        data-hdr-logo={mode}
         viewBox="0 0 100 100"
         width={size}
         height={size}
@@ -67,7 +71,8 @@ export const HdrLogo: React.FC<HdrLogoProps> = ({
         {/* Outer Rhombus / Geometric Diamond */}
         <polygon
           points="50,6 94,50 50,94 6,50"
-          stroke={active ? 'url(#hdrDiamondGrad)' : 'url(#sdrDiamondGrad)'}
+          stroke={active ? 'url(#hdrDiamondGrad)' : mode === 'sdr' ? 'url(#sdrDiamondGrad)' : tone}
+          strokeDasharray={mode === 'unknown' ? '5 4' : undefined}
           strokeWidth="2.5"
           fill={active ? 'rgba(15, 23, 42, 0.7)' : 'rgba(15, 23, 42, 0.6)'}
           filter={active ? 'url(#logoGlow)' : undefined}
@@ -90,13 +95,13 @@ export const HdrLogo: React.FC<HdrLogoProps> = ({
           cx="50"
           cy="50"
           r="19"
-          stroke={active ? 'url(#hdrDiamondGrad)' : '#94a3b8'}
+          stroke={active ? 'url(#hdrDiamondGrad)' : tone}
           strokeWidth="1.8"
           fill="rgba(6, 9, 15, 0.85)"
         />
 
         {/* Geometric Camera Iris Aperture Blades */}
-        <g stroke={active ? 'url(#irisGrad)' : '#94a3b8'} strokeWidth="1.4" strokeLinecap="round">
+        <g stroke={active ? 'url(#irisGrad)' : tone} strokeWidth="1.4" strokeLinecap="round">
           <path d="M 50 31 L 59 44" />
           <path d="M 66 40 L 61 56" />
           <path d="M 66 59 L 52 66" />
@@ -110,7 +115,7 @@ export const HdrLogo: React.FC<HdrLogoProps> = ({
           cx="50"
           cy="50"
           r={active ? '5' : '3.5'}
-          fill={active ? '#ffffff' : '#38bdf8'}
+          fill={active ? '#ffffff' : tone}
           filter={active ? 'url(#logoGlow)' : undefined}
           className={active ? 'animate-pulse' : ''}
         />

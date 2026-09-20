@@ -62,7 +62,7 @@ pub fn scan_installed_games() -> Vec<HdrApp> {
 // Native File Dialog & Path Inspection
 // --------------------------------------------------------------------------------------
 
-pub fn pick_game_exe_dialog() -> Result<Option<PickedGameInfo>, String> {
+pub fn pick_game_exe_dialog(_czech: bool) -> Result<Option<PickedGameInfo>, String> {
     let file = rfd::FileDialog::new()
         .add_filter("Executable (*.exe)", &["exe"])
         .set_title("Vybrat herní soubor (.exe) / Select Game Executable")
@@ -1246,6 +1246,5 @@ mod tests {
         assert!(by_re7.is_some(), "Should find Resident Evil 7 by re7.exe");
     }
 }
-
 
 
