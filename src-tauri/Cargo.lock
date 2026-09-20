@@ -4156,6 +4156,8 @@ dependencies = [
  "tauri-plugin-autostart",
  "tauri-plugin-notification",
  "tauri-plugin-opener",
+ "tempfile",
+ "uuid",
  "windows 0.62.2",
 ]
 

@@ -1,4 +1,6 @@
 mod config;
+mod config_storage;
+mod config_v2;
 mod database;
 mod display;
 mod monitor_hook;
