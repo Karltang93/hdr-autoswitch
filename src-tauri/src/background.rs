@@ -59,6 +59,13 @@ pub(crate) fn publish_enrichment_result(
 }
 
 impl BackgroundWork {
+    pub fn disabled() -> Self {
+        Self {
+            cancelled: Arc::new(AtomicBool::new(true)),
+            task: Mutex::new(None),
+        }
+    }
+
     pub fn start(
         manager: &Arc<ConfigManager>,
         monitor_service: Arc<MonitorService>,

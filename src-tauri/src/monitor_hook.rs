@@ -32,6 +32,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 
 const SHUTDOWN_ATTEMPT_BUDGET: usize = 32;
+const FOREGROUND_WATCHDOG_INTERVAL: Duration = Duration::from_secs(1);
 
 #[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
 #[serde(tag = "status", rename_all = "snake_case")]
@@ -429,7 +430,10 @@ fn foreground_pid() -> u32 {
 }
 
 fn observe_foreground() -> Result<Option<TrackedProcess>, String> {
-    let pid = foreground_pid();
+    observe_foreground_pid(foreground_pid())
+}
+
+fn observe_foreground_pid(pid: u32) -> Result<Option<TrackedProcess>, String> {
     if pid == 0 {
         return Ok(None);
     }
@@ -551,6 +555,34 @@ struct Debounce {
     generation: u64,
     process: ProcessIdentity,
     seconds: u64,
+}
+
+fn actor_wait_timeout(debounce: Option<Debounce>, now: Instant) -> Duration {
+    debounce
+        .map(|timer| {
+            timer
+                .deadline
+                .saturating_duration_since(now)
+                .min(FOREGROUND_WATCHDOG_INTERVAL)
+        })
+        .unwrap_or(FOREGROUND_WATCHDOG_INTERVAL)
+}
+
+fn take_expired_debounce(debounce: &mut Option<Debounce>, now: Instant) -> Option<Debounce> {
+    if debounce.is_some_and(|timer| timer.deadline <= now) {
+        debounce.take()
+    } else {
+        None
+    }
+}
+
+fn foreground_watchdog_changed(last_pid: &mut u32, current_pid: u32) -> bool {
+    if *last_pid == current_pid {
+        false
+    } else {
+        *last_pid = current_pid;
+        true
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -744,6 +776,7 @@ struct Actor {
     tracked: Option<TrackedProcess>,
     watcher: Option<ProcessWatcher>,
     debounce: Option<Debounce>,
+    last_foreground_pid: u32,
     last_outcomes: Vec<MonitorOutcome>,
 }
 
@@ -757,6 +790,7 @@ impl Actor {
             tracked: None,
             watcher: None,
             debounce: None,
+            last_foreground_pid: u32::MAX,
             last_outcomes: Vec::new(),
         }
     }
@@ -789,18 +823,23 @@ impl Actor {
                 }
                 continue;
             }
-            let received = if let Some(timer) = self.debounce {
-                receiver.recv_timeout(timer.deadline.saturating_duration_since(Instant::now()))
-            } else {
-                receiver.recv().map_err(|_| RecvTimeoutError::Disconnected)
-            };
+            let received = receiver.recv_timeout(actor_wait_timeout(self.debounce, Instant::now()));
             let command = match received {
                 Ok(command) => command,
                 Err(RecvTimeoutError::Timeout) => {
-                    let expired = self.debounce.take();
+                    let now = Instant::now();
+                    let expired = take_expired_debounce(&mut self.debounce, now);
                     if self.events.admitted.load(Ordering::Acquire) {
-                        let _ = self.observe(expired, true);
-                        self.publish();
+                        let current_pid = foreground_pid();
+                        if expired.is_some()
+                            || foreground_watchdog_changed(
+                                &mut self.last_foreground_pid,
+                                current_pid,
+                            )
+                        {
+                            let _ = self.observe(expired, true);
+                            self.publish();
+                        }
                     }
                     continue;
                 }
@@ -1009,7 +1048,9 @@ impl Actor {
                 return Err(error);
             }
         };
-        let foreground = match observe_foreground() {
+        let current_pid = foreground_pid();
+        self.last_foreground_pid = current_pid;
+        let foreground = match observe_foreground_pid(current_pid) {
             Ok(foreground) => foreground,
             Err(error) => {
                 self.controller.warn(error);
@@ -1545,6 +1586,62 @@ mod tests {
     }
 
     #[test]
+    fn safe_test_mode_blocks_manual_control_without_granting_consent() {
+        for mode in [
+            ConfigMode::FirstRun,
+            ConfigMode::ImportAvailable,
+            ConfigMode::RecoveryRequired,
+            ConfigMode::UnsupportedSchema,
+            ConfigMode::Ready,
+            ConfigMode::Unavailable,
+        ] {
+            let fixture = manual_fixture(mode);
+            let before = fixture.manager.snapshot().unwrap();
+            let blocked = crate::reconcile_controller(&fixture.manager, true).unwrap();
+            assert_eq!(blocked.controller_issue.as_deref(), Some(crate::SAFE_TEST_ISSUE));
+            assert_eq!(
+                manual_admission(&blocked, true),
+                ManualControl::Blocked { reason: crate::SAFE_TEST_ISSUE.into() }
+            );
+            assert_eq!(
+                automatic_pause(&blocked, "game.exe", &blocked.context_token).as_deref(),
+                Some(crate::SAFE_TEST_ISSUE)
+            );
+            let (service, receiver) = idle_service(fixture.manager.clone());
+            for scope in [
+                TargetMonitor::All,
+                TargetMonitor::Monitor {
+                    device_path: "chosen".into(),
+                    display_name: "Chosen display".into(),
+                },
+            ] {
+                for enabled in [true, false] {
+                    assert_eq!(
+                        service.manual_set(scope.clone(), enabled).err().as_deref(),
+                        Some(crate::SAFE_TEST_ISSUE)
+                    );
+                }
+            }
+            assert!(receiver.try_recv().is_err());
+            let mut authority = fixture.authority(OperationKind::Manual);
+            for enabled in [true, false] {
+                let mut attempt = mock_attempt();
+                attempt.requested_hdr = enabled;
+                let error = authority
+                    .authorize(&attempt, &mut || panic!("Safe test mode issued native HDR"))
+                    .unwrap_err();
+                assert_eq!(error.kind, FailureKind::AuthorityDenied);
+                assert_eq!(error.message, crate::SAFE_TEST_ISSUE);
+            }
+            assert_eq!(fixture.manager.snapshot().unwrap(), blocked);
+            assert_eq!(blocked.settings, before.settings);
+            assert_eq!(blocked.mode, before.mode);
+            assert_eq!(blocked.revision, before.revision);
+            assert_eq!(blocked.context_token, before.context_token);
+        }
+    }
+
+    #[test]
     fn manual_requests_enqueue_in_click_order_without_waiting_for_the_actor() {
         let fixture = GateFixture::new();
         let (service, receiver) = idle_service(fixture.manager.clone());
@@ -1851,6 +1948,54 @@ mod tests {
         assert!(!service.events.foreground_pending.load(Ordering::Acquire));
         assert!(automatic_pause(&current, "game.exe", &before.context_token).is_some());
         assert_eq!(std::fs::read(&before.config_path).unwrap(), conflicting_bytes);
+    }
+
+    #[test]
+    fn foreground_watchdog_only_runs_full_observation_after_a_pid_change() {
+        let mut last_pid = u32::MAX;
+        assert!(foreground_watchdog_changed(&mut last_pid, 42));
+        assert_eq!(last_pid, 42);
+        assert!(!foreground_watchdog_changed(&mut last_pid, 42));
+        assert!(foreground_watchdog_changed(&mut last_pid, 7));
+        assert_eq!(last_pid, 7);
+    }
+
+    #[test]
+    fn watchdog_wakeup_does_not_expire_a_later_debounce() {
+        let now = Instant::now();
+        let mut debounce = Some(Debounce {
+            deadline: now + Duration::from_secs(5),
+            generation: 1,
+            process: ProcessIdentity {
+                pid: 2,
+                created_at: 3,
+            },
+            seconds: 5,
+        });
+        assert_eq!(
+            actor_wait_timeout(debounce, now),
+            FOREGROUND_WATCHDOG_INTERVAL
+        );
+        assert!(take_expired_debounce(&mut debounce, now + FOREGROUND_WATCHDOG_INTERVAL).is_none());
+        assert!(take_expired_debounce(&mut debounce, now + Duration::from_secs(5)).is_some());
+    }
+
+    #[test]
+    fn shorter_debounce_precedes_the_watchdog_deadline() {
+        let now = Instant::now();
+        let debounce = Some(Debounce {
+            deadline: now + Duration::from_millis(200),
+            generation: 1,
+            process: ProcessIdentity {
+                pid: 2,
+                created_at: 3,
+            },
+            seconds: 0,
+        });
+        assert_eq!(
+            actor_wait_timeout(debounce, now),
+            Duration::from_millis(200)
+        );
     }
 
     #[test]
