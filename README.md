@@ -223,8 +223,11 @@ cargo test --manifest-path .\src-tauri\Cargo.toml --lib
 ```
 
 Rust tests use temporary settings directories and mocked display operations.
-The Node tests cover mutation ordering/history fences and mixed, unavailable,
-and deferred HDR scope rendering.
+The Node tests cover mutation ordering/history fences and English/Czech rendering,
+including every shipped catalog description. Frontend labels/descriptions, tray
+labels, and file-picker titles follow the selected language; game names and
+unknown external catalog descriptions are preserved. Native diagnostic details
+retain their backend or Windows language.
 
 Run the isolated NSIS source/model regressions with `node --test .\scripts\test-nsis-uninstall.mjs`. These checks simulate sharing locks, missing files, readback failures, and recovery without executing an installer or touching Windows metadata. Template compilation and disposable-VM uninstall/upgrade qualification remain separate release gates.
 
