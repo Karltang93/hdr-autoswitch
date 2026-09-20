@@ -102,6 +102,23 @@ fn reconcile_controller(
     manager.set_controller_issue(issue)
 }
 
+fn should_start_hidden(snapshot: &ConfigSnapshot, minimized_requested: bool) -> bool {
+    minimized_requested
+        && snapshot.mode == ConfigMode::Ready
+        && snapshot.controller_issue.is_none()
+        && matches!(
+            snapshot.settings.target_monitor,
+            config::TargetMonitor::All | config::TargetMonitor::Monitor { .. }
+        )
+        && snapshot.settings.switch_method == config::SwitchMethod::Native
+}
+
+fn second_instance_requests_window(arguments: &[String]) -> bool {
+    !arguments
+        .iter()
+        .any(|argument| argument.eq_ignore_ascii_case("--minimized"))
+}
+
 pub(crate) fn show_main_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         for result in [window.unminimize(), window.show(), window.set_focus()] {
@@ -128,8 +145,10 @@ pub fn run() {
         std::process::exit(code);
     }
     let built = tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _, _| {
-            show_main_window(app);
+        .plugin(tauri_plugin_single_instance::init(|app, arguments, _| {
+            if second_instance_requests_window(&arguments) {
+                show_main_window(app);
+            }
         }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
@@ -151,21 +170,11 @@ pub fn run() {
             );
             let snapshot =
                 reconcile_controller(&config_mgr, safe_test_mode).map_err(std::io::Error::other)?;
+            let minimized_requested = std::env::args().any(|arg| arg == "--minimized")
+                || snapshot.settings.start_minimized;
+            let start_hidden = should_start_hidden(&snapshot, minimized_requested);
             if let Some(window) = app.get_webview_window("main") {
                 window.set_icon(tauri::include_image!("icons/128x128.png"))?;
-                let minimized = std::env::args().any(|arg| arg == "--minimized")
-                    || snapshot.settings.start_minimized;
-                if minimized
-                    && snapshot.mode == ConfigMode::Ready
-                    && snapshot.controller_issue.is_none()
-                    && matches!(
-                        snapshot.settings.target_monitor,
-                        config::TargetMonitor::All | config::TargetMonitor::Monitor { .. }
-                    )
-                    && snapshot.settings.switch_method == config::SwitchMethod::Native
-                {
-                    window.hide()?;
-                }
             }
             tray::setup_tray(app.handle())?;
             let monitor_service = MonitorService::new(config_mgr.clone(), app.handle().clone());
@@ -188,6 +197,9 @@ pub fn run() {
             });
             if !safe_test_mode {
                 monitor_service.start_hook();
+            }
+            if !start_hidden {
+                show_main_window(app.handle());
             }
             Ok(())
         })
@@ -233,5 +245,73 @@ pub fn run() {
             }
         }),
         Err(error) => report_startup_failure(error),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use config::{AppConfig, SwitchMethod, TargetMonitor};
+
+    fn ready_snapshot() -> ConfigSnapshot {
+        ConfigSnapshot {
+            settings: AppConfig::default(),
+            mode: ConfigMode::Ready,
+            store_id: Some("store".into()),
+            revision: "1".into(),
+            context_token: "context".into(),
+            library_generation: "1".into(),
+            control_epoch: "1".into(),
+            issue: None,
+            controller_issue: None,
+            candidates: Vec::new(),
+            config_path: "test".into(),
+        }
+    }
+
+    #[test]
+    fn valid_minimized_start_stays_hidden() {
+        assert!(should_start_hidden(&ready_snapshot(), true));
+        assert!(!should_start_hidden(&ready_snapshot(), false));
+    }
+
+    #[test]
+    fn recovery_or_incomplete_control_state_is_shown() {
+        let mut snapshot = ready_snapshot();
+        snapshot.mode = ConfigMode::RecoveryRequired;
+        assert!(!should_start_hidden(&snapshot, true));
+
+        snapshot = ready_snapshot();
+        snapshot.controller_issue = Some("controller conflict".into());
+        assert!(!should_start_hidden(&snapshot, true));
+
+        snapshot = ready_snapshot();
+        snapshot.settings.target_monitor = TargetMonitor::NeedsConfirmation {
+            legacy_runtime_id: "runtime-id".into(),
+        };
+        assert!(!should_start_hidden(&snapshot, true));
+
+        snapshot = ready_snapshot();
+        snapshot.settings.switch_method = SwitchMethod::Shortcut;
+        assert!(!should_start_hidden(&snapshot, true));
+    }
+
+    #[test]
+    fn duplicate_minimized_start_does_not_open_the_hidden_singleton() {
+        assert!(!second_instance_requests_window(&[
+            r"E:\HDR Auto-Switch\tauri-app.exe".into(),
+            "--minimized".into(),
+        ]));
+        assert!(!second_instance_requests_window(&[
+            "tauri-app.exe".into(),
+            "--MINIMIZED".into(),
+        ]));
+    }
+
+    #[test]
+    fn normal_second_instance_requests_the_existing_window() {
+        assert!(second_instance_requests_window(&[
+            r"E:\HDR Auto-Switch\tauri-app.exe".into(),
+        ]));
     }
 }
