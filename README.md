@@ -267,6 +267,12 @@ fully atomic by the application.
 
 ---
 
+## 🤝 Community & Contributors
+
+* A special thank you to **[@Karltang93](https://github.com/Karltang93)** for contributing [PR #2](https://github.com/Soptik1290/hdr-autoswitch/pull/2), resolving persistent monitor identification across restarts, transactional settings storage, and background safety hardening!
+
+---
+
 ## 📄 License
 
 Distributed under the [MIT License](LICENSE).  

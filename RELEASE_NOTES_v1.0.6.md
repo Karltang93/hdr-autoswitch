@@ -1,6 +1,6 @@
 # HDR Auto-Switch v1.0.6 — Persistent Monitor Identity & Hardened HDR Control
 
-> **Major stability and architecture release: fixes the bug where target display selection reverted to "All Monitors" after PC restart via durable Windows device-interface paths, introduces transactional schema-2 settings storage with automatic recovery, adds a 1 Hz foreground watchdog fallback, silent minimized startup, complete English/Czech localization, and full integration of the 1,027 verified PC HDR game catalog.**
+> **Major stability and architecture release: fixes the bug where target display selection reverted to "All Monitors" after PC restart via durable Windows device-interface paths, introduces transactional schema-2 settings storage with automatic recovery, adds a 1 Hz foreground watchdog fallback, silent minimized startup, complete English/Czech localization, and full integration of the 1,027 verified PC HDR game catalog. Special thanks to [@Karltang93](https://github.com/Karltang93) for contributing [PR #2](https://github.com/Soptik1290/hdr-autoswitch/pull/2)!**
 
 ---
 
@@ -48,6 +48,11 @@
   - **HDR Gamer**: Integrated calibration profiles for verified PC titles (*Ghostrunner 1 & 2*, *Mass Effect Legendary Edition*, *Gears of War 4*, *Grounded*, *Farming Simulator 22*, *Mafia III: DE*, *Psychonauts 2*, *The Quarry*, etc.).
   - **Zero Duplicates**: Complete audit eliminating trademark (`™`, `®`) and Roman numeral collisions.
   - **Console Exclusions**: Explicitly excludes console-only HDR titles (*World of Tanks*, *Ghost Recon: Wildlands*, *Homefront: The Revolution*, *State of Decay 2*), ensuring they remain in the bottom SDR section as intended.
+
+---
+
+### 💖 Special Thanks & Contributors
+* Huge thanks to **[@Karltang93](https://github.com/Karltang93)** for the outstanding work on [Pull Request #2](https://github.com/Soptik1290/hdr-autoswitch/pull/2), providing the comprehensive durable monitor identity implementation, transactional settings engine, 1 Hz foreground watchdog, and robust test suite!
 
 ---
 
