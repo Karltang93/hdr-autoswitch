@@ -106,6 +106,19 @@ Download the latest installer (`.exe` setup or `.msi`) from the [**Releases Page
 * [Rust](https://www.rust-lang.org/) (stable toolchain)
 * Windows 10 (build 19041+) or Windows 11 with an HDR-capable display
 
+### Settings Storage Foundation
+The schema-2 transactional store is compiled as `config_v2` and `config_storage`, but is not activated until caller integration. The application still uses the original `config` module and autostart plugin.
+
+Persisted schema-2 settings, app rows, and monitor targets use strict typed decoding at every document and journal-candidate entry point. All canonical fields must be present, including nullable metadata and journal install sources (explicit `null` remains valid); unknown nested fields are rejected without rewriting the evidence or advertising malformed recovery sources. Legacy import alone retains its recognized defaults, aliases, and permissive compatibility behavior.
+
+A registered recovery source that changes or becomes unreadable retires the current settings context and blocks automatic authority before recovery inventory is refreshed. Malformed, unknown, or expired candidate IDs are rejected without changing authority.
+
+Run the isolated store regressions on Windows with the Rust MSVC toolchain and cached Cargo dependencies:
+```powershell
+cargo test --manifest-path .\src-tauri\Cargo.toml --lib --offline --locked --quiet -j 2 config_
+```
+These tests use temporary directories, not the installed application's settings, and do not launch the application or change HDR state.
+
 ### Development Mode
 ```bash
 # Clone the repository
@@ -134,4 +147,3 @@ Output files will be generated in:
 
 Distributed under the [MIT License](LICENSE).  
 Developed with ❤️ for the PC and OLED gaming community.
-
