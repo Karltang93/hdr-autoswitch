@@ -1,15 +1,21 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::mem;
 use windows::Win32::Devices::Display::{
     DisplayConfigGetDeviceInfo, DisplayConfigSetDeviceInfo, GetDisplayConfigBufferSizes,
     QueryDisplayConfig, DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO,
-    DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME, DISPLAYCONFIG_DEVICE_INFO_HEADER,
-    DISPLAYCONFIG_DEVICE_INFO_SET_ADVANCED_COLOR_STATE, DISPLAYCONFIG_DEVICE_INFO_TYPE,
-    DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO, DISPLAYCONFIG_MODE_INFO, DISPLAYCONFIG_PATH_INFO,
+    DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME, DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME,
+    DISPLAYCONFIG_DEVICE_INFO_HEADER, DISPLAYCONFIG_DEVICE_INFO_SET_ADVANCED_COLOR_STATE,
+    DISPLAYCONFIG_DEVICE_INFO_TYPE, DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO, DISPLAYCONFIG_MODE_INFO,
+    DISPLAYCONFIG_PATH_INFO, DISPLAYCONFIG_PATH_SOURCE_INFO,
     DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE, DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE_0,
-    DISPLAYCONFIG_TARGET_DEVICE_NAME, QDC_ONLY_ACTIVE_PATHS,
+    DISPLAYCONFIG_SOURCE_DEVICE_NAME, DISPLAYCONFIG_TARGET_DEVICE_NAME, QDC_ONLY_ACTIVE_PATHS,
 };
 use windows::Win32::Foundation::LUID;
+use windows::Win32::Graphics::Gdi::{
+    EnumDisplayDevicesW, DISPLAY_DEVICEW, DISPLAY_DEVICE_ATTACHED_TO_DESKTOP,
+    DISPLAY_DEVICE_PRIMARY_DEVICE,
+};
 
 const ERROR_INSUFFICIENT_BUFFER: u32 = 122;
 const ENUMERATION_ATTEMPTS: usize = 3;
@@ -307,6 +313,100 @@ fn enumerate_paths() -> Result<Vec<DISPLAYCONFIG_PATH_INFO>, String> {
     })
 }
 
+fn decode_gdi_device_name(value: &[u16]) -> Result<String, String> {
+    let end = value
+        .iter()
+        .position(|&character| character == 0)
+        .ok_or_else(|| "GDI display name is not NUL-terminated".to_string())?;
+    if end == 0 {
+        return Err("Windows returned an empty GDI display name".into());
+    }
+    String::from_utf16(&value[..end]).map_err(|_| "GDI display name is not valid UTF-16".into())
+}
+
+fn primary_from_gdi_devices(
+    source_name: &[u16],
+    devices: impl IntoIterator<Item = DISPLAY_DEVICEW>,
+) -> Result<bool, String> {
+    let source_name = decode_gdi_device_name(source_name)?;
+    for device in devices {
+        let name = decode_gdi_device_name(&device.DeviceName)?;
+        if name.eq_ignore_ascii_case(&source_name) {
+            if !device
+                .StateFlags
+                .contains(DISPLAY_DEVICE_ATTACHED_TO_DESKTOP)
+            {
+                return Err(format!(
+                    "GDI display source {source_name} is no longer attached to the desktop"
+                ));
+            }
+            return Ok(device.StateFlags.contains(DISPLAY_DEVICE_PRIMARY_DEVICE));
+        }
+    }
+    Err(format!(
+        "GDI primary metadata is unavailable for display source {source_name}"
+    ))
+}
+
+fn read_source_primary(source: &DISPLAYCONFIG_PATH_SOURCE_INFO) -> Result<bool, String> {
+    let mut name = DISPLAYCONFIG_SOURCE_DEVICE_NAME {
+        header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
+            r#type: DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME,
+            size: mem::size_of::<DISPLAYCONFIG_SOURCE_DEVICE_NAME>() as u32,
+            adapterId: source.adapterId,
+            id: source.id,
+        },
+        ..Default::default()
+    };
+    let result = unsafe { DisplayConfigGetDeviceInfo(&mut name.header) };
+    if result != 0 {
+        return Err(format!(
+            "Display source GDI name query failed (Windows error {result})"
+        ));
+    }
+    let devices = (0..).map_while(|index| {
+        let mut device = DISPLAY_DEVICEW {
+            cb: mem::size_of::<DISPLAY_DEVICEW>() as u32,
+            ..Default::default()
+        };
+        unsafe { EnumDisplayDevicesW(None, index, &mut device, 0) }
+            .as_bool()
+            .then_some(device)
+    });
+    primary_from_gdi_devices(&name.viewGdiDeviceName, devices)
+}
+
+fn primary_source_labels(
+    paths: &[DISPLAYCONFIG_PATH_INFO],
+    mut read_primary: impl FnMut(&DISPLAYCONFIG_PATH_SOURCE_INFO) -> Result<bool, String>,
+    mut report_error: impl FnMut(String),
+) -> Vec<bool> {
+    let mut sources = HashMap::new();
+    paths
+        .iter()
+        .map(|path| {
+            let source = &path.sourceInfo;
+            let key = (
+                source.adapterId.LowPart,
+                source.adapterId.HighPart,
+                source.id,
+            );
+            // Clone targets share a logical source, including any failed metadata query.
+            *sources
+                .entry(key)
+                .or_insert_with(|| match read_primary(source) {
+                    Ok(is_primary) => is_primary,
+                    Err(error) => {
+                        report_error(format!(
+                            "Primary monitor label unavailable for source {key:?}: {error}"
+                        ));
+                        false
+                    }
+                })
+        })
+        .collect()
+}
+
 fn header(
     address: RuntimeAddress,
     info_type: DISPLAYCONFIG_DEVICE_INFO_TYPE,
@@ -421,8 +521,10 @@ fn read_color_state(
 impl DisplayBackend for WindowsDisplay {
     fn inventory(&mut self) -> Result<Vec<MonitorInfo>, String> {
         let paths = enumerate_paths()?;
+        let primary_labels =
+            primary_source_labels(&paths, read_source_primary, |error| eprintln!("{error}"));
         let mut monitors: Vec<MonitorInfo> = Vec::new();
-        for (index, path) in paths.into_iter().enumerate() {
+        for (index, (path, is_primary)) in paths.into_iter().zip(primary_labels).enumerate() {
             let address = RuntimeAddress {
                 adapter_id_low: path.targetInfo.adapterId.LowPart,
                 adapter_id_high: path.targetInfo.adapterId.HighPart,
@@ -460,7 +562,7 @@ impl DisplayBackend for WindowsDisplay {
                 is_hdr_enabled: enabled,
                 hdr_state_known: state_error.is_none(),
                 state_error,
-                is_primary: index == 0,
+                is_primary,
             });
         }
         for index in 0..monitors.len() {
@@ -827,6 +929,149 @@ pub(crate) mod tests {
     use super::*;
     use std::collections::VecDeque;
 
+    fn display_path(source_id: u32, target_id: u32) -> DISPLAYCONFIG_PATH_INFO {
+        let mut path = DISPLAYCONFIG_PATH_INFO::default();
+        path.sourceInfo.adapterId = LUID {
+            LowPart: 20,
+            HighPart: -1,
+        };
+        path.sourceInfo.id = source_id;
+        path.targetInfo.adapterId = LUID {
+            LowPart: 10,
+            HighPart: 0,
+        };
+        path.targetInfo.id = target_id;
+        path
+    }
+
+    fn gdi_device(name: &str, primary: bool) -> DISPLAY_DEVICEW {
+        let mut device = DISPLAY_DEVICEW {
+            cb: mem::size_of::<DISPLAY_DEVICEW>() as u32,
+            StateFlags: if primary {
+                DISPLAY_DEVICE_ATTACHED_TO_DESKTOP | DISPLAY_DEVICE_PRIMARY_DEVICE
+            } else {
+                DISPLAY_DEVICE_ATTACHED_TO_DESKTOP
+            },
+            ..Default::default()
+        };
+        let name: Vec<_> = name.encode_utf16().collect();
+        assert!(name.len() < device.DeviceName.len());
+        device.DeviceName[..name.len()].copy_from_slice(&name);
+        device
+    }
+
+    #[test]
+    fn primary_source_need_not_be_the_first_path_or_gdi_device() {
+        let secondary = gdi_device(r"\\.\DISPLAY1", false);
+        let primary = gdi_device(r"\\.\DISPLAY2", true);
+        let labels = primary_source_labels(
+            &[display_path(7, 1), display_path(9, 44)],
+            |source| {
+                let name = if source.id == 9 {
+                    gdi_device(r"\\.\display2", false).DeviceName
+                } else {
+                    secondary.DeviceName
+                };
+                primary_from_gdi_devices(&name, [secondary, primary])
+            },
+            |error| panic!("Unexpected primary metadata failure: {error}"),
+        );
+        assert_eq!(labels, [false, true]);
+    }
+
+    #[test]
+    fn primary_labels_follow_sources_when_paths_are_reordered() {
+        for paths in [
+            [display_path(7, 1), display_path(9, 44)],
+            [display_path(9, 44), display_path(7, 1)],
+        ] {
+            let labels = primary_source_labels(
+                &paths,
+                |source| Ok(source.id == 9),
+                |error| panic!("Unexpected primary metadata failure: {error}"),
+            );
+            let labelled_targets: Vec<_> = paths
+                .iter()
+                .zip(labels)
+                .filter_map(|(path, primary)| primary.then_some(path.targetInfo.id))
+                .collect();
+            assert_eq!(labelled_targets, [44]);
+        }
+    }
+
+    #[test]
+    fn clone_targets_share_one_primary_source_metadata_query() {
+        let mut queries = Vec::new();
+        let labels = primary_source_labels(
+            &[display_path(7, 1), display_path(9, 44), display_path(9, 45)],
+            |source| {
+                assert!(!queries.contains(&source.id));
+                queries.push(source.id);
+                Ok(source.id == 9)
+            },
+            |error| panic!("Unexpected primary metadata failure: {error}"),
+        );
+        assert_eq!(labels, [false, true, true]);
+        assert_eq!(queries, [7, 9]);
+    }
+
+    #[test]
+    fn source_ids_on_different_adapters_do_not_share_primary_metadata() {
+        let primary = display_path(9, 44);
+        let mut other_low = display_path(9, 45);
+        other_low.sourceInfo.adapterId.LowPart = 21;
+        let mut other_high = display_path(9, 46);
+        other_high.sourceInfo.adapterId.HighPart = 0;
+        let mut queries = 0;
+        let labels = primary_source_labels(
+            &[primary, other_low, other_high],
+            |source| {
+                queries += 1;
+                Ok(source.adapterId.LowPart == 20 && source.adapterId.HighPart == -1)
+            },
+            |error| panic!("Unexpected primary metadata failure: {error}"),
+        );
+        assert_eq!(labels, [true, false, false]);
+        assert_eq!(queries, 3);
+    }
+
+    #[test]
+    fn absent_or_failing_primary_metadata_omits_badges_and_reports_diagnostics() {
+        let name = gdi_device(r"\\.\DISPLAY1", false).DeviceName;
+        let mut diagnostics = Vec::new();
+        let labels = primary_source_labels(
+            &[display_path(7, 1), display_path(9, 44), display_path(9, 45)],
+            |source| {
+                if source.id == 7 {
+                    primary_from_gdi_devices(&name, [])
+                } else {
+                    Err("Display source GDI name query failed (Windows error 5)".into())
+                }
+            },
+            |error| diagnostics.push(error),
+        );
+        assert_eq!(labels, [false, false, false]);
+        assert_eq!(diagnostics.len(), 2);
+        assert!(diagnostics[0].contains("GDI primary metadata is unavailable"));
+        assert!(diagnostics[1].contains("Windows error 5"));
+    }
+
+    #[test]
+    fn invalid_missing_or_detached_gdi_primary_metadata_is_rejected() {
+        let primary = gdi_device(r"\\.\DISPLAY2", true);
+        let name = primary.DeviceName;
+        assert!(primary_from_gdi_devices(&[0; 32], [primary]).is_err());
+        assert!(primary_from_gdi_devices(&[0xd800, 0], [primary]).is_err());
+        assert!(primary_from_gdi_devices(&[65; 32], [primary]).is_err());
+        assert!(primary_from_gdi_devices(&name, [gdi_device(r"\\.\DISPLAY1", true)]).is_err());
+        let mut detached = primary;
+        detached.StateFlags = DISPLAY_DEVICE_PRIMARY_DEVICE;
+        assert!(primary_from_gdi_devices(&name, [detached]).is_err());
+        let mut malformed = primary;
+        malformed.DeviceName[0] = 0xd800;
+        assert!(primary_from_gdi_devices(&name, [malformed]).is_err());
+    }
+
     pub(crate) fn monitor(path: &str, target: u32, enabled: bool) -> MonitorInfo {
         MonitorInfo {
             id: path.into(),
@@ -927,6 +1172,66 @@ pub(crate) mod tests {
                 after_set(&mut self.monitors);
             }
             result
+        }
+    }
+
+    #[test]
+    fn primary_labels_do_not_change_identity_based_hdr_targeting() {
+        for metadata_available in [true, false] {
+            let paths = [display_path(7, 1), display_path(9, 44)];
+            let mut diagnostics = Vec::new();
+            let labels = primary_source_labels(
+                &paths,
+                |source| {
+                    if metadata_available {
+                        Ok(source.id == 7)
+                    } else {
+                        Err("Primary metadata query failed".into())
+                    }
+                },
+                |error| diagnostics.push(error),
+            );
+            let mut monitors = vec![monitor("primary", 1, false), monitor("selected", 44, false)];
+            for (monitor, is_primary) in monitors.iter_mut().zip(labels) {
+                monitor.is_primary = is_primary;
+                assert_eq!(monitor.identity_status, TargetStatus::Ready);
+                assert!(monitor.identity_error.is_none());
+                assert!(monitor.hdr_state_known);
+                assert!(monitor.state_error.is_none());
+            }
+            assert_eq!(monitors[0].is_primary, metadata_available);
+            assert!(!monitors[1].is_primary);
+            assert_eq!(diagnostics.len(), if metadata_available { 0 } else { 2 });
+            let selected_address = monitors[1].address();
+            let target = crate::config_v2::TargetMonitor::Monitor {
+                device_path: "selected".into(),
+                display_name: monitors[0].name.clone(),
+            };
+            assert!(!monitor_is_selected(&monitors[0], &target));
+            assert!(monitor_is_selected(&monitors[1], &target));
+            let mut backend = MockDisplay::new(monitors);
+            let result = set_hdr(
+                &mut backend,
+                "SELECTED",
+                true,
+                NativePurpose::Manual,
+                |_| Ok(()),
+            );
+            assert_eq!(result.outcome, OutcomeKind::Changed);
+            assert_eq!(backend.writes, [(selected_address, NativeApi::Hdr, true)]);
+            assert!(!backend.monitors[0].is_hdr_enabled);
+            assert_eq!(
+                set_hdr(
+                    &mut backend,
+                    "missing",
+                    true,
+                    NativePurpose::Manual,
+                    |_| Ok(())
+                )
+                .failure,
+                Some(FailureKind::Disconnected)
+            );
+            assert_eq!(backend.writes.len(), 1);
         }
     }
 
