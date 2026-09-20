@@ -1,8 +1,9 @@
 import React, { useRef, useState } from 'react';
 import { MonitorInfo, HdrStatePayload, ActivityLogEntry, RecentGameSession, TargetMonitor, ManualSetResult } from '../types';
 import { invoke } from '@tauri-apps/api/core';
-import { activityMessage, describeHdrScope } from '../telemetryText';
+import { activityMessage, describeHdrScope, telemetryTime } from '../telemetryText';
 import { manualScopeAvailable, monitorMode, monitorReady, scopeVisuals } from '../displayState';
+import { launcherName } from '../catalogNotes';
 import {
   Monitor,
   ShieldCheck,
@@ -45,7 +46,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   controlAvailable,
   onControlError,
 }) => {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [toggling, setToggling] = useState(false);
   const manualPending = useRef(false);
 
@@ -376,7 +377,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   {getTierBadge()}
                   {game.launcher && (
                     <span className="px-1 py-0.2 text-[8px] font-mono text-[#b5a9ac] bg-black/60 border border-white/10 uppercase">
-                      {game.launcher}
+                      {launcherName(game.launcher, lang)}
                     </span>
                   )}
                 </div>
@@ -407,7 +408,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     </div>
 
                     <div className="flex items-center justify-between text-[9px] text-[#8a7f81]">
-                      <span>{game.last_switched_at}</span>
+                      <span>{telemetryTime(game.last_switched_at, lang, t)}</span>
                       <span className="text-[#5accf5]">{t.recentHdrOk}</span>
                     </div>
                   </div>
@@ -436,7 +437,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               key={log.id}
               className="flex items-center gap-2 text-xs font-mono transition-colors hover:text-white relative z-10"
             >
-              <span className="text-[#8a7f81] shrink-0">[{log.timestamp}]</span>
+              <span className="text-[#8a7f81] shrink-0">[{telemetryTime(log.timestamp, lang, t)}]</span>
               <span
                 className={`w-1.5 h-1.5 shrink-0 ${
                   log.type === 'hdr_on'

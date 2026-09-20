@@ -62,10 +62,10 @@ pub fn scan_installed_games() -> Vec<HdrApp> {
 // Native File Dialog & Path Inspection
 // --------------------------------------------------------------------------------------
 
-pub fn pick_game_exe_dialog(_czech: bool) -> Result<Option<PickedGameInfo>, String> {
+pub fn pick_game_exe_dialog(czech: bool) -> Result<Option<PickedGameInfo>, String> {
     let file = rfd::FileDialog::new()
-        .add_filter("Executable (*.exe)", &["exe"])
-        .set_title("Vybrat herní soubor (.exe) / Select Game Executable")
+        .add_filter(if czech { "Spustitelný soubor (*.exe)" } else { "Executable (*.exe)" }, &["exe"])
+        .set_title(if czech { "Vybrat herní soubor (.exe)" } else { "Select Game Executable (.exe)" })
         .pick_file();
 
     match file {
@@ -80,16 +80,16 @@ pub fn pick_game_exe_dialog(_czech: bool) -> Result<Option<PickedGameInfo>, Stri
 pub fn inspect_exe_path(path: &str) -> Result<PickedGameInfo, String> {
     let p = PathBuf::from(path);
     if !p.exists() || !p.is_file() {
-        return Err("Vybraný soubor neexistuje / Selected file does not exist".to_string());
+        return Err("Selected file does not exist.".to_string());
     }
 
     let exe_name = match p.file_name() {
         Some(n) => n.to_string_lossy().to_string(),
-        None => return Err("Neplatný název souboru / Invalid file name".to_string()),
+        None => return Err("Invalid file name.".to_string()),
     };
 
     if !exe_name.to_lowercase().ends_with(".exe") {
-        return Err("Vybraný soubor není spustitelný .exe / Selected file is not an .exe".to_string());
+        return Err("Selected file is not an .exe.".to_string());
     }
 
     let catalog = database::get_full_catalog();

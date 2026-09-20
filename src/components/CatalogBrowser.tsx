@@ -3,6 +3,7 @@ import { CatalogEntry, AppConfig, HdrApp, SupportTier } from '../types';
 import { invoke } from '@tauri-apps/api/core';
 import { configClient } from '../useConfig';
 import { findTrackedApp } from '../libraryState';
+import { catalogNotes } from '../catalogNotes';
 import {
   Search,
   CheckCircle2,
@@ -27,7 +28,7 @@ interface CatalogBrowserProps {
 export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
   config,
 }) => {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
@@ -267,7 +268,7 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
                     {item.notes && (
                       <>
                         <span>•</span>
-                        <span className="truncate max-w-[400px]">{item.notes}</span>
+                        <span className="truncate max-w-[400px]">{catalogNotes(item.notes, lang)}</span>
                       </>
                     )}
                   </div>
