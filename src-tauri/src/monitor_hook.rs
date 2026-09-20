@@ -33,11 +33,44 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 const SHUTDOWN_ATTEMPT_BUDGET: usize = 32;
 
+#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum ManualControl {
+    Available,
+    Blocked { reason: String },
+}
+
+impl ManualControl {
+    fn require(self) -> Result<(), String> {
+        match self {
+            Self::Available => Ok(()),
+            Self::Blocked { reason } => Err(reason),
+        }
+    }
+}
+
+fn manual_admission(snapshot: &ConfigSnapshot, admitted: bool) -> ManualControl {
+    let reason = if !admitted {
+        Some("The HDR controller is shutting down".into())
+    } else if let Some(issue) = &snapshot.controller_issue {
+        Some(issue.clone())
+    } else if snapshot.mode == ConfigMode::Unavailable {
+        Some("Configuration authority is unavailable; manual HDR is blocked".into())
+    } else {
+        None
+    };
+    match reason {
+        Some(reason) => ManualControl::Blocked { reason },
+        None => ManualControl::Available,
+    }
+}
+
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct HdrStatePayload {
     /// Observed frozen activation scope, or the saved scope when no activation exists.
     pub is_hdr_active: bool,
     pub scope_hdr_state: ScopeHdrState,
+    pub manual_control: ManualControl,
     pub current_app_name: Option<String>,
     pub current_exe: Option<String>,
     pub switched_by_app: bool,
@@ -60,6 +93,7 @@ impl HdrStatePayload {
         Self {
             is_hdr_active: false,
             scope_hdr_state: ScopeHdrState::Unknown,
+            manual_control: ManualControl::Blocked { reason: message.clone() },
             current_app_name: None,
             current_exe: None,
             switched_by_app: false,
@@ -137,11 +171,28 @@ struct Threads {
 }
 
 pub struct MonitorService {
+    config: Arc<ConfigManager>,
     events: EventSink,
     threads: Mutex<Threads>,
 }
 
 static HOOK_EVENTS: OnceLock<Mutex<Option<EventSink>>> = OnceLock::new();
+
+pub struct PendingRequest<T> {
+    receiver: Receiver<Result<T, String>>,
+}
+
+impl<T: Send + 'static> PendingRequest<T> {
+    pub async fn resolve(self) -> Result<T, String> {
+        tauri::async_runtime::spawn_blocking(move || {
+            self.receiver
+                .recv()
+                .map_err(|_| "The HDR controller stopped before responding".to_string())?
+        })
+        .await
+        .map_err(|error| format!("Cannot receive HDR controller response: {error}"))?
+    }
+}
 
 impl MonitorService {
     pub fn new(config_mgr: Arc<ConfigManager>, app_handle: AppHandle) -> Arc<Self> {
@@ -155,13 +206,15 @@ impl MonitorService {
             shutdown_budget: Arc::new(AtomicUsize::new(SHUTDOWN_ATTEMPT_BUDGET)),
         };
         let actor_events = events.clone();
+        let actor_config = config_mgr.clone();
         let actor = thread::Builder::new()
             .name("hdr-controller".into())
             .spawn(move || {
-                Actor::new(config_mgr, app_handle, actor_events).run(receiver);
+                Actor::new(actor_config, app_handle, actor_events).run(receiver);
             })
             .expect("Unable to start the HDR controller");
         Arc::new(Self {
+            config: config_mgr,
             events,
             threads: Mutex::new(Threads {
                 actor: Some(actor),
@@ -243,10 +296,10 @@ impl MonitorService {
         self.events.foreground();
     }
 
-    fn request<T: Send + 'static>(
+    fn enqueue<T: Send + 'static>(
         &self,
         command: impl FnOnce(Sender<Result<T, String>>) -> Command,
-    ) -> Result<T, String> {
+    ) -> Result<PendingRequest<T>, String> {
         if !self.events.admitted.load(Ordering::Acquire) {
             return Err("The HDR controller is shutting down".into());
         }
@@ -255,25 +308,25 @@ impl MonitorService {
             .sender
             .send(command(reply))
             .map_err(|_| "The HDR controller is unavailable".to_string())?;
-        receive
-            .recv()
-            .map_err(|_| "The HDR controller stopped before responding".to_string())?
+        Ok(PendingRequest { receiver: receive })
     }
 
-    pub fn refresh(&self) -> Result<Vec<MonitorInfo>, String> {
-        self.request(Command::Refresh)
+    pub fn refresh(&self) -> Result<PendingRequest<Vec<MonitorInfo>>, String> {
+        self.enqueue(Command::Refresh)
     }
 
     pub fn manual_set(
         &self,
         scope: TargetMonitor,
         enable: bool,
-    ) -> Result<ManualSetResult, String> {
-        self.request(|reply| Command::ManualSet(scope, enable, reply))
+    ) -> Result<PendingRequest<ManualSetResult>, String> {
+        manual_admission(&self.config.snapshot()?, self.events.admitted.load(Ordering::Acquire))
+            .require()?;
+        self.enqueue(|reply| Command::ManualSet(scope, enable, reply))
     }
 
-    pub fn status(&self) -> Result<HdrStatePayload, String> {
-        self.request(Command::Status)
+    pub fn status(&self) -> Result<PendingRequest<HdrStatePayload>, String> {
+        self.enqueue(Command::Status)
     }
 
     pub fn config_committed(&self) {
@@ -625,6 +678,14 @@ impl WriteAuthority for Authority {
                     |message| Err(DisplayFailure::new(FailureKind::AuthorityDenied, message));
                 if let Some(issue) = &snapshot.controller_issue {
                     return denied(issue.clone());
+                }
+                if self.kind == OperationKind::Manual {
+                    if let Err(reason) = manual_admission(
+                        snapshot,
+                        self.admitted.load(Ordering::Acquire),
+                    ).require() {
+                        return denied(reason);
+                    }
                 }
                 if self.kind != OperationKind::Cleanup && !self.admitted.load(Ordering::Acquire) {
                     return denied("The HDR controller is shutting down".into());
@@ -1087,10 +1148,11 @@ impl Actor {
         scope: TargetMonitor,
         enable: bool,
     ) -> Result<ManualSetResult, String> {
+        let snapshot = self.config.snapshot()?;
+        manual_admission(&snapshot, self.events.admitted.load(Ordering::Acquire)).require()?;
         // Establish the logical interval without enabling HDR first. A manual Off while a game is
         // foreground must not produce an automatic On followed by a second hidden setter.
         let _ = self.controller.refresh_inventory();
-        let snapshot = self.config.snapshot()?;
         if let Ok(Some(process)) = observe_foreground() {
             if automatic_pause(&snapshot, &process.exe, &snapshot.context_token).is_none() {
                 if self.controller.activation().is_none() {
@@ -1211,18 +1273,21 @@ impl Actor {
             target_status = TargetStatus::AutomationPaused;
             warnings.push("The foreground hook is unavailable; automatic HDR is paused".into());
         }
-        let target_deferred = active
+        let target_deferred = snapshot.mode == ConfigMode::Ready && active
             .is_some_and(|active| !same_target(&active.target, &snapshot.settings.target_monitor));
         if target_deferred {
             warnings.push("The saved monitor target will apply to the next activation".into());
         }
-        let observed_scope = active
-            .map(|active| &active.target)
-            .unwrap_or(&snapshot.settings.target_monitor);
-        let scope_hdr_state = self.controller.scope_hdr_state(observed_scope);
+        let observed_scope = active.map(|active| &active.target).or_else(|| {
+            (snapshot.mode == ConfigMode::Ready).then_some(&snapshot.settings.target_monitor)
+        });
+        let scope_hdr_state = observed_scope
+            .map(|scope| self.controller.scope_hdr_state(scope))
+            .unwrap_or(ScopeHdrState::Unknown);
         HdrStatePayload {
             is_hdr_active: scope_hdr_state == ScopeHdrState::Hdr,
             scope_hdr_state,
+            manual_control: manual_admission(snapshot, self.events.admitted.load(Ordering::Acquire)),
             current_app_name: active.map(|active| {
                 app.map(|app| app.name.clone())
                     .unwrap_or_else(|| active.exe.clone())
@@ -1358,9 +1423,10 @@ mod tests {
         }
     }
 
-    fn idle_service() -> (MonitorService, Receiver<Command>) {
+    fn idle_service(config: Arc<ConfigManager>) -> (MonitorService, Receiver<Command>) {
         let (sender, receiver) = channel();
         let service = MonitorService {
+            config,
             events: EventSink {
                 sender,
                 admitted: Arc::new(AtomicBool::new(true)),
@@ -1388,6 +1454,201 @@ mod tests {
             previous_hdr_user_enabled: false,
             purpose: NativePurpose::Manual,
         }
+    }
+
+    fn manual_fixture(mode: ConfigMode) -> GateFixture {
+        let directory = tempfile::Builder::new()
+            .prefix(".hdr-manual-test-")
+            .tempdir_in(env!("CARGO_MANIFEST_DIR"))
+            .unwrap();
+        let local = directory.path().join("local");
+        let legacy = directory.path().join("legacy.json");
+        std::fs::create_dir(&local).unwrap();
+        match mode {
+            ConfigMode::RecoveryRequired => {
+                std::fs::write(local.join("config-v2.json"), b"unreadable settings").unwrap();
+            }
+            ConfigMode::UnsupportedSchema => {
+                std::fs::write(local.join("config-v2.json"), br#"{"schema_version":3}"#).unwrap();
+            }
+            ConfigMode::Unavailable => std::fs::create_dir(&legacy).unwrap(),
+            ConfigMode::Ready | ConfigMode::ImportAvailable => {
+                let mut settings = serde_json::to_value(AppConfig::default()).unwrap();
+                settings["switch_method"] = "shortcut".into();
+                settings["target_monitor"] = "all".into();
+                std::fs::write(&legacy, serde_json::to_vec(&settings).unwrap()).unwrap();
+            }
+            ConfigMode::FirstRun => {}
+        }
+        let manager = Arc::new(ConfigManager::load(local, legacy).unwrap());
+        if mode == ConfigMode::Ready {
+            let snapshot = manager.snapshot().unwrap();
+            manager.import_legacy(&snapshot.context_token).unwrap();
+        }
+        assert_eq!(manager.snapshot().unwrap().mode, mode);
+        GateFixture { manager, _directory: directory }
+    }
+
+    #[test]
+    fn scoped_manual_hdr_in_paused_modes_does_not_grant_automatic_consent() {
+        use crate::display::tests::{monitor, MockDisplay};
+
+        for mode in [
+            ConfigMode::FirstRun, ConfigMode::ImportAvailable, ConfigMode::RecoveryRequired,
+            ConfigMode::UnsupportedSchema, ConfigMode::Ready,
+        ] {
+            let fixture = manual_fixture(mode);
+            let before = fixture.manager.snapshot().unwrap();
+            assert_eq!(manual_admission(&before, true), ManualControl::Available);
+            assert!(automatic_pause(&before, "game.exe", &before.context_token).is_some());
+            let mut authority = fixture.authority(OperationKind::Manual);
+            let mut controller = HdrController::new(MockDisplay::new(vec![
+                monitor("chosen", 1, false), monitor("other", 2, true),
+            ]));
+            let scope = TargetMonitor::Monitor {
+                device_path: "chosen".into(), display_name: "Chosen display".into(),
+            };
+            for enabled in [true, false] {
+                let outcomes = controller.manual_set(&scope, enabled, &mut authority);
+                assert_eq!(outcomes.len(), 1);
+                assert!(outcomes[0].is_verified());
+                let inventory = controller.refresh_inventory().unwrap();
+                assert_eq!(inventory[0].is_hdr_enabled, enabled);
+                assert!(inventory[1].is_hdr_enabled);
+                assert_eq!(fixture.manager.snapshot().unwrap(), before);
+            }
+            assert!(controller.activation().is_none());
+            assert!(!controller.has_ownership());
+        }
+    }
+
+    #[test]
+    fn manual_entry_and_issuance_share_conflict_shutdown_and_unavailable_gates() {
+        for mode in [ConfigMode::FirstRun, ConfigMode::Unavailable] {
+            let fixture = manual_fixture(mode);
+            let (service, receiver) = idle_service(fixture.manager.clone());
+            if mode == ConfigMode::Unavailable {
+                assert!(service.manual_set(TargetMonitor::All, true).is_err());
+                let mut authority = fixture.authority(OperationKind::Manual);
+                assert!(authority.authorize(&mock_attempt(), &mut || panic!("issued")).is_err());
+            } else {
+                fixture.manager.set_controller_issue(Some("controller conflict".into())).unwrap();
+                assert!(service.manual_set(TargetMonitor::All, true).is_err());
+                fixture.manager.set_controller_issue(None).unwrap();
+                service.events.admitted.store(false, Ordering::Release);
+                assert!(service.manual_set(TargetMonitor::All, false).is_err());
+            }
+            assert!(receiver.try_recv().is_err());
+        }
+        let unknown = HdrStatePayload::unavailable("Unreadable authority".into());
+        assert!(matches!(unknown.manual_control, ManualControl::Blocked { .. }));
+    }
+
+    #[test]
+    fn manual_requests_enqueue_in_click_order_without_waiting_for_the_actor() {
+        let fixture = GateFixture::new();
+        let (service, receiver) = idle_service(fixture.manager.clone());
+        let on = service.manual_set(TargetMonitor::All, true).unwrap();
+        let off = service.manual_set(TargetMonitor::All, false).unwrap();
+        for (expected, result) in [(true, "first result"), (false, "second result")] {
+            let Command::ManualSet(scope, enabled, reply) = receiver.try_recv().unwrap() else {
+                panic!("Expected manual request");
+            };
+            assert_eq!(scope, TargetMonitor::All);
+            assert_eq!(enabled, expected);
+            reply.send(Err(result.into())).unwrap();
+        }
+        // Awaiting in the opposite order cannot change the already-enqueued native order.
+        assert_eq!(tauri::async_runtime::block_on(off.resolve()).unwrap_err(), "second result");
+        assert_eq!(tauri::async_runtime::block_on(on.resolve()).unwrap_err(), "first result");
+        assert!(receiver.try_recv().is_err());
+    }
+
+    #[test]
+    fn manual_waiter_reports_a_dropped_actor_response_without_hanging() {
+        let fixture = GateFixture::new();
+        let (service, receiver) = idle_service(fixture.manager.clone());
+        let pending = service.manual_set(TargetMonitor::All, false).unwrap();
+        drop(receiver);
+        assert!(tauri::async_runtime::block_on(pending.resolve())
+            .unwrap_err().contains("stopped before responding"));
+        assert!(service.manual_set(TargetMonitor::All, true).is_err());
+    }
+
+    #[test]
+    fn queued_manual_requests_cannot_bypass_a_later_conflict_or_shutdown() {
+        use crate::display::tests::{monitor, MockDisplay};
+
+        for conflict in [true, false] {
+            let fixture = GateFixture::new();
+            let (service, receiver) = idle_service(fixture.manager.clone());
+            let pending = service.manual_set(TargetMonitor::All, true).unwrap();
+            if conflict {
+                fixture.manager.set_controller_issue(Some("new conflict".into())).unwrap();
+            } else {
+                service.events.admitted.store(false, Ordering::Release);
+            }
+            let Command::ManualSet(scope, enabled, reply) = receiver.try_recv().unwrap() else {
+                panic!("Expected queued manual request");
+            };
+            let mut authority = fixture.authority(OperationKind::Manual);
+            authority.admitted = service.events.admitted.clone();
+            let mut controller = HdrController::new(MockDisplay::new(vec![
+                monitor("chosen", 1, false),
+            ]));
+            let outcomes = controller.manual_set(&scope, enabled, &mut authority);
+            assert_eq!(outcomes[0].failure, Some(FailureKind::AuthorityDenied));
+            assert!(!controller.refresh_inventory().unwrap()[0].is_hdr_enabled);
+            reply.send(Err(outcomes[0].message.clone().unwrap())).unwrap();
+            assert!(tauri::async_runtime::block_on(pending.resolve()).is_err());
+        }
+    }
+
+    #[test]
+    fn unchanged_enrichment_is_quiet_but_real_changes_and_conflicts_wake_the_actor() {
+        let fixture = GateFixture::new();
+        let before = fixture.ready();
+        let (service, receiver) = idle_service(fixture.manager.clone());
+        let unchanged = fixture.manager.mutate_if_changed(
+            &before.context_token, Some(&before.library_generation), true, |settings| {
+                assert!(!crate::library::enrich_existing(settings, &before.settings.apps));
+                Ok(())
+            },
+        );
+        assert!(matches!(&unchanged, Ok(None)));
+        crate::background::publish_enrichment_result(
+            &fixture.manager, &service, unchanged, |_| panic!("no-op emitted"),
+        );
+        assert!(receiver.try_recv().is_err());
+        assert_eq!(fixture.manager.snapshot().unwrap(), before);
+        let changed = fixture.manager.mutate_if_changed(
+            &before.context_token, Some(&before.library_generation), true, |settings| {
+                let mut detected = settings.apps[0].clone();
+                detected.alternate_exes.push("new-alias.exe".into());
+                assert!(crate::library::enrich_existing(settings, &[detected]));
+                Ok(())
+            },
+        );
+        assert!(matches!(&changed, Ok(Some(_))));
+        let mut emitted = None;
+        crate::background::publish_enrichment_result(
+            &fixture.manager, &service, changed, |snapshot| emitted = Some(snapshot.clone()),
+        );
+        assert!(matches!(receiver.try_recv(), Ok(Command::ConfigCommitted)));
+        assert_eq!(emitted, Some(fixture.manager.snapshot().unwrap()));
+        service.events.config_pending.store(false, Ordering::Release);
+        std::fs::write(&before.config_path, b"external conflict").unwrap();
+        let failed = fixture.manager.mutate_if_changed(
+            &before.context_token, None, true, |_| Ok(()),
+        );
+        assert!(failed.is_err());
+        crate::background::publish_enrichment_result(
+            &fixture.manager, &service, failed, |snapshot| {
+                assert_eq!(snapshot.mode, ConfigMode::RecoveryRequired);
+            },
+        );
+        assert!(matches!(receiver.try_recv(), Ok(Command::ConfigCommitted)));
+        assert!(receiver.try_recv().is_err());
     }
 
     #[test]
@@ -1503,7 +1764,8 @@ mod tests {
 
     #[test]
     fn producer_hints_are_coalesced_and_stop_after_admission_closes() {
-        let (service, receiver) = idle_service();
+        let fixture = GateFixture::new();
+        let (service, receiver) = idle_service(fixture.manager.clone());
         let events = &service.events;
         events.foreground();
         events.foreground();
@@ -1528,7 +1790,7 @@ mod tests {
     fn background_enrichment_wakes_controller_without_a_foreground_event() {
         let fixture = GateFixture::new();
         let before = fixture.ready();
-        let (service, receiver) = idle_service();
+        let (service, receiver) = idle_service(fixture.manager.clone());
         let foreground_exe = "game-dx12.exe";
         assert!(automatic_pause(&before, foreground_exe, &before.context_token).is_some());
         let mut detected = before.settings.apps[0].clone();
@@ -1561,7 +1823,7 @@ mod tests {
     fn background_recovery_wakes_controller_after_failed_commit() {
         let fixture = GateFixture::new();
         let before = fixture.ready();
-        let (service, receiver) = idle_service();
+        let (service, receiver) = idle_service(fixture.manager.clone());
         assert!(automatic_pause(&before, "game.exe", &before.context_token).is_none());
         let conflicting_bytes = b"unreadable settings";
         std::fs::write(&before.config_path, conflicting_bytes).unwrap();

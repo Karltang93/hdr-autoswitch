@@ -17,6 +17,7 @@ import { Settings } from './components/Settings';
 import { ConfigNotice } from './components/ConfigNotice';
 import { configClient, useConfig } from './useConfig';
 import { describeHdrScope } from './telemetryText';
+import { manualControlAvailable, scopeVisuals } from './displayState';
 import { HdrLogo } from './components/HdrLogo';
 import { GlitchNavItem } from './components/GlitchNavItem';
 import { Sun, Moon, Globe } from 'lucide-react';
@@ -141,6 +142,7 @@ export default function App() {
   const [status, setStatus] = useState<HdrStatePayload>({
     is_hdr_active: false,
     scope_hdr_state: 'unknown',
+    manual_control: { status: 'blocked', reason: 'HDR controller starting' },
     current_app_name: null,
     current_exe: null,
     switched_by_app: false,
@@ -157,6 +159,8 @@ export default function App() {
     operation_outcomes: [],
   });
   const scopePresentation = describeHdrScope(status, t);
+  const headerMode = statusLoaded ? scopePresentation.mode : 'unknown';
+  const headerVisuals = scopeVisuals[headerMode];
 
   const [recentGames, setRecentGames] = useState<RecentGameSession[]>(() => {
     try {
@@ -409,7 +413,7 @@ export default function App() {
             {/* Brand Logo & Name with Solid Glitch Title Bar */}
             <div className="flex items-center gap-3">
               <div className="p-1.5 border border-[#f55a6b]/40 bg-[#180e10] flex items-center justify-center shrink-0 aspect-square">
-                <HdrLogo size={28} active={status.is_hdr_active} />
+                <HdrLogo size={28} mode={headerMode} />
               </div>
 
               <div className="flex items-center gap-2.5">
@@ -419,20 +423,12 @@ export default function App() {
 
                 {/* Status Pill Badge */}
                 <div
-                  className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-[11px] font-bold tracking-wider border uppercase transition-all ${
-                    status.is_hdr_active
-                      ? 'bg-[#f55a6b] text-[#0f0b0b] border-[#f55a6b] neon-glow-coral'
-                      : 'bg-[#180e10] text-[#5accf5] border-[#5accf5]/50'
-                  }`}
+                  className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-[11px] font-bold tracking-wider border uppercase transition-all ${headerVisuals.badge}`}
                 >
                   <span
-                    className={`w-1.5 h-1.5 ${
-                      status.is_hdr_active
-                        ? 'bg-[#0f0b0b] animate-status-pulse'
-                        : 'bg-[#5accf5]'
-                    }`}
+                    className={`w-1.5 h-1.5 ${headerVisuals.dot}`}
                   />
-                  <span>{!statusLoaded || !config || snapshot?.controller_issue
+                  <span>{!statusLoaded
                     ? t.configStatusUnknown
                     : scopePresentation.badge}</span>
                 </div>
@@ -523,12 +519,11 @@ export default function App() {
             : status.active_target.kind === 'monitor' ? status.active_target.display_name : t.configConfirmTarget}.
           {' '}{t.configTargetHint}
         </p>}
-        <fieldset disabled={pending} className={`min-w-0 ${pending ? 'pointer-events-none opacity-70' : ''}`}>
-        {config && activeTab === 'dashboard' && (
+        {activeTab === 'dashboard' && (
           <Dashboard
             status={status}
             monitors={monitors}
-            config={config}
+            libraryCount={config?.apps.length ?? null}
             activityLogs={activityLogs}
             recentGames={recentGames}
             onRefreshMonitors={() => {
@@ -541,11 +536,12 @@ export default function App() {
             }}
             onNavigateToApps={() => setActiveTab('apps')}
             onControlError={setControlError}
-            controlAvailable={statusLoaded && !snapshot?.controller_issue && config.switch_method === 'native'}
+            controlAvailable={manualControlAvailable(status, statusLoaded)}
             isDark={isDark}
           />
         )}
 
+        <fieldset disabled={pending} className={`min-w-0 ${pending ? 'pointer-events-none opacity-70' : ''}`}>
         {config && activeTab === 'apps' && (
           <AppsManager
             config={config}

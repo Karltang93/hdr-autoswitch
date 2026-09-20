@@ -39,6 +39,7 @@ export interface Translations {
   displaysTargetHdr: string;
   displaysHdrSupported: string;
   displaysSdrOnly: string;
+  displaysStateUnknown: string;
   displaysTargetId: string;
   displaysHdrOn: string;
   displaysSdr: string;
@@ -228,6 +229,8 @@ export interface Translations {
   configTargetHint: string;
   configSelectRecovery: string;
   configMonitorIdentityError: string;
+  configManualPolicy: string;
+  configManualUnavailable: string;
   configAllOn: string;
   configAllOff: string;
   configStatusUnknown: string;
@@ -271,6 +274,7 @@ const cs: Translations = {
   displaysTargetHdr: 'CÍL HDR',
   displaysHdrSupported: 'HDR10 PODPOROVÁNO',
   displaysSdrOnly: 'POUZE SDR',
+  displaysStateUnknown: 'STAV HDR NEZNÁMÝ / NEDOSTUPNÝ',
   displaysTargetId: 'TARGET ID',
   displaysHdrOn: 'HDR ZAPNUTO',
   displaysSdr: 'SDR',
@@ -448,10 +452,12 @@ const cs: Translations = {
   configConfirmTarget: 'Staré ID monitoru není trvalé. V Nastavení znovu vyberte monitor; jiné displeje se mezitím nebudou přepínat.',
   configMissingTarget: 'Vybraný monitor není dostupný',
   configNativeConsent: 'Klávesová zkratka Win + Alt + B nemůže bezpečně ovládat konkrétní monitor. Automatické HDR čeká na váš souhlas s nativním ovládáním.',
-  configAcceptNative: 'POVOLIT NATIVNÍ OVLÁDÁNÍ HDR',
+  configAcceptNative: 'POVOLIT AUTOMATICKÉ NATIVNÍ HDR',
   configTargetHint: 'Výběr platí pro příští spuštění hry. Odpojený monitor zůstane vybraný; aplikace jej nenahradí jiným.',
   configSelectRecovery: 'Vyberte ověřenou kopii nastavení',
   configMonitorIdentityError: 'Trvalá identita displeje není dostupná; ovládání je zablokované.',
+  configManualPolicy: 'Ruční nativní Zapnout/Vypnout platí jen pro výslovně zvolený displej nebo Vše. Funguje i při pozastavené automatizaci; nemění nastavení ani souhlas s automatickým HDR. Konflikt ovladače, ukončování nebo nedostupná autorita ovládání blokují.',
+  configManualUnavailable: 'Ruční HDR není dostupné: ověřte autoritu ovládání, identitu a stav displeje.',
   configAllOn: 'ZAPNOUT HDR NA VŠECH DISPLEJÍCH',
   configAllOff: 'VYPNOUT HDR NA VŠECH DISPLEJÍCH',
   configStatusUnknown: 'STAV HDR NEZNÁMÝ / POZASTAVENO',
@@ -495,6 +501,7 @@ const en: Translations = {
   displaysTargetHdr: 'HDR TARGET',
   displaysHdrSupported: 'HDR10 SUPPORTED',
   displaysSdrOnly: 'SDR ONLY',
+  displaysStateUnknown: 'HDR STATE UNKNOWN / UNAVAILABLE',
   displaysTargetId: 'TARGET ID',
   displaysHdrOn: 'HDR ENABLED',
   displaysSdr: 'SDR',
@@ -672,10 +679,12 @@ const en: Translations = {
   configConfirmTarget: 'The old monitor ID is not persistent. Choose your monitor again in Settings; other displays will not be substituted.',
   configMissingTarget: 'Selected monitor is unavailable',
   configNativeConsent: 'Win + Alt + B cannot safely control a specific monitor. Automatic HDR is paused until you consent to native display control.',
-  configAcceptNative: 'ENABLE NATIVE HDR CONTROL',
+  configAcceptNative: 'ENABLE AUTOMATIC NATIVE HDR',
   configTargetHint: 'Selection changes apply to the next game activation. A disconnected display stays selected; no other display is substituted.',
   configSelectRecovery: 'Choose a validated settings copy',
   configMonitorIdentityError: 'A persistent display identity is unavailable; control is blocked.',
+  configManualPolicy: 'Manual native On/Off applies only to the explicitly chosen display or All. It remains available while automation is paused and never changes settings or automatic HDR consent. Controller conflicts, shutdown, or unavailable authority block manual control.',
+  configManualUnavailable: 'Manual HDR is unavailable: check controller authority, display identity, and state.',
   configAllOn: 'TURN HDR ON FOR ALL DISPLAYS',
   configAllOff: 'TURN HDR OFF FOR ALL DISPLAYS',
   configStatusUnknown: 'HDR STATE UNKNOWN / PAUSED',

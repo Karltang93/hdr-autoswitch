@@ -565,24 +565,7 @@ impl DisplayBackend for WindowsDisplay {
                 is_primary,
             });
         }
-        for index in 0..monitors.len() {
-            let ambiguous = monitors[index]
-                .device_path
-                .as_ref()
-                .is_some_and(|identity| {
-                    monitors.iter().enumerate().any(|(other_index, other)| {
-                        other_index != index
-                            && other
-                                .device_path
-                                .as_ref()
-                                .is_some_and(|other| identity_eq(identity, other))
-                            && other.address() != monitors[index].address()
-                    })
-                });
-            if ambiguous {
-                monitors[index].identity_status = TargetStatus::Ambiguous;
-            }
-        }
+        mark_ambiguous_identities(&mut monitors);
         Ok(monitors)
     }
 
@@ -649,6 +632,29 @@ impl DisplayBackend for WindowsDisplay {
 
     fn verification_pause(&mut self) {
         std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+}
+
+fn mark_ambiguous_identities(monitors: &mut [MonitorInfo]) {
+    for index in 0..monitors.len() {
+        let ambiguous = monitors[index]
+            .device_path
+            .as_ref()
+            .is_some_and(|identity| {
+                monitors.iter().enumerate().any(|(other_index, other)| {
+                    other_index != index
+                        && other
+                            .device_path
+                            .as_ref()
+                            .is_some_and(|other| identity_eq(identity, other))
+                        && other.address() != monitors[index].address()
+                })
+            });
+        if ambiguous {
+            monitors[index].identity_status = TargetStatus::Ambiguous;
+            monitors[index].identity_error =
+                Some("Multiple display endpoints claim this monitor identity".into());
+        }
     }
 }
 
@@ -1250,6 +1256,27 @@ pub(crate) mod tests {
         assert_eq!(result.outcome, OutcomeKind::Changed);
         assert_eq!(backend.writes.len(), 1);
         assert_eq!(backend.writes[0].0, selected.address());
+    }
+
+    #[test]
+    fn duplicate_identities_publish_errors_and_never_become_selected_targets() {
+        let mut monitors = vec![
+            monitor("duplicate", 1, false),
+            monitor("DUPLICATE", 2, true),
+            monitor("unique", 3, false),
+        ];
+        mark_ambiguous_identities(&mut monitors);
+        for entry in &monitors[..2] {
+            assert_eq!(entry.identity_status, TargetStatus::Ambiguous);
+            assert!(entry.identity_error.as_ref().unwrap().contains("Multiple display endpoints"));
+            assert!(!monitor_is_selected(entry, &crate::config::TargetMonitor::All));
+        }
+        assert_eq!(monitors[2].identity_status, TargetStatus::Ready);
+        assert!(monitors[2].identity_error.is_none());
+        assert_eq!(resolve_identity(&monitors, "duplicate").unwrap_err().kind, FailureKind::Ambiguous);
+        let mut repeated = vec![monitor("same", 1, false), monitor("SAME", 1, false)];
+        mark_ambiguous_identities(&mut repeated);
+        assert!(repeated.iter().all(|entry| entry.identity_status == TargetStatus::Ready));
     }
 
     #[test]

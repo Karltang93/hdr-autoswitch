@@ -26,6 +26,8 @@ export class ConfigClient {
   private readGeneration = 0;
   private tail: Promise<void> = Promise.resolve();
   private pendingCount = 0;
+  private errorSource: 'read' | 'action' | null = null;
+  private errorVersion = 0;
   private authority: Pick<ConfigSnapshot, 'context_token' | 'control_epoch'> | null = null;
 
   constructor(transport: Transport) {
@@ -45,9 +47,23 @@ export class ConfigClient {
   }
 
   reportError = (error: unknown): void => {
+    this.setError(error, 'action');
+  };
+
+  private setError(error: unknown, source: 'read' | 'action'): void {
+    if (source === 'read' && this.errorSource === 'action') return;
+    this.errorSource = source;
+    ++this.errorVersion;
     const message = error instanceof Error ? error.message : String(error);
     this.publish({ error: message });
-  };
+  }
+
+  private clearError(version: number): void {
+    if (version !== this.errorVersion) return;
+    this.errorSource = null;
+    ++this.errorVersion;
+    this.publish({ error: null });
+  }
 
   private accept(next: ConfigSnapshot, allowHistoryChange: boolean): boolean {
     if (this.authority) {
@@ -84,11 +100,14 @@ export class ConfigClient {
 
   refresh = async (): Promise<void> => {
     const generation = ++this.readGeneration;
+    const errorVersion = this.errorVersion;
     try {
       const next = await this.transport<ConfigSnapshot>('get_config');
-      if (generation === this.readGeneration) this.accept(next, true);
+      if (generation === this.readGeneration && this.accept(next, true) && this.errorSource === 'read') {
+        this.clearError(errorVersion);
+      }
     } catch (error) {
-      if (generation === this.readGeneration) this.reportError(error);
+      if (generation === this.readGeneration) this.setError(error, 'read');
     }
   };
 
@@ -149,6 +168,7 @@ export class ConfigClient {
       return Promise.reject(error);
     }
     return this.enqueue(async () => {
+      const errorVersion = this.errorVersion;
       if (!this.isCurrentContext(captured.contextToken)) {
         throw new Error('Settings history changed. Start this action again.');
       }
@@ -162,7 +182,7 @@ export class ConfigClient {
       if (next.context_token !== captured.contextToken || !this.isCurrentContext(captured.contextToken)) {
         throw new Error('This result belongs to retired settings. Review the current settings before trying again.');
       }
-      if (this.accept(next, false)) this.publish({ error: null });
+      if (this.accept(next, false)) this.clearError(errorVersion);
       return next;
     });
   };
@@ -181,6 +201,7 @@ export class ConfigClient {
       return Promise.reject(error);
     }
     return this.enqueue(async () => {
+      const errorVersion = this.errorVersion;
       if (!this.isCurrentContext(origin)) {
         throw new Error('Settings history changed. Start this action again.');
       }
@@ -193,7 +214,7 @@ export class ConfigClient {
       if (!this.accept(next, true) && !this.isCurrentContext(next.context_token)) {
         throw new Error('This result belongs to retired settings. Review the current settings before trying again.');
       }
-      this.publish({ error: null });
+      this.clearError(errorVersion);
       return next;
     });
   };

@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { MonitorInfo, HdrStatePayload, AppConfig, ActivityLogEntry, RecentGameSession, TargetMonitor, ManualSetResult } from '../types';
+import React, { useRef, useState } from 'react';
+import { MonitorInfo, HdrStatePayload, ActivityLogEntry, RecentGameSession, TargetMonitor, ManualSetResult } from '../types';
 import { invoke } from '@tauri-apps/api/core';
 import { activityMessage, describeHdrScope } from '../telemetryText';
+import { manualScopeAvailable, monitorMode, monitorReady, scopeVisuals } from '../displayState';
 import {
   Monitor,
   ShieldCheck,
@@ -21,7 +22,7 @@ import { useI18n } from '../i18n';
 interface DashboardProps {
   status: HdrStatePayload;
   monitors: MonitorInfo[];
-  config: AppConfig;
+  libraryCount: number | null;
   activityLogs: ActivityLogEntry[];
   recentGames: RecentGameSession[];
   onRefreshMonitors: () => void;
@@ -35,7 +36,7 @@ interface DashboardProps {
 export const Dashboard: React.FC<DashboardProps> = ({
   status,
   monitors,
-  config,
+  libraryCount,
   activityLogs,
   recentGames,
   onRefreshMonitors,
@@ -46,14 +47,24 @@ export const Dashboard: React.FC<DashboardProps> = ({
 }) => {
   const { t } = useI18n();
   const [toggling, setToggling] = useState(false);
+  const manualPending = useRef(false);
 
   const handleSet = async (scope: TargetMonitor, enable: boolean) => {
+    if (manualPending.current) return;
+    if (!controlAvailable || !manualScopeAvailable(scope, monitors)) {
+      onControlError(status.manual_control.status === 'blocked'
+        ? status.manual_control.reason : t.configManualUnavailable);
+      return;
+    }
+    manualPending.current = true;
     setToggling(true);
     onControlError(null);
     try {
       const result = await invoke<ManualSetResult>('set_hdr', { scope, enable });
       const failures = result.outcomes.filter((item) => item.outcome === 'failed' || item.outcome === 'outcome_unknown');
-      if (failures.length > 0) {
+      if (result.outcomes.length === 0) {
+        onControlError(t.configManualUnavailable);
+      } else if (failures.length > 0) {
         onControlError(failures.map((item) =>
           `${item.display_name ?? item.device_path ?? t.settingsAllMonitors}: ${item.message ?? item.outcome}`
         ).join('; '));
@@ -62,30 +73,30 @@ export const Dashboard: React.FC<DashboardProps> = ({
       onControlError(String(err));
     } finally {
       onManualToggle();
+      manualPending.current = false;
       setToggling(false);
     }
   };
 
   const handleSetMonitor = (monitor: MonitorInfo, enable: boolean) => {
-    if (!monitor.device_path || monitor.identity_error || !monitor.is_hdr_supported) {
+    if (!monitorReady(monitor)) {
       onControlError(t.configMonitorIdentityError);
       return;
     }
     void handleSet({ kind: 'monitor', device_path: monitor.device_path, display_name: monitor.name }, enable);
   };
 
-  const hdrSupportedMonitors = monitors.filter((m) => m.is_hdr_supported);
+  const hdrSupportedMonitors = monitors.filter(monitorReady);
   const scope = describeHdrScope(status, t);
+  const visuals = scopeVisuals[scope.mode];
+  const allAvailable = controlAvailable && manualScopeAvailable({ kind: 'all' }, monitors);
 
   return (
     <div className="space-y-6 font-mono">
       {/* Hero Display Control Center (Retro Glitch Terminal) */}
       <div
-        className={`relative overflow-hidden border p-6 transition-all duration-300 ${
-          status.is_hdr_active
-            ? 'bg-[#180e10] border-[#f55a6b] neon-glow-coral'
-            : 'bg-[#120d0e] border-[#f55a6b]/30 hover:border-[#f55a6b]/60'
-        }`}
+        data-hdr-scope={scope.mode}
+        className={`relative overflow-hidden border p-6 transition-all duration-300 ${visuals.panel}`}
       >
         {/* Subtle scanline background texture */}
         <div className="absolute inset-0 scanlines-overlay opacity-30 pointer-events-none" />
@@ -94,28 +105,18 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <div className="flex items-center gap-5">
             {/* Ambient Aperture Dial with Glitch Border */}
             <div
-              className={`p-3 border shrink-0 flex items-center justify-center aspect-square transition-all duration-300 ${
-                status.is_hdr_active
-                  ? 'bg-[#221314] border-[#f55a6b] shadow-[0_0_25px_rgba(245,90,107,0.5)] scale-105'
-                  : 'bg-[#170f10] border-[#f55a6b]/40'
-              }`}
+              className={`p-3 border shrink-0 flex items-center justify-center aspect-square transition-all duration-300 ${visuals.dial}`}
             >
-              <HdrLogo size={52} active={status.is_hdr_active} />
+              <HdrLogo size={52} mode={scope.mode} />
             </div>
 
             <div className="space-y-1.5">
               <div className="flex items-center gap-2.5 flex-wrap">
                 <span
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider border ${
-                    status.is_hdr_active
-                      ? 'bg-[#f55a6b] text-[#0f0b0b] border-[#f55a6b]'
-                      : 'bg-[#221314] text-[#5accf5] border-[#5accf5]/40'
-                  }`}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider border ${visuals.badge}`}
                 >
                   <span
-                    className={`w-2 h-2 ${
-                      status.is_hdr_active ? 'bg-[#0f0b0b] animate-status-pulse' : 'bg-[#5accf5]'
-                    }`}
+                    className={`w-2 h-2 ${visuals.dot}`}
                   />
                   {scope.mode === 'hdr' ? t.heroHdrRec2020 : scope.mode === 'sdr' ? t.heroSdrBt709 : scope.badge}
                 </span>
@@ -151,7 +152,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     )}
                   </span>
                 ) : (
-                  <span>{t.heroSdrSubtext}</span>
+                  <span>{scope.badge}</span>
                 )}
               </p>
             </div>
@@ -163,18 +164,19 @@ export const Dashboard: React.FC<DashboardProps> = ({
               variant="primary"
               icon={<Zap className="w-4 h-4 fill-current" />}
               size="lg"
-              disabled={toggling || !controlAvailable}
+              disabled={toggling || !allAvailable}
               onClick={() => handleSet({ kind: 'all' }, true)}
             />
             <GlitchButton
               label={toggling ? t.heroSwitching : t.configAllOff}
               variant="outline"
               size="lg"
-              disabled={toggling || !controlAvailable}
+              disabled={toggling || !allAvailable}
               onClick={() => handleSet({ kind: 'all' }, false)}
             />
           </div>
         </div>
+        <p className="relative z-10 mt-4 text-xs text-[#b5a9ac]">{t.configManualPolicy}</p>
       </div>
 
       {/* Connected Displays & Monitor Controls */}
@@ -200,15 +202,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {monitors.map((m) => {
             const isTarget = m.is_selected;
+            const mode = monitorMode(m);
 
             return (
               <div
                 key={`${m.adapter_id_low}:${m.adapter_id_high}:${m.target_id}`}
-                className={`p-4 border transition-all relative ${
-                  m.is_hdr_enabled
-                    ? 'bg-[#180e10] border-[#f55a6b] neon-glow-coral'
-                    : 'bg-[#130e0f] border-[#f55a6b]/30 hover:border-[#f55a6b]/70'
-                }`}
+                data-monitor-state={mode}
+                className={`p-4 border transition-all relative ${scopeVisuals[mode].panel}`}
               >
                 <div className="absolute inset-0 scanlines-overlay opacity-20 pointer-events-none" />
 
@@ -231,7 +231,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     </div>
 
                     <div className="flex items-center gap-2 text-xs">
-                      {m.is_hdr_supported ? (
+                      {mode === 'unknown' ? (
+                        <span className="text-amber-300">{t.displaysStateUnknown}</span>
+                      ) : m.is_hdr_supported ? (
                         <span className="text-emerald-400 flex items-center gap-1 font-semibold">
                           <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
                           {t.displaysHdrSupported}
@@ -250,16 +252,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     {m.is_hdr_supported && <>
                       <GlitchButton
                         label={t.heroTurnOnHdr}
-                        variant={m.is_hdr_enabled ? 'primary' : 'outline'}
+                        variant={mode === 'hdr' ? 'primary' : 'outline'}
                         size="sm"
-                        disabled={toggling || !controlAvailable || !m.device_path || !!m.identity_error}
+                        disabled={toggling || !controlAvailable || !monitorReady(m)}
                         onClick={() => handleSetMonitor(m, true)}
                       />
                       <GlitchButton
                         label={t.heroTurnOffHdr}
-                        variant={!m.is_hdr_enabled ? 'primary' : 'outline'}
+                        variant={mode === 'sdr' ? 'primary' : 'outline'}
                         size="sm"
-                        disabled={toggling || !controlAvailable || !m.device_path || !!m.identity_error}
+                        disabled={toggling || !controlAvailable || !monitorReady(m)}
                         onClick={() => handleSetMonitor(m, false)}
                       />
                     </>}
@@ -284,13 +286,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <span className="text-xs text-[#8a7f81]">({recentGames.length})</span>
           </div>
 
-          <button
+          {libraryCount !== null && <button
             onClick={onNavigateToApps}
             className="text-xs text-[#5accf5] hover:text-[#70d6f7] flex items-center gap-1 font-bold cursor-pointer uppercase transition-colors"
           >
-            <span>{t.recentAllLibrary(config.apps.length)}</span>
+            <span>{t.recentAllLibrary(libraryCount)}</span>
             <ArrowRight className="w-3.5 h-3.5" />
-          </button>
+          </button>}
         </div>
 
         {recentGames.length === 0 ? (

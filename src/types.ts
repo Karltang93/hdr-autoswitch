@@ -129,6 +129,7 @@ export interface RunningProcessInfo {
 export interface HdrStatePayload {
   is_hdr_active: boolean;
   scope_hdr_state: 'hdr' | 'sdr' | 'mixed' | 'unknown';
+  manual_control: { status: 'available' } | { status: 'blocked'; reason: string };
   current_app_name?: string | null;
   current_exe?: string | null;
   switched_by_app: boolean;

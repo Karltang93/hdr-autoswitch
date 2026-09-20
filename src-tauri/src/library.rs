@@ -1,12 +1,21 @@
 use crate::config::{AppConfig, HdrApp};
 
 fn same_game(existing: &HdrApp, item: &HdrApp) -> bool {
-    existing.exe_name.eq_ignore_ascii_case(&item.exe_name)
+    if existing.exe_name.eq_ignore_ascii_case(&item.exe_name)
         || existing.name.eq_ignore_ascii_case(&item.name)
-        || existing
-            .alternate_exes
-            .iter()
-            .any(|exe| exe.eq_ignore_ascii_case(&item.exe_name))
+    {
+        return true;
+    }
+    if matches!((&existing.steam_id, &item.steam_id), (Some(left), Some(right)) if left != right) {
+        return false;
+    }
+    std::iter::once(&existing.exe_name)
+        .chain(&existing.alternate_exes)
+        .any(|exe| {
+            std::iter::once(&item.exe_name)
+                .chain(&item.alternate_exes)
+                .any(|other| exe.eq_ignore_ascii_case(other))
+        })
 }
 
 fn merge_aliases(existing: &mut HdrApp, item: &HdrApp) {
@@ -45,9 +54,11 @@ pub fn import_games(config: &mut AppConfig, detected: Vec<HdrApp>) -> Result<(),
     Ok(())
 }
 
-pub fn enrich_existing(config: &mut AppConfig, detected: &[HdrApp]) {
+pub fn enrich_existing(config: &mut AppConfig, detected: &[HdrApp]) -> bool {
+    let mut changed = false;
     for item in detected {
         if let Some(existing) = config.apps.iter_mut().find(|app| same_game(app, item)) {
+            let before = existing.clone();
             merge_aliases(existing, item);
             if existing.steam_id.is_none() {
                 existing.steam_id.clone_from(&item.steam_id);
@@ -55,8 +66,10 @@ pub fn enrich_existing(config: &mut AppConfig, detected: &[HdrApp]) {
             if existing.launcher.is_none() {
                 existing.launcher.clone_from(&item.launcher);
             }
+            changed |= *existing != before;
         }
     }
+    changed
 }
 
 pub fn validate_app(app: &HdrApp) -> Result<(), String> {
@@ -76,7 +89,7 @@ pub fn add_app(config: &mut AppConfig, mut app: HdrApp) -> Result<(), String> {
     if let Some(existing) = config
         .apps
         .iter_mut()
-        .find(|entry| entry.exe_name.eq_ignore_ascii_case(&app.exe_name))
+        .find(|entry| same_game(entry, &app))
     {
         merge_aliases(existing, &app);
         existing.name = app.name;
@@ -166,5 +179,68 @@ mod tests {
         assert_eq!(config.apps.len(), 1);
         assert_eq!(config.apps[0].path, existing.path);
         assert_eq!(config.apps[0].steam_id, existing.steam_id);
+    }
+
+    #[test]
+    fn primary_and_alias_overlap_is_symmetric_for_every_library_entry_point() {
+        let mut existing = game("User title", "main.exe");
+        existing.enabled = false;
+        existing.path = Some(r"D:\Chosen\main.exe".into());
+        existing.alternate_exes = vec!["renderer.exe".into()];
+        for (primary, aliases) in [
+            ("MAIN.EXE", vec![]),
+            ("RENDERER.EXE", vec![]),
+            ("new.exe", vec!["MAIN.EXE"]),
+            ("new.exe", vec!["RENDERER.EXE"]),
+        ] {
+            let mut incoming = game("Catalog title", primary);
+            incoming.alternate_exes = aliases.into_iter().map(str::to_owned).collect();
+            incoming.launcher = Some("Steam".into());
+            assert!(same_game(&existing, &incoming));
+            assert!(same_game(&incoming, &existing));
+            for operation in 0..3 {
+                let mut config = AppConfig::default();
+                config.apps = vec![existing.clone()];
+                match operation {
+                    0 => add_app(&mut config, incoming.clone()).unwrap(),
+                    1 => import_games(&mut config, vec![incoming.clone()]).unwrap(),
+                    _ => { assert!(enrich_existing(&mut config, &[incoming.clone()])); }
+                }
+                assert_eq!(config.apps.len(), 1);
+                assert_eq!(config.apps[0].path, existing.path);
+                assert_eq!(config.apps[0].exe_name, existing.exe_name);
+                assert_eq!(config.apps[0].enabled, operation != 2);
+                assert_eq!(config.apps[0].launcher.as_deref(), Some("Steam"));
+            }
+        }
+    }
+
+    #[test]
+    fn unrelated_titles_and_conflicting_game_ids_are_not_merged() {
+        let left = game("Game", "game.exe");
+        let right = game("Game Deluxe", "game-deluxe.exe");
+        assert!(!same_game(&left, &right));
+        assert!(!same_game(&right, &left));
+        let mut left = left;
+        let mut right = right;
+        left.steam_id = Some("100".into());
+        right.steam_id = Some("200".into());
+        left.alternate_exes.push("launcher.exe".into());
+        right.alternate_exes.push("launcher.exe".into());
+        assert!(!same_game(&left, &right));
+        assert!(!same_game(&right, &left));
+    }
+
+    #[test]
+    fn enrichment_reports_no_change_for_unknown_games_and_existing_metadata() {
+        let existing = game("Known game", "known.exe");
+        let mut config = AppConfig::default();
+        config.apps = vec![existing.clone()];
+        assert!(!enrich_existing(&mut config, &[game("Unknown", "unknown.exe")]));
+        assert!(!enrich_existing(&mut config, &[existing]));
+        let mut detected = game("Known game", "alternate.exe");
+        detected.launcher = Some("Steam".into());
+        assert!(enrich_existing(&mut config, &[detected.clone()]));
+        assert!(!enrich_existing(&mut config, &[detected]));
     }
 }

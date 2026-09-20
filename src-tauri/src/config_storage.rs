@@ -896,6 +896,14 @@ impl Storage {
         ))
     }
 
+    pub fn verify_unchanged(&self, predecessor: &Document) -> Result<(), String> {
+        self.ensure_no_active_artifacts()?;
+        if let Some(issue) = self.unsupported_artifacts(&self.entries()?)? {
+            return Err(issue);
+        }
+        self.exact(MAIN, &predecessor.bytes)
+    }
+
     pub fn commit(&mut self, predecessor: &Document, candidate: Document) -> StoreOutcome {
         match self.commit_inner(predecessor, candidate) {
             Ok(outcome) => outcome,

@@ -45,6 +45,19 @@ pub(crate) fn publish_result(
     monitor_service.config_committed();
 }
 
+pub(crate) fn publish_enrichment_result(
+    manager: &ConfigManager,
+    monitor_service: &MonitorService,
+    result: Result<Option<ConfigSnapshot>, String>,
+    emit: impl FnOnce(&ConfigSnapshot),
+) {
+    match result {
+        Ok(None) => {}
+        Ok(Some(snapshot)) => publish_result(manager, monitor_service, Ok(snapshot), emit),
+        Err(error) => publish_result(manager, monitor_service, Err(error), emit),
+    }
+}
+
 impl BackgroundWork {
     pub fn start(
         manager: &Arc<ConfigManager>,
@@ -117,7 +130,7 @@ impl BackgroundWork {
             let Some(manager) = config.upgrade() else {
                 return;
             };
-            let result = manager.mutate(
+            let result = manager.mutate_if_changed(
                 &scan_origin.context_token,
                 Some(&scan_origin.library_generation),
                 true,
@@ -129,7 +142,7 @@ impl BackgroundWork {
                     Ok(())
                 },
             );
-            publish_result(&manager, &monitor_service, result, |snapshot| {
+            publish_enrichment_result(&manager, &monitor_service, result, |snapshot| {
                 emit_config(&app, snapshot)
             });
         });

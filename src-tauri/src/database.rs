@@ -275,8 +275,7 @@ pub async fn fetch_online_database() -> Result<Vec<CatalogEntry>, String> {
         if res.status().is_success() {
             if let Ok(json_data) = res.json::<serde_json::Value>().await {
                 if let Some(wikitext) = json_data.pointer("/parse/wikitext/*").and_then(|v| v.as_str()) {
-                    parse_pcgw_autohdr_wikitext(wikitext, &mut catalog_map);
-                    fetched |= !wikitext.trim().is_empty();
+                    fetched |= parse_pcgw_autohdr_wikitext(wikitext, &mut catalog_map) > 0;
                 }
             }
         }
@@ -293,8 +292,8 @@ pub async fn fetch_online_database() -> Result<Vec<CatalogEntry>, String> {
         {
             if res.status().is_success() {
                 if let Ok(entries) = res.json::<Vec<CatalogEntry>>().await {
-                    fetched = !entries.is_empty();
-                    for entry in entries {
+                    for entry in entries.into_iter().filter(valid_catalog_entry) {
+                        fetched = true;
                         catalog_map.insert(clean_key(&entry.name), entry);
                     }
                 }
@@ -302,14 +301,28 @@ pub async fn fetch_online_database() -> Result<Vec<CatalogEntry>, String> {
         }
     }
 
+    let result = synced_catalog(fetched, catalog_map)?;
+    save_to_cache(&result)?;
+    Ok(result)
+}
+
+fn valid_catalog_entry(entry: &CatalogEntry) -> bool {
+    !clean_key(&entry.name).is_empty()
+        && !entry.exe_name.contains(['\\', '/'])
+        && entry.exe_name.to_ascii_lowercase().ends_with(".exe")
+        && entry.exe_name.len() > 4
+}
+
+fn synced_catalog(
+    fetched: bool,
+    catalog_map: HashMap<String, CatalogEntry>,
+) -> Result<Vec<CatalogEntry>, String> {
     if !fetched {
         return Err("No online catalog source succeeded. The existing catalog was not replaced.".into());
     }
 
     let mut result: Vec<CatalogEntry> = catalog_map.into_values().collect();
     result.sort_by(|a, b| a.name.cmp(&b.name));
-    save_to_cache(&result)?;
-
     Ok(result)
 }
 
@@ -340,7 +353,9 @@ fn parse_pcgw_table_html(html: &str, out: &mut Vec<(String, String)>) {
                 let after_supp = &after_name[supp_pos + supp_tag.len()..];
                 if let Some(td_end) = after_supp.find("</td>") {
                     let supported_val = after_supp[..td_end].trim();
-                    if !game_name.is_empty() {
+                    if !clean_key(game_name).is_empty()
+                        && matches!(supported_val, "true" | "hackable" | "limited" | "always on")
+                    {
                         out.push((game_name.to_string(), supported_val.to_string()));
                     }
                     rest = &after_supp[td_end..];
@@ -352,41 +367,103 @@ fn parse_pcgw_table_html(html: &str, out: &mut Vec<(String, String)>) {
     }
 }
 
-fn parse_pcgw_autohdr_wikitext(wikitext: &str, map: &mut HashMap<String, CatalogEntry>) {
+fn parse_pcgw_autohdr_wikitext(wikitext: &str, map: &mut HashMap<String, CatalogEntry>) -> usize {
+    let mut recognized = 0;
     for line in wikitext.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with('|') && trimmed.contains("[[") && trimmed.contains("]]") {
-            if let Some(start_bracket) = trimmed.find("[[") {
-                if let Some(end_bracket) = trimmed[start_bracket..].find("]]") {
-                    let inside = &trimmed[start_bracket + 2..start_bracket + end_bracket];
-                    let game_name = if let Some(pipe_pos) = inside.find('|') {
-                        &inside[pipe_pos + 1..]
-                    } else {
-                        inside
-                    }
-                    .trim();
-
-                    if !game_name.is_empty() && !game_name.starts_with("File:") {
-                        let key = clean_key(game_name);
-                        let clean_exe = game_name
-                            .to_lowercase()
-                            .chars()
-                            .filter(|c| c.is_alphanumeric())
-                            .collect::<String>();
-
-                        map.entry(key).or_insert_with(|| CatalogEntry {
-                            name: game_name.to_string(),
-                            exe_name: format!("{}.exe", clean_exe),
-                            hdr_type: HdrType::AutoHdr,
-                            support_tier: "autohdr".to_string(),
-                            notes: Some("Podporuje Microsoft Windows Auto HDR".to_string()),
-                            steam_id: None,
-                            alternate_exes: Vec::new(),
-                        });
-
-                    }
-                }
-            }
+        let Some(row) = line.trim().strip_prefix('|') else {
+            continue;
+        };
+        let Some(link) = row.trim().strip_prefix("[[") else {
+            continue;
+        };
+        let Some((inside, _)) = link.split_once("]]") else {
+            continue;
+        };
+        let (page, label) = inside.split_once('|').unwrap_or((inside, inside));
+        let game_name = label.trim();
+        if clean_key(page).is_empty()
+            || clean_key(game_name).is_empty()
+            || ["file:", "image:", "category:", "template:", "help:"]
+                .iter()
+                .any(|prefix| page.trim().to_ascii_lowercase().starts_with(prefix))
+        {
+            continue;
         }
+        recognized += 1;
+        let key = clean_key(game_name);
+        map.entry(key.clone()).or_insert_with(|| CatalogEntry {
+            name: game_name.to_string(),
+            exe_name: format!("{key}.exe"),
+            hdr_type: HdrType::AutoHdr,
+            support_tier: "autohdr".to_string(),
+            notes: Some("Podporuje Microsoft Windows Auto HDR".to_string()),
+            steam_id: None,
+            alternate_exes: Vec::new(),
+        });
+    }
+    recognized
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_error_and_changed_format_pages_do_not_count_as_ingestion() {
+        for input in [
+            "", "   ", "<html>Service unavailable</html>",
+            r#"{"error":{"code":"missingtitle"}}"#,
+            "{{AutoHDR|New table format}}", "| no recognized game rows",
+            "| [[File:HDR.png|Picture]]", "| [[Category:HDR|HDR games]]",
+            "| [[|Missing page]]", "| [[Game|]]", "| [[...]]",
+        ] {
+            let mut catalog = HashMap::new();
+            assert_eq!(parse_pcgw_autohdr_wikitext(input, &mut catalog), 0, "{input}");
+            assert!(synced_catalog(false, catalog).is_err());
+        }
+    }
+
+    #[test]
+    fn valid_rows_count_even_when_the_catalog_already_contains_them() {
+        let text = "{| class=\"wikitable\"\n| [[Game one]] || Yes\n|-\n| [[Game two|Game 2]] || Yes\n|}";
+        let mut catalog = HashMap::new();
+        assert_eq!(parse_pcgw_autohdr_wikitext(text, &mut catalog), 2);
+        catalog.get_mut("gameone").unwrap().steam_id = Some("123".into());
+        let recognized = parse_pcgw_autohdr_wikitext(text, &mut catalog);
+        assert_eq!(recognized, 2);
+        assert_eq!(catalog.len(), 2);
+        assert_eq!(catalog["gameone"].steam_id.as_deref(), Some("123"));
+        assert!(synced_catalog(recognized > 0, catalog).is_ok());
+    }
+
+    #[test]
+    fn an_existing_catalog_does_not_turn_a_failed_fetch_into_success() {
+        let mut catalog = HashMap::new();
+        parse_pcgw_autohdr_wikitext("| [[Existing game]]", &mut catalog);
+        let recognized = parse_pcgw_autohdr_wikitext("A nonempty upstream error", &mut catalog);
+        assert!(synced_catalog(recognized > 0, catalog).unwrap_err().contains("No online catalog source succeeded"));
+    }
+
+    #[test]
+    fn fallback_requires_valid_entries_and_native_rows_require_known_support() {
+        let mut rows = Vec::new();
+        parse_pcgw_table_html(
+            "<td class=\"field_Name\"><a>Game</a></td><td class=\"field_Supported\">new unknown value</td>",
+            &mut rows,
+        );
+        assert!(rows.is_empty());
+        parse_pcgw_table_html(
+            "<td class=\"field_Name\"><a>Game</a></td><td class=\"field_Supported\">true</td>",
+            &mut rows,
+        );
+        assert_eq!(rows, vec![("Game".into(), "true".into())]);
+        let mut map = HashMap::new();
+        parse_pcgw_autohdr_wikitext("| [[Fallback game]]", &mut map);
+        let mut entry = map.remove("fallbackgame").unwrap();
+        assert!(valid_catalog_entry(&entry));
+        entry.exe_name = ".exe".into();
+        assert!(!valid_catalog_entry(&entry));
+        entry.exe_name = r"C:\game.exe".into();
+        assert!(!valid_catalog_entry(&entry));
     }
 }

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AppConfig, MonitorInfo, SettingsPatch } from '../types';
 import { configClient, useConfig } from '../useConfig';
+import { monitorReady } from '../displayState';
 import {
   Monitor,
   Clock,
@@ -30,7 +31,7 @@ export const Settings: React.FC<SettingsProps> = ({
   const [newBlacklistExe, setNewBlacklistExe] = useState('');
 
   const selectedMonitor = monitors.find((monitor) =>
-    monitor.is_selected && monitor.device_path && !monitor.identity_error && monitor.is_hdr_supported);
+    monitor.is_selected && monitorReady(monitor));
   const targetValue = config.target_monitor.kind === 'all'
     ? 'all'
     : selectedMonitor?.device_path ?? 'unavailable';
@@ -51,8 +52,8 @@ export const Settings: React.FC<SettingsProps> = ({
       void handleSave({ target_monitor: { kind: 'all' } });
       return;
     }
-    const monitor = monitors.find((item) => item.device_path === value && !item.identity_error);
-    if (!monitor?.device_path) {
+    const monitor = monitors.find((item) => item.device_path === value && monitorReady(item));
+    if (!monitor || !monitorReady(monitor)) {
       configClient.reportError(t.configMonitorIdentityError);
       return;
     }
@@ -164,7 +165,7 @@ export const Settings: React.FC<SettingsProps> = ({
                 {config.target_monitor.kind === 'needs_confirmation' ? t.configConfirmTarget : t.configMissingTarget}
               </option>}
               {monitors
-                .filter((m) => m.is_hdr_supported && m.device_path && !m.identity_error)
+                .filter(monitorReady)
                 .map((m) => (
                   <option key={m.id} value={m.device_path ?? ''}>
                     {m.name} {m.is_primary ? `(${t.displaysPrimary})` : ''}

@@ -1,5 +1,6 @@
 import { mockIPC, mockWindows } from '@tauri-apps/api/mocks';
 import { emit } from '@tauri-apps/api/event';
+import { manualScopeAvailable } from '../src/displayState.ts';
 
 const options = new URLSearchParams(location.search);
 localStorage.setItem('hdr_lang', options.get('lang') === 'cs' ? 'cs' : 'en');
@@ -17,14 +18,15 @@ const settings = {
   start_minimized: false,
   auto_detect_new_games: false,
   auto_sync_database: false,
-  switch_method: mode === 'import_available' ? 'shortcut' : 'native',
+  switch_method: mode === 'import_available' || options.get('consent') === 'pending' ? 'shortcut' : 'native',
   blacklist: [],
   apps: [],
 };
 let snapshot = {
   mode, settings, store_id: 'fixture-history', revision: '1', control_epoch: '1',
   context_token: 'fixture-context', library_generation: '1', issue: null,
-  controller_issue: null, config_path: 'C:\\ISOLATED-UI-FIXTURE\\config-v2.json',
+  controller_issue: options.get('conflict') === '1' ? 'Fixture controller conflict' : null,
+  config_path: 'C:\\ISOLATED-UI-FIXTURE\\config-v2.json',
   candidates: mode === 'recovery_required'
     ? [{ id: 'validated-checkpoint', label: 'Validated fixture checkpoint' }] : [],
 };
@@ -42,6 +44,17 @@ if (options.get('mixed') === '1') {
     name: 'Second test display', target_id: 24, is_hdr_enabled: false, is_primary: false,
   });
 }
+if (options.get('ambiguous') === '1') {
+  monitors[0].identity_status = 'ambiguous';
+  monitors[0].identity_error = 'Multiple endpoints claim this identity';
+  monitors.push({ ...monitors[0], target_id: 24, is_primary: false });
+}
+if (options.get('unknown') === '1') {
+  monitors[0].hdr_state_known = false;
+  monitors[0].state_error = 'Fixture HDR state query failed';
+  monitors[0].is_hdr_supported = false;
+  monitors[0].is_hdr_enabled = false;
+}
 const games = [{
   name: 'Fixture game', exe_name: 'fixture.exe', hdr_type: 'native', enabled: true,
   alternate_exes: [], launcher: 'Média',
@@ -49,6 +62,13 @@ const games = [{
 const commands = [];
 let history = 1;
 let failSave = options.get('failSave') === '1';
+let shuttingDown = options.get('shutdown') === '1';
+
+function manualControl() {
+  const reason = shuttingDown ? 'Fixture controller shutting down'
+    : snapshot.controller_issue ?? (snapshot.mode === 'unavailable' ? 'Fixture authority unavailable' : null);
+  return reason ? { status: 'blocked', reason } : { status: 'available' };
+}
 
 function status() {
   const target = snapshot.settings.target_monitor;
@@ -63,6 +83,7 @@ function status() {
     : selected.some((monitor) => monitor.is_hdr_enabled) ? 'mixed' : 'sdr';
   return {
     is_hdr_active: scope_hdr_state === 'hdr', scope_hdr_state,
+    manual_control: manualControl(),
     current_app_name: null, current_exe: null, switched_by_app: false,
     steam_id: null, launcher: null, hdr_type: null, target_status,
     warning: target_status === 'disconnected' ? 'The saved display is disconnected. No other display is substituted.' : null,
@@ -96,8 +117,9 @@ mockIPC(async (command, args = {}) => {
     case 'get_current_status': return status();
     case 'get_monitors': return monitors.map((monitor) => ({
       ...monitor,
-      is_selected: snapshot.settings.target_monitor.kind === 'all'
-        || snapshot.settings.target_monitor.device_path === monitor.device_path,
+      is_selected: snapshot.mode === 'ready' && monitor.identity_status === 'ready'
+        && (snapshot.settings.target_monitor.kind === 'all'
+          || snapshot.settings.target_monitor.device_path === monitor.device_path),
     }));
     case 'patch_settings':
       if (failSave) throw new Error('Simulated save failure; previous settings preserved');
@@ -135,6 +157,9 @@ mockIPC(async (command, args = {}) => {
     case 'pick_game_exe': return null;
     case 'sync_database': return games.length;
     case 'set_hdr': {
+      const admission = manualControl();
+      if (admission.status === 'blocked') throw new Error(admission.reason);
+      if (!manualScopeAvailable(args.scope, monitors)) throw new Error('Fixture scope unavailable');
       const selected = monitors.filter((monitor) => args.scope.kind === 'all' || args.scope.device_path === monitor.device_path);
       const outcomes = selected.map((monitor) => {
         const previous = monitor.is_hdr_enabled;
@@ -166,5 +191,9 @@ window.__hdrFixture = {
   get snapshot() { return structuredClone(snapshot); },
   permitSaves() { failSave = false; },
   emitStatus: () => emit('hdr-status-changed', status()),
+  async stopController() {
+    shuttingDown = true;
+    await emit('hdr-status-changed', status());
+  },
 };
 await import('../src/main.tsx');

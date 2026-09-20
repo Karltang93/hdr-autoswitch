@@ -1,7 +1,7 @@
 use crate::{
     config::TargetMonitor,
     display::{ScopeHdrState, TargetStatus},
-    monitor_hook::HdrStatePayload,
+    monitor_hook::{HdrStatePayload, ManualControl, ManualSetResult},
     show_main_window, AppState,
 };
 use std::sync::{
@@ -26,16 +26,16 @@ struct TrayLabels {
 fn labels(czech: bool) -> [&'static str; 5] {
     if czech {
         [
-            "Zapnout HDR na VŠECH monitorech",
-            "Vypnout HDR na VŠECH monitorech",
+            "Ručně zapnout HDR na VŠECH monitorech",
+            "Ručně vypnout HDR na VŠECH monitorech",
             "Otevřít okno",
             "Ukončit",
             "Nastavení a obnova",
         ]
     } else {
         [
-            "Turn HDR ON for ALL displays",
-            "Turn HDR OFF for ALL displays",
+            "Manually turn HDR ON for ALL displays",
+            "Manually turn HDR OFF for ALL displays",
             "Open window",
             "Quit",
             "Settings and recovery",
@@ -67,6 +67,13 @@ fn status_label(czech: bool, status: Option<&HdrStatePayload>) -> &'static str {
         || (status.target_status != TargetStatus::Ready && !unavailable_next_target)
         || status.scope_hdr_state == ScopeHdrState::Unknown
     {
+        if manual_enabled(Some(status)) {
+            return if czech {
+                "Automatické HDR pozastaveno / stav neznámý - ruční ovládání dostupné"
+            } else {
+                "Automatic HDR paused / state unknown - manual controls available"
+            };
+        }
         return if czech {
             "HDR pozastaveno / neznámý stav - otevřete nastavení"
         } else {
@@ -165,6 +172,10 @@ fn render_status(app: &AppHandle, labels: &TrayLabels) -> Result<(), String> {
         .lock()
         .map_err(|_| "Tray status lock is poisoned.")?;
     let text = status_label(labels.czech.load(Ordering::Acquire), status.as_ref());
+    for item in &labels.items[..2] {
+        item.set_enabled(manual_enabled(status.as_ref()))
+            .map_err(|error| format!("Cannot update manual HDR admission: {error}"))?;
+    }
     labels
         .status_item
         .set_text(text)
@@ -188,8 +199,7 @@ fn render_status(app: &AppHandle, labels: &TrayLabels) -> Result<(), String> {
 pub fn update_status(app: &AppHandle, status: &HdrStatePayload) {
     let handle = app.clone();
     let status = status.clone();
-    // Manual IPC/tray commands may be waiting for the actor on the UI thread.
-    // Queue native menu work; never synchronously dispatch it from the actor.
+    // Native menu updates belong on the UI thread, never on the actor.
     if let Err(error) = app.run_on_main_thread(move || {
         if let Some(labels) = handle.try_state::<TrayLabels>() {
             match labels.latest_status.lock() {
@@ -222,31 +232,34 @@ pub fn set_language(app: &AppHandle, czech: bool) -> Result<(), String> {
 
 fn report_control_error(app: &AppHandle, error: String) {
     eprintln!("Tray HDR request failed: {error}");
-    show_main_window(app);
-    if let Err(error) = app.emit("controller-error", Some(error)) {
-        eprintln!("Cannot display tray HDR error: {error}");
+    let handle = app.clone();
+    if let Err(error) = app.run_on_main_thread(move || {
+        show_main_window(&handle);
+        if let Err(error) = handle.emit("controller-error", Some(error)) {
+            eprintln!("Cannot display tray HDR error: {error}");
+        }
+    }) {
+        eprintln!("Cannot schedule tray HDR error: {error}");
     }
 }
 
-fn manual_all(app: &AppHandle, enable: bool) {
-    let Some(state) = app.try_state::<AppState>() else {
-        report_control_error(app, "HDR control has not initialized.".into());
-        return;
-    };
-    match state.monitor_service.manual_set(TargetMonitor::All, enable) {
+fn manual_enabled(status: Option<&HdrStatePayload>) -> bool {
+    status.is_some_and(|status| {
+        status.manual_control == ManualControl::Available && !status.inventory_stale
+    })
+}
+
+fn report_manual_result(app: &AppHandle, result: Result<ManualSetResult, String>) {
+    match result {
         Ok(result) => {
-            let errors: Vec<String> = result
-                .outcomes
-                .iter()
+            let errors: Vec<String> = result.outcomes.iter()
                 .filter(|outcome| !outcome.is_verified())
-                .map(|outcome| {
-                    outcome
-                        .message
-                        .clone()
-                        .unwrap_or_else(|| format!("{:?}", outcome.outcome))
-                })
+                .map(|outcome| outcome.message.clone()
+                    .unwrap_or_else(|| format!("{:?}", outcome.outcome)))
                 .collect();
-            if !errors.is_empty() {
+            if result.outcomes.is_empty() {
+                report_control_error(app, "No display result was returned.".into());
+            } else if !errors.is_empty() {
                 report_control_error(app, errors.join("; "));
             } else if let Err(error) = app.emit("controller-error", Option::<String>::None) {
                 eprintln!("Cannot notify the UI of verified manual HDR: {error}");
@@ -256,11 +269,32 @@ fn manual_all(app: &AppHandle, enable: bool) {
     }
 }
 
+fn manual_all(app: &AppHandle, enable: bool) {
+    let Some(state) = app.try_state::<AppState>() else {
+        report_control_error(app, "HDR control has not initialized.".into());
+        return;
+    };
+    let request = state.ensure_admission()
+        .and_then(|()| state.monitor_service.manual_set(TargetMonitor::All, enable));
+    let request = match request {
+        Ok(request) => request,
+        Err(error) => {
+            report_control_error(app, error);
+            return;
+        }
+    };
+    // Enqueue on the callback thread, then wait elsewhere: click order is actor order.
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        report_manual_result(&handle, request.resolve().await);
+    });
+}
+
 pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let czech = matches!(unsafe { GetUserDefaultUILanguage() } & 0x3ff, 0x05 | 0x1b);
     let text = labels(czech);
-    let on_item = MenuItemBuilder::with_id("hdr_on_all", text[0]).build(app)?;
-    let off_item = MenuItemBuilder::with_id("hdr_off_all", text[1]).build(app)?;
+    let on_item = MenuItemBuilder::with_id("hdr_on_all", text[0]).enabled(false).build(app)?;
+    let off_item = MenuItemBuilder::with_id("hdr_off_all", text[1]).enabled(false).build(app)?;
     let show_item = MenuItemBuilder::with_id("show", text[2]).build(app)?;
     let exit_item = MenuItemBuilder::with_id("exit", text[3]).build(app)?;
     let settings_item = MenuItemBuilder::with_id("show_settings", text[4]).build(app)?;
@@ -351,6 +385,7 @@ mod tests {
         HdrStatePayload {
             is_hdr_active: scope == ScopeHdrState::Hdr,
             scope_hdr_state: scope,
+            manual_control: ManualControl::Available,
             current_app_name: None,
             current_exe: None,
             switched_by_app: false,
@@ -377,6 +412,30 @@ mod tests {
         assert!(status_label(true, Some(&state)).contains("pozastaveno"));
         state.target_status = TargetStatus::OutcomeUnknown;
         assert!(status_label(false, Some(&state)).contains("unknown"));
+    }
+
+    #[test]
+    fn manual_tray_actions_follow_shared_admission_not_automatic_readiness() {
+        assert!(!manual_enabled(None));
+        let mut state = status(ScopeHdrState::Unknown);
+        for target in [
+            TargetStatus::AutomationPaused, TargetStatus::NeedsConfirmation,
+            TargetStatus::Disconnected,
+        ] {
+            state.target_status = target;
+            assert!(manual_enabled(Some(&state)));
+            assert!(status_label(false, Some(&state)).contains("manual controls available"));
+            assert!(status_label(true, Some(&state)).contains("ruční ovládání dostupné"));
+        }
+        state.inventory_stale = true;
+        assert!(!manual_enabled(Some(&state)));
+        state.inventory_stale = false;
+        for reason in ["controller conflict", "shutting down", "authority unavailable"] {
+            state.manual_control = ManualControl::Blocked { reason: reason.into() };
+            assert!(!manual_enabled(Some(&state)));
+        }
+        let payload = serde_json::to_value(&state).unwrap();
+        assert_eq!(payload["manual_control"]["status"], "blocked");
     }
 
     #[test]

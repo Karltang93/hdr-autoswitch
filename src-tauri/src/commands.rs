@@ -14,6 +14,12 @@ pub struct MonitorView {
     is_selected: bool,
 }
 
+fn monitor_view(monitor: MonitorInfo, snapshot: &ConfigSnapshot) -> MonitorView {
+    let is_selected = snapshot.mode == ConfigMode::Ready
+        && display::monitor_is_selected(&monitor, &snapshot.settings.target_monitor);
+    MonitorView { monitor, is_selected }
+}
+
 #[derive(Serialize)]
 pub struct ScanResult {
     context_token: String,
@@ -83,33 +89,27 @@ fn check_predecessor(app: &AppHandle, state: &AppState) -> Result<(), String> {
 #[tauri::command]
 pub fn get_monitors(state: State<'_, AppState>) -> Result<Vec<MonitorView>, String> {
     let monitors = display::get_monitors()?;
-    let target = state.config_mgr.snapshot()?.settings.target_monitor;
+    let snapshot = state.config_mgr.snapshot()?;
     Ok(monitors
         .into_iter()
-        .map(|monitor| {
-            let is_selected = display::monitor_is_selected(&monitor, &target);
-            MonitorView {
-                monitor,
-                is_selected,
-            }
-        })
+        .map(|monitor| monitor_view(monitor, &snapshot))
         .collect())
 }
 
 #[tauri::command]
-pub fn set_hdr(
+pub async fn set_hdr(
     state: State<'_, AppState>,
     scope: TargetMonitor,
     enable: bool,
 ) -> Result<ManualSetResult, String> {
     state.ensure_admission()?;
-    state.monitor_service.manual_set(scope, enable)
+    state.monitor_service.manual_set(scope, enable)?.resolve().await
 }
 
 #[tauri::command]
-pub fn get_current_status(state: State<'_, AppState>) -> Result<HdrStatePayload, String> {
-    state.monitor_service.refresh()?;
-    state.monitor_service.status()
+pub async fn get_current_status(state: State<'_, AppState>) -> Result<HdrStatePayload, String> {
+    state.monitor_service.refresh()?.resolve().await?;
+    state.monitor_service.status()?.resolve().await
 }
 
 #[tauri::command]
@@ -373,4 +373,30 @@ pub fn verify_game_paths(paths: Vec<String>) -> std::collections::HashMap<String
             (path, exists)
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::ConfigManager;
+
+    #[test]
+    fn monitor_ipc_does_not_label_untrusted_default_all_as_a_saved_target() {
+        let root = tempfile::tempdir().unwrap();
+        let manager = ConfigManager::load(
+            root.path().join("local"), root.path().join("legacy.json"),
+        ).unwrap();
+        let first = manager.snapshot().unwrap();
+        let monitor = crate::display::tests::monitor("chosen", 1, false);
+        for mode in [
+            ConfigMode::FirstRun, ConfigMode::ImportAvailable, ConfigMode::RecoveryRequired,
+            ConfigMode::UnsupportedSchema, ConfigMode::Unavailable,
+        ] {
+            let mut snapshot = first.clone();
+            snapshot.mode = mode;
+            assert!(!monitor_view(monitor.clone(), &snapshot).is_selected);
+        }
+        let saved = manager.initialize(&first.context_token).unwrap();
+        assert!(monitor_view(monitor, &saved).is_selected);
+    }
 }

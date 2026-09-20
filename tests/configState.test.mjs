@@ -277,8 +277,90 @@ test('failed reconciliation and stale reads never restore retired authority', as
   result = snapshot({ revision: '2', control_epoch: '2' });
   await client.refresh();
   assert.equal(client.getView().snapshot.revision, '1');
+  assert.equal(client.getView().error, 'Refetch failed');
   assert.throws(client.captureOrigin, /history changed/);
   result = next;
   await client.refresh();
   assert.equal(client.captureOrigin().contextToken, 'context-2');
+  assert.equal(client.getView().error, null);
+});
+
+test('a successful accepted retry clears a transient read error', async () => {
+  let failing = true;
+  const client = new ConfigClient(async () => {
+    if (failing) throw new Error('read unavailable');
+    return snapshot();
+  });
+  await client.refresh();
+  assert.equal(client.getView().error, 'read unavailable');
+  failing = false;
+  await client.refresh();
+  assert.equal(client.getView().error, null);
+});
+
+test('mutation errors survive both successful and failed recovery reads', async () => {
+  let readFails = false;
+  let mutationFails = true;
+  const client = new ConfigClient(async (command) => {
+    if (command === 'get_config') {
+      if (readFails) throw new Error('recovery read failed');
+      return snapshot();
+    }
+    if (mutationFails) throw new Error('write rejected');
+    return snapshot({ revision: '2', control_epoch: '2' });
+  });
+  await client.refresh();
+  await assert.rejects(client.patch({ autostart: true }), /write rejected/);
+  await client.refresh();
+  assert.equal(client.getView().error, 'write rejected');
+  readFails = true;
+  await client.refresh();
+  assert.equal(client.getView().error, 'write rejected');
+  readFails = false;
+  mutationFails = false;
+  await client.patch({ autostart: false });
+  assert.equal(client.getView().error, null);
+});
+
+test('an older successful read cannot clear a newer failed read', async () => {
+  const old = deferred();
+  let reads = 0;
+  const client = new ConfigClient(async () => {
+    if (++reads === 1) return old.promise;
+    throw new Error('newer read failed');
+  });
+  const first = client.refresh();
+  await client.refresh();
+  old.resolve(snapshot());
+  await first;
+  assert.equal(client.getView().error, 'newer read failed');
+  assert.equal(client.getView().snapshot, null);
+});
+
+test('a read retry cannot clear an action error reported after it started', async () => {
+  const retry = deferred();
+  let reads = 0;
+  const client = new ConfigClient(async () => {
+    if (++reads === 1) throw new Error('read failed');
+    return retry.promise;
+  });
+  await client.refresh();
+  const recovered = client.refresh();
+  client.reportError('manual action failed');
+  retry.resolve(snapshot());
+  await recovered;
+  assert.equal(client.getView().error, 'manual action failed');
+});
+
+test('a completed mutation cannot clear a newer unrelated error', async () => {
+  const write = deferred();
+  const client = new ConfigClient(async (command) =>
+    command === 'get_config' ? snapshot() : write.promise);
+  await client.refresh();
+  const mutation = client.patch({ autostart: true });
+  await Promise.resolve();
+  client.reportError('newer UI failure');
+  write.resolve(snapshot({ revision: '2', control_epoch: '2' }));
+  await mutation;
+  assert.equal(client.getView().error, 'newer UI failure');
 });

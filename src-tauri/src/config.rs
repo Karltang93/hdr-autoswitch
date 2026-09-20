@@ -445,6 +445,29 @@ impl ConfigManager {
     where
         F: FnOnce(&mut AppConfig) -> Result<(), String>,
     {
+        self.mutate_inner(expected_context, expected_library_generation, changes_library, false, update)
+            .map(|(snapshot, _)| snapshot)
+    }
+
+    pub fn mutate_if_changed(
+        &self,
+        expected_context: &str,
+        expected_library_generation: Option<&str>,
+        changes_library: bool,
+        update: impl FnOnce(&mut AppConfig) -> Result<(), String>,
+    ) -> Result<Option<ConfigSnapshot>, String> {
+        self.mutate_inner(expected_context, expected_library_generation, changes_library, true, update)
+            .map(|(snapshot, changed)| changed.then_some(snapshot))
+    }
+
+    fn mutate_inner(
+        &self,
+        expected_context: &str,
+        expected_library_generation: Option<&str>,
+        changes_library: bool,
+        skip_unchanged: bool,
+        update: impl FnOnce(&mut AppConfig) -> Result<(), String>,
+    ) -> Result<(ConfigSnapshot, bool), String> {
         let mut writer = self
             .writer
             .lock()
@@ -471,6 +494,12 @@ impl ConfigManager {
         {
             return Err("Shortcut automation cannot be enabled".into());
         }
+        if skip_unchanged && settings == predecessor.envelope.settings {
+            if let Err(error) = writer.storage.verify_unchanged(&predecessor) {
+                return self.block(&mut writer, error).map(|snapshot| (snapshot, false));
+            }
+            return self.snapshot().map(|snapshot| (snapshot, false));
+        }
         // A caller cannot accidentally omit the library fence for an actual library edit.
         let changes_library =
             changes_library || settings.apps != predecessor.envelope.settings.apps;
@@ -483,6 +512,7 @@ impl ConfigManager {
         let candidate = predecessor.successor(settings)?;
         let outcome = writer.storage.commit(&predecessor, candidate);
         self.finish(&mut writer, outcome, false, generation)
+            .map(|snapshot| (snapshot, true))
     }
 
     pub fn initialize(&self, expected_context: &str) -> Result<ConfigSnapshot, String> {
@@ -723,6 +753,82 @@ mod tests {
             steam_id: None,
             launcher: Some("Custom launcher".into()),
         }
+    }
+
+    #[test]
+    fn unchanged_mutation_preserves_revision_generation_epoch_and_artifacts() {
+        let fixture = Fixture::new();
+        let (manager, ready) = fixture.ready();
+        let bytes = artifact_bytes(&fixture);
+        let result = manager.mutate_if_changed(
+            &ready.context_token, Some(&ready.library_generation), true, |_| Ok(()),
+        ).unwrap();
+        assert!(result.is_none());
+        assert_eq!(manager.snapshot().unwrap(), ready);
+        assert_eq!(artifact_bytes(&fixture), bytes);
+        let mut called = false;
+        assert!(manager.mutate_if_changed(&ready.context_token, Some("999"), true, |_| {
+            called = true;
+            Ok(())
+        }).is_err());
+        assert!(!called);
+    }
+
+    #[test]
+    fn unchanged_mutation_still_retires_authority_on_a_persistence_conflict() {
+        let fixture = Fixture::new();
+        let (manager, ready) = fixture.ready();
+        fs::write(fixture.main(), b"external conflicting bytes").unwrap();
+        let bytes = artifact_bytes(&fixture);
+        assert!(manager.mutate_if_changed(
+            &ready.context_token, None, true, |_| Ok(()),
+        ).is_err());
+        let blocked = manager.snapshot().unwrap();
+        assert_eq!(blocked.mode, ConfigMode::RecoveryRequired);
+        assert_ne!(blocked.context_token, ready.context_token);
+        assert_eq!(artifact_bytes(&fixture), bytes);
+    }
+
+    #[test]
+    fn no_op_detection_uses_latest_settings_under_writer_serialization() {
+        let fixture = Fixture::new();
+        let (manager, ready) = fixture.ready();
+        let manager = Arc::new(manager);
+        let (entered, waiting) = std::sync::mpsc::channel();
+        let (release, released) = std::sync::mpsc::channel();
+        let writer = manager.clone();
+        let context = ready.context_token.clone();
+        let first = std::thread::spawn(move || {
+            writer.mutate(&context, None, true, |settings| {
+                settings.apps.push(app("game.exe"));
+                entered.send(()).unwrap();
+                released.recv().unwrap();
+                Ok(())
+            }).unwrap()
+        });
+        waiting.recv().unwrap();
+        let next_writer = manager.clone();
+        let context = ready.context_token;
+        let second = std::thread::spawn(move || {
+            next_writer.mutate_if_changed(&context, None, true, |settings| {
+                assert_eq!(settings.apps, vec![app("game.exe")]);
+                crate::library::enrich_existing(settings, &[app("game.exe")]);
+                Ok(())
+            }).unwrap()
+        });
+        release.send(()).unwrap();
+        let committed = first.join().unwrap();
+        assert!(second.join().unwrap().is_none());
+        assert_eq!(manager.snapshot().unwrap(), committed);
+        let changed = manager.mutate_if_changed(
+            &committed.context_token, Some(&committed.library_generation), true,
+            |settings| {
+                settings.apps[0].alternate_exes.push("game-dx12.exe".into());
+                Ok(())
+            },
+        ).unwrap().unwrap();
+        assert_eq!(changed.revision.parse::<u64>().unwrap(), committed.revision.parse::<u64>().unwrap() + 1);
+        assert_eq!(changed.library_generation.parse::<u64>().unwrap(), committed.library_generation.parse::<u64>().unwrap() + 1);
     }
 
     fn legacy_bytes(settings: &AppConfig, target: &str) -> Vec<u8> {

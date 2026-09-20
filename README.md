@@ -130,6 +130,22 @@ changing authority.
 Background library updates and recovery-state changes notify the controller
 without waiting for a foreground-window change.
 
+Manual native **On**/**Off** explicitly targets one display or **All**. These
+actions remain available during first-run, recovery, unsupported settings, and
+pending automatic Native consent; they neither save settings nor grant that
+consent. No untrusted default All selection is presented as a saved target.
+Controller conflicts, shutdown, or unreadable control authority block manual
+actions, and every request still validates native display identity and HDR state.
+Automatic activation requires ready settings, Native consent, and an eligible
+game; cleanup of changes already owned by the app is a separate operation.
+
+Ruční nativní **Zapnout**/**Vypnout** platí jen pro výslovně zvolený displej nebo
+**Vše**, i při pozastavené automatizaci během prvního spuštění, obnovy,
+nepodporovaného nastavení nebo čekání na souhlas s automatickým nativním HDR.
+Nemění nastavení ani tento souhlas. Konflikt ovladače, ukončování a nedostupná
+autorita ovládání ruční zásahy blokují; identita a stav displeje se vždy ověřují.
+Automatické HDR nadále vyžaduje platné nastavení, souhlas a způsobilou hru.
+
 Automatic cleanup only reverses changes the app verified that it made. It leaves
 pre-existing HDR and observed manual/external overrides alone. An unverified
 native result remains unresolved until an explicit, verified per-display (or All)
