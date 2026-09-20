@@ -106,10 +106,12 @@ Download the latest installer (`.exe` setup or `.msi`) from the [**Releases Page
 * [Rust](https://www.rust-lang.org/) (stable toolchain)
 * Windows 10 (build 19041+) or Windows 11 with an HDR-capable display
 
-### Settings Storage Foundation
-The schema-2 transactional store is compiled as `config_v2` and `config_storage`, but is not activated until caller integration. The application still uses the original `config` module and autostart plugin.
+### Settings Storage and Native HDR Foundations
+The schema-2 transactional store (`config_v2`, `config_storage`) and the stable-identity, native-only verified HDR foundation (`display_v2`, `hdr_controller`) are compiled and regression-tested, but remain inactive until caller integration. The HDR controller preserves frozen activation scopes, application ownership, manual overrides, uncertain outcomes, and bounded cleanup. The application still uses the original `config`, `display`, `MonitorService`, tray/runtime code, and autostart plugin; the new Tauri actor is not integrated yet.
 
 Persisted schema-2 settings, app rows, and monitor targets use strict typed decoding at every document and journal-candidate entry point. All canonical fields must be present, including nullable metadata and journal install sources (explicit `null` remains valid); unknown nested fields are rejected without rewriting the evidence or advertising malformed recovery sources. Legacy import alone retains its recognized defaults, aliases, and permissive compatibility behavior.
+
+Primary-monitor labels use the Windows GDI primary-source metadata, not display-path ordering. Cloned targets sharing a primary source share its label. Missing or failed primary metadata is logged and omits the label without invalidating monitor identity or HDR state; HDR control still resolves only by durable monitor identity.
 
 A registered recovery source that changes or becomes unreadable retires the current settings context and blocks automatic authority before recovery inventory is refreshed. Malformed, unknown, or expired candidate IDs are rejected without changing authority.
 

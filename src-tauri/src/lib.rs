@@ -3,6 +3,8 @@ mod config_storage;
 mod config_v2;
 mod database;
 mod display;
+mod display_v2;
+mod hdr_controller;
 mod monitor_hook;
 mod process;
 mod scanner;
