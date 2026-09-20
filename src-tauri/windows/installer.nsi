@@ -68,6 +68,81 @@ Var HdrUiLevel
 Var HdrPassive
 Var HdrNoShortcut
 Var HdrArguments
+Var HdrUninstallRecovery
+Var HdrUninstallFailure
+Var HdrUninstallRestoreFailed
+Var HdrUninstallRestoreDir
+Var HdrUninstallRestoreDirOwned
+
+!macro HdrCreateUninstallDirectory DIRECTORY PARENT SUFFIX FAILURE
+  ClearErrors
+  GetTempFileName ${DIRECTORY} "${PARENT}"
+  ${If} ${Errors}
+    Goto ${FAILURE}
+  ${EndIf}
+  ClearErrors
+  Delete "${DIRECTORY}"
+  ${If} ${Errors}
+    Goto ${FAILURE}
+  ${EndIf}
+  StrCpy ${DIRECTORY} "${DIRECTORY}.${SUFFIX}"
+  System::Call 'kernel32::CreateDirectoryW(w "${DIRECTORY}", p 0) i .r0'
+  ${If} $0 == 0
+    Goto ${FAILURE}
+  ${EndIf}
+!macroend
+
+!macro HdrBackupUninstallFile NAME
+  System::Call 'kernel32::CopyFileW(w "$INSTDIR\${NAME}", w "$HdrUninstallRecovery\${NAME}", i 1) i .r0'
+  ${If} $0 == 0
+    Goto hdr_uninstall_prepare_failed
+  ${EndIf}
+!macroend
+
+!macro HdrDeleteUninstallPayload PATH
+  StrCpy $HdrUninstallFailure "${PATH}"
+  ClearErrors
+  Delete "${PATH}"
+  ${If} ${Errors}
+    Goto hdr_uninstall_failed
+  ${EndIf}
+  ; IfFileExists also returns false on lookup errors; only confirmed absence
+  ; (ERROR_FILE_NOT_FOUND / ERROR_PATH_NOT_FOUND) authorizes metadata removal.
+  System::Call 'kernel32::GetFileAttributesW(w "${PATH}") i .r0 ?e'
+  Pop $1
+  ${If} $0 != -1
+    Goto hdr_uninstall_failed
+  ${EndIf}
+  ${If} $1 != 2
+  ${AndIf} $1 != 3
+    Goto hdr_uninstall_failed
+  ${EndIf}
+!macroend
+
+!macro HdrRestoreUninstallFile NAME
+  System::Call 'kernel32::GetFileAttributesW(w "$INSTDIR\${NAME}") i .r0 ?e'
+  Pop $1
+  ${If} $0 == -1
+    ${If} $1 == 2
+    ${OrIf} $1 == 3
+      ${If} $HdrUninstallRestoreDirOwned != 1
+        !insertmacro HdrCreateUninstallDirectory $HdrUninstallRestoreDir "$INSTDIR" "hdr-uninstall-restore" hdr_uninstall_restore_incomplete
+        StrCpy $HdrUninstallRestoreDirOwned 1
+      ${EndIf}
+      ; Keep partial copies off registered paths. Staging under $INSTDIR makes
+      ; the no-replace rename same-volume even when the backups are on C:.
+      System::Call 'kernel32::CopyFileW(w "$HdrUninstallRecovery\${NAME}", w "$HdrUninstallRestoreDir\${NAME}.restore", i 1) i .r0'
+      ${If} $0 != 0
+        System::Call 'kernel32::MoveFileExW(w "$HdrUninstallRestoreDir\${NAME}.restore", w "$INSTDIR\${NAME}", i 0) i .r0'
+      ${EndIf}
+      ${If} $0 == 0
+        StrCpy $HdrUninstallRestoreFailed 1
+      ${EndIf}
+    ${Else}
+      StrCpy $HdrUninstallRestoreFailed 1
+    ${EndIf}
+  ${EndIf}
+!macroend
 
 !define MUI_PAGE_CUSTOMFUNCTION_PRE HdrSkipPassive
 !insertmacro MUI_PAGE_WELCOME
@@ -288,14 +363,37 @@ Section "Uninstall"
     SetErrorLevel 1
     Quit
   ${EndIf}
-  Delete "$INSTDIR\${MAINBINARYNAME}.exe"
+  ; NSIS normally runs a temporary self-copy, so the registered uninstall.exe
+  ; can be removed. _?= disables that behavior and must fail, not defer deletion.
+  ; The ownership helper requires BOTH original executable paths on a retry.
+  ; Keep recovery outside $PLUGINSDIR until success: Quit cleans $PLUGINSDIR.
+  StrCpy $HdrUninstallRecovery ""
+  ClearErrors
+  InitPluginsDir
+  ${If} ${Errors}
+    Goto hdr_uninstall_prepare_failed
+  ${EndIf}
+  !insertmacro HdrCreateUninstallDirectory $HdrUninstallRecovery "$TEMP" "hdr-uninstall-recovery" hdr_uninstall_prepare_failed
+  !insertmacro HdrBackupUninstallFile "${MAINBINARYNAME}.exe"
+  !insertmacro HdrBackupUninstallFile "uninstall.exe"
+
   {{#each resources}}
-  Delete "$INSTDIR\\{{this.[1]}}"
+  !insertmacro HdrDeleteUninstallPayload "$INSTDIR\\{{this.[1]}}"
   {{/each}}
   {{#each binaries}}
-  Delete "$INSTDIR\\{{this}}"
+  !insertmacro HdrDeleteUninstallPayload "$INSTDIR\\{{this}}"
   {{/each}}
-  Delete "$INSTDIR\uninstall.exe"
+  !insertmacro HdrDeleteUninstallPayload "$INSTDIR\${MAINBINARYNAME}.exe"
+  !insertmacro HdrDeleteUninstallPayload "$INSTDIR\uninstall.exe"
+
+  ; Retire the recovery pair together only after every installed payload is
+  ; confirmed absent. A failed move still leaves both originals available.
+  StrCpy $HdrUninstallFailure "$HdrUninstallRecovery (recovery cleanup)"
+  ClearErrors
+  Rename "$HdrUninstallRecovery" "$PLUGINSDIR\hdr-uninstall-complete"
+  ${If} ${Errors}
+    Goto hdr_uninstall_failed
+  ${EndIf}
   !insertmacro IsShortcutTarget "$SMPROGRAMS\${PRODUCTNAME}.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
   Pop $0
   ${If} $0 == 1
@@ -314,4 +412,48 @@ Section "Uninstall"
   {{/each}}
   RMDir "$INSTDIR"
   ; Neither legacy nor v2 user settings are removed by this installer.
+  Goto hdr_uninstall_done
+
+hdr_uninstall_prepare_failed:
+  StrCpy $0 "Uninstall blocked: recovery copies could not be prepared. No bundled file was removed; shortcuts and installation metadata were retained. Startup may already be disabled. Close file locks and retry. Any temporary recovery copies remain at: $HdrUninstallRecovery"
+  SetErrorLevel 1
+  DetailPrint "$0"
+  ${If} $HdrUiLevel == 5
+    MessageBox MB_OK|MB_ICONSTOP "$0"
+  ${EndIf}
+  Quit
+
+hdr_uninstall_failed:
+  StrCpy $HdrUninstallRestoreFailed 0
+  StrCpy $HdrUninstallRestoreDir ""
+  StrCpy $HdrUninstallRestoreDirOwned 0
+  !insertmacro HdrRestoreUninstallFile "${MAINBINARYNAME}.exe"
+  !insertmacro HdrRestoreUninstallFile "uninstall.exe"
+  Goto hdr_uninstall_restore_report
+
+hdr_uninstall_restore_incomplete:
+  StrCpy $HdrUninstallRestoreFailed 1
+
+hdr_uninstall_restore_report:
+  ${If} $HdrUninstallRestoreDirOwned == 1
+    ClearErrors
+    RMDir "$HdrUninstallRestoreDir"
+    ${If} ${Errors}
+      DetailPrint "Nonempty or locked recovery staging retained at $HdrUninstallRestoreDir. Do not use .restore files for manual repair."
+    ${EndIf}
+  ${EndIf}
+  SetErrorLevel 1
+  StrCpy $0 "Uninstall incomplete: $HdrUninstallFailure. Earlier files may be gone and startup may already be disabled. Shortcuts and installation metadata were retained; existing files were not overwritten. Close locks and retry normally (without _?=). Do not launch the app."
+  ${If} $HdrUninstallRestoreFailed == 1
+    StrCpy $0 "$0$\r$\nAutomatic recovery was blocked. After closing locks, restore the two recovery files from $HdrUninstallRecovery to $INSTDIR only where originals are missing; do not overwrite conflicts. Do not use .restore staging files at $HdrUninstallRestoreDir. Then retry. Reinstallation cannot repair missing ownership paths."
+  ${Else}
+    StrCpy $0 "$0$\r$\nMissing cleanup executables were restored. Recovery copies remain at $HdrUninstallRecovery; retain them until a retry succeeds."
+  ${EndIf}
+  DetailPrint "$0"
+  ${If} $HdrUiLevel == 5
+    MessageBox MB_OK|MB_ICONSTOP "$0"
+  ${EndIf}
+  Quit
+
+hdr_uninstall_done:
 SectionEnd
