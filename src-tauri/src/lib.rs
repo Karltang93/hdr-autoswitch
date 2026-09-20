@@ -5,6 +5,7 @@ mod database;
 mod display;
 mod display_v2;
 mod hdr_controller;
+mod legacy_upgrade;
 mod monitor_hook;
 mod process;
 mod scanner;
