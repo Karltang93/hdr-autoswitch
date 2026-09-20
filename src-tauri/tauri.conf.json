@@ -29,6 +29,16 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "template": "windows\\installer.nsi"
+      },
+      "wix": {
+        "upgradeCode": "30b00949-76aa-5c71-b9aa-0599499ac6de",
+        "template": "windows\\main.wxs"
+      }
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

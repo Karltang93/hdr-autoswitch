@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
-import { AppConfig, MonitorInfo } from '../types';
-import { invoke } from '@tauri-apps/api/core';
-import { enable, disable, isEnabled } from '@tauri-apps/plugin-autostart';
+import { useState } from 'react';
+import { AppConfig, MonitorInfo, SettingsPatch } from '../types';
+import { configClient, useConfig } from '../useConfig';
+import { monitorReady } from '../displayState';
 import {
   Monitor,
   Clock,
@@ -18,48 +18,48 @@ import { useI18n } from '../i18n';
 interface SettingsProps {
   config: AppConfig;
   monitors: MonitorInfo[];
-  onUpdateConfig: (newConfig: AppConfig) => void;
   isDark: boolean;
 }
 
 export const Settings: React.FC<SettingsProps> = ({
   config,
   monitors,
-  onUpdateConfig,
 }) => {
   const { t, lang, setLang } = useI18n();
-  const [autostartActive, setAutostartActive] = useState(false);
+  const { snapshot, pending } = useConfig();
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [newBlacklistExe, setNewBlacklistExe] = useState('');
 
-  useEffect(() => {
-    isEnabled().then(setAutostartActive).catch(console.error);
-  }, []);
+  const selectedMonitor = monitors.find((monitor) =>
+    monitor.is_selected && monitorReady(monitor));
+  const targetValue = config.target_monitor.kind === 'all'
+    ? 'all'
+    : selectedMonitor?.device_path ?? 'unavailable';
 
-  const handleSave = async (updated: AppConfig) => {
+  const handleSave = async (patch: SettingsPatch) => {
+    setSaveMessage(null);
     try {
-      await invoke('save_config', { config: updated });
-      onUpdateConfig(updated);
+      await configClient.patch(patch);
       setSaveMessage(t.settingsSavedMsg);
       setTimeout(() => setSaveMessage(null), 2500);
     } catch (err) {
-      console.error('Failed to save config:', err);
+      configClient.reportError(err);
     }
   };
 
-  const handleAutostartToggle = async (active: boolean) => {
-    try {
-      if (active) {
-        await enable();
-      } else {
-        await disable();
-      }
-      setAutostartActive(active);
-      const updated = { ...config, autostart: active };
-      await handleSave(updated);
-    } catch (err) {
-      console.error('Failed to toggle autostart:', err);
+  const handleTarget = (value: string) => {
+    if (value === 'all') {
+      void handleSave({ target_monitor: { kind: 'all' } });
+      return;
     }
+    const monitor = monitors.find((item) => item.device_path === value && monitorReady(item));
+    if (!monitor || !monitorReady(monitor)) {
+      configClient.reportError(t.configMonitorIdentityError);
+      return;
+    }
+    void handleSave({
+      target_monitor: { kind: 'monitor', device_path: monitor.device_path, display_name: monitor.name },
+    });
   };
 
   const handleAddBlacklist = (e: React.FormEvent) => {
@@ -69,7 +69,7 @@ export const Settings: React.FC<SettingsProps> = ({
     if (!clean.endsWith('.exe')) clean += '.exe';
 
     if (!config.blacklist.includes(clean)) {
-      const updated = { ...config, blacklist: [...config.blacklist, clean] };
+      const updated = { blacklist: [...config.blacklist, clean] };
       handleSave(updated);
     }
     setNewBlacklistExe('');
@@ -77,14 +77,13 @@ export const Settings: React.FC<SettingsProps> = ({
 
   const handleRemoveBlacklist = (exe: string) => {
     const updated = {
-      ...config,
       blacklist: config.blacklist.filter((b) => b !== exe),
     };
     handleSave(updated);
   };
 
   return (
-    <div className="space-y-6 max-w-4xl font-mono">
+    <fieldset disabled={pending} className={`space-y-6 max-w-4xl font-mono ${pending ? 'pointer-events-none opacity-70' : ''}`}>
       {/* Header */}
       <div>
         <div className="flex items-center gap-2.5">
@@ -156,33 +155,34 @@ export const Settings: React.FC<SettingsProps> = ({
           <div className="space-y-1.5">
             <label className="text-xs uppercase text-[#8a7f81]">{t.settingsTargetMonitor}</label>
             <select
-              value={config.target_monitor}
-              onChange={(e) => handleSave({ ...config, target_monitor: e.target.value })}
+              value={targetValue}
+              onChange={(e) => handleTarget(e.target.value)}
               className="w-full px-3 py-2 text-xs border border-[#f55a6b]/30 bg-[#0f0b0b] focus:border-[#f55a6b] text-white focus:outline-none"
             >
               <option value="all">{t.settingsAllMonitors}</option>
+              {targetValue === 'unavailable' && <option value="unavailable" disabled>
+                {config.target_monitor.kind === 'monitor' ? `${config.target_monitor.display_name}: ` : ''}
+                {config.target_monitor.kind === 'needs_confirmation' ? t.configConfirmTarget : t.configMissingTarget}
+              </option>}
               {monitors
-                .filter((m) => m.is_hdr_supported)
+                .filter(monitorReady)
                 .map((m) => (
-                  <option key={m.id} value={m.id}>
+                  <option key={m.id} value={m.device_path ?? ''}>
                     {m.name} {m.is_primary ? `(${t.displaysPrimary})` : ''}
                   </option>
                 ))}
             </select>
+            <p className="text-[11px] text-[#8a7f81]">{t.configTargetHint}</p>
           </div>
 
           <div className="space-y-1.5">
             <label className="text-xs uppercase text-[#8a7f81]">{t.settingsSwitchMethod}</label>
-            <select
-              value={config.switch_method}
-              onChange={(e) =>
-                handleSave({ ...config, switch_method: e.target.value as 'native' | 'shortcut' })
-              }
-              className="w-full px-3 py-2 text-xs border border-[#f55a6b]/30 bg-[#0f0b0b] focus:border-[#f55a6b] text-white focus:outline-none"
-            >
-              <option value="native">{t.settingsMethodNative}</option>
-              <option value="shortcut">{t.settingsMethodShortcut}</option>
-            </select>
+            {config.switch_method === 'native' ? <p className="text-xs text-[#5accf5] py-2">{t.settingsMethodNative}</p> : <>
+              <p className="text-xs text-amber-300">{t.configNativeConsent}</p>
+              <button className="p-2 text-xs border border-[#5accf5]/50 text-[#5accf5]" onClick={() => handleSave({ switch_method: 'native' })}>
+                {t.configAcceptNative}
+              </button>
+            </>}
           </div>
         </div>
       </div>
@@ -203,7 +203,7 @@ export const Settings: React.FC<SettingsProps> = ({
         <div className="space-y-3 relative z-10">
           {/* Option 1: Exit Only */}
           <div
-            onClick={() => handleSave({ ...config, exit_only_hdr: true })}
+            onClick={() => handleSave({ exit_only_hdr: true })}
             className={`p-3.5 border cursor-pointer transition-all ${
               config.exit_only_hdr
                 ? 'border-[#f55a6b] bg-[#1a0f12] neon-glow-coral'
@@ -228,7 +228,7 @@ export const Settings: React.FC<SettingsProps> = ({
 
           {/* Option 2: Alt+Tab Debounce */}
           <div
-            onClick={() => handleSave({ ...config, exit_only_hdr: false })}
+            onClick={() => handleSave({ exit_only_hdr: false })}
             className={`p-3.5 border cursor-pointer transition-all ${
               !config.exit_only_hdr
                 ? 'border-[#f55a6b] bg-[#1a0f12] neon-glow-coral'
@@ -266,7 +266,7 @@ export const Settings: React.FC<SettingsProps> = ({
               step="1"
               value={config.alt_tab_delay_seconds}
               onChange={(e) =>
-                handleSave({ ...config, alt_tab_delay_seconds: parseInt(e.target.value) })
+                handleSave({ alt_tab_delay_seconds: parseInt(e.target.value, 10) })
               }
               className="w-full accent-[#f55a6b] cursor-pointer"
             />
@@ -297,14 +297,14 @@ export const Settings: React.FC<SettingsProps> = ({
             </div>
 
             <button
-              onClick={() => handleAutostartToggle(!autostartActive)}
+              onClick={() => handleSave({ autostart: !config.autostart })}
               className={`px-3 py-1 text-xs font-bold uppercase tracking-wider border cursor-pointer transition-all ${
-                autostartActive
+                config.autostart
                   ? 'bg-[#f55a6b] text-[#0f0b0b] border-[#f55a6b]'
                   : 'bg-[#120d0e] text-[#8a7f81] border-[#8a7f81]/30'
               }`}
             >
-              {autostartActive ? t.settingsStateOn : t.settingsStateOff}
+              {config.autostart ? t.settingsStateOn : t.settingsStateOff}
             </button>
           </div>
 
@@ -318,7 +318,7 @@ export const Settings: React.FC<SettingsProps> = ({
 
             <button
               onClick={() =>
-                handleSave({ ...config, start_minimized: !config.start_minimized })
+                handleSave({ start_minimized: !config.start_minimized })
               }
               className={`px-3 py-1 text-xs font-bold uppercase tracking-wider border cursor-pointer transition-all ${
                 config.start_minimized
@@ -340,7 +340,7 @@ export const Settings: React.FC<SettingsProps> = ({
 
             <button
               onClick={() =>
-                handleSave({ ...config, auto_detect_new_games: !config.auto_detect_new_games })
+                handleSave({ auto_detect_new_games: !config.auto_detect_new_games })
               }
               className={`px-3 py-1 text-xs font-bold uppercase tracking-wider border cursor-pointer transition-all ${
                 config.auto_detect_new_games
@@ -362,7 +362,7 @@ export const Settings: React.FC<SettingsProps> = ({
 
             <button
               onClick={() =>
-                handleSave({ ...config, auto_sync_database: !config.auto_sync_database })
+                handleSave({ auto_sync_database: !config.auto_sync_database })
               }
               className={`px-3 py-1 text-xs font-bold uppercase tracking-wider border cursor-pointer transition-all ${
                 config.auto_sync_database
@@ -384,7 +384,7 @@ export const Settings: React.FC<SettingsProps> = ({
 
             <button
               onClick={() =>
-                handleSave({ ...config, notifications_enabled: !config.notifications_enabled })
+                handleSave({ notifications_enabled: !config.notifications_enabled })
               }
               className={`px-3 py-1 text-xs font-bold uppercase tracking-wider border cursor-pointer transition-all ${
                 config.notifications_enabled
@@ -449,6 +449,7 @@ export const Settings: React.FC<SettingsProps> = ({
           )}
         </div>
       </div>
-    </div>
+      {snapshot && <p className="text-[11px] text-[#8a7f81] break-all">{t.configFile}: {snapshot.config_path}</p>}
+    </fieldset>
   );
 };
