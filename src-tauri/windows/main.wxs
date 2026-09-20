@@ -1,0 +1,205 @@
+<!-- HDR Auto-Switch's ownership-safe MSI template. Identity and component layout
+     were verified against Tauri CLI 2.11.4 and the published v1.0.5 MSI database.
+     Adapted Tauri packaging conventions: see LICENSE-Tauri.txt (MIT).
+     No CloseApplication, basename-kill, or old NSIS-uninstaller action is allowed. -->
+<?if $(sys.BUILDARCH)="x86"?>
+  <?define Win64 = "no" ?>
+  <?define PlatformProgramFilesFolder = "ProgramFilesFolder" ?>
+<?elseif $(sys.BUILDARCH)="x64"?>
+  <?define Win64 = "yes" ?>
+  <?define PlatformProgramFilesFolder = "ProgramFiles64Folder" ?>
+<?elseif $(sys.BUILDARCH)="arm64"?>
+  <?define Win64 = "yes" ?>
+  <?define PlatformProgramFilesFolder = "ProgramFiles64Folder" ?>
+<?else?>
+  <?error Unsupported platform for the HDR installer?>
+<?endif?>
+
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="*" Name="{{product_name}}" UpgradeCode="{{upgrade_code}}"
+           Language="!(loc.TauriLanguage)" Manufacturer="{{manufacturer}}" Version="{{version}}">
+    <Package Id="*" InstallerVersion="450" Languages="0" Compressed="yes"
+             InstallScope="perMachine" SummaryCodepage="!(loc.TauriCodepage)"/>
+    <Media Id="1" Cabinet="app.cab" EmbedCab="yes"/>
+    <Property Id="REINSTALLMODE" Value="amus"/>
+    <Property Id="AUTOLAUNCHAPP" Secure="yes"/>
+    <Property Id="LAUNCHAPPARGS" Secure="yes"/>
+    <Property Id="ARPNOREPAIR" Value="yes" Secure="yes"/>
+    <!-- WixUI_InstallDir supplies ARPNOMODIFY=1; declaring it again causes LGHT0091. -->
+    <!-- Authored as a property, not set by a custom action (MSI ignores the
+         latter). Windows Installer may detect locked files but must not close
+         applications. The helper establishes actual exit before validation. -->
+    <Property Id="MSIRESTARTMANAGERCONTROL" Value="DisableShutdown" Secure="yes"/>
+    <Property Id="REBOOT" Value="ReallySuppress"/>
+    {{#if allow_downgrades}}
+    <MajorUpgrade Schedule="afterInstallInitialize" AllowDowngrades="yes"/>
+    {{else}}
+    <MajorUpgrade Schedule="afterInstallInitialize" DowngradeErrorMessage="!(loc.DowngradeErrorMessage)"
+                  AllowSameVersionUpgrades="yes"/>
+    {{/if}}
+    <Icon Id="ProductIcon" SourceFile="{{icon_path}}"/>
+    <Property Id="ARPPRODUCTICON" Value="ProductIcon"/>
+
+    <!-- Preserve the shipped per-machine MSI scope and HKCU directory hint.
+         The helper corroborates the destination with the MSI component path,
+         not merely this hint, and refuses cross-format/directory replacement. -->
+    <Property Id="INSTALLDIR">
+      <RegistrySearch Id="PrevInstallDirWithName" Root="HKCU"
+                      Key="Software\{{manufacturer}}\{{product_name}}"
+                      Name="InstallDir" Type="raw"/>
+    </Property>
+
+    <!-- These embedded-executable actions MUST exit before any Tauri/app setup.
+         Immediate actions run in the initiating user's context; the helper
+         rejects SYSTEM or an alternate account instead of guessing an owner. -->
+    <Binary Id="HdrGuardBinary" SourceFile="{{main_binary_path}}"/>
+    <CustomAction Id="HdrUpgradePreflight" BinaryKey="HdrGuardBinary" Execute="immediate"
+                  Impersonate="yes" Return="check"
+                  ExeCommand="--hdr-installer-preflight msi &quot;[INSTALLDIR]{{main_binary_name}}.exe&quot; [UILevel]"/>
+    <CustomAction Id="HdrUninstallPreflight" BinaryKey="HdrGuardBinary" Execute="immediate"
+                  Impersonate="yes" Return="check"
+                  ExeCommand="--hdr-installer-uninstall msi &quot;[INSTALLDIR]{{main_binary_name}}.exe&quot; [UILevel]"/>
+    <InstallExecuteSequence>
+      <Custom Action="HdrUpgradePreflight" Before="InstallValidate">NOT REMOVE</Custom>
+      <Custom Action="HdrUninstallPreflight" Before="HdrUpgradePreflight">
+        REMOVE = "ALL" AND NOT UPGRADINGPRODUCTCODE
+      </Custom>
+      <RemoveShortcuts>Installed AND NOT UPGRADINGPRODUCTCODE</RemoveShortcuts>
+    </InstallExecuteSequence>
+
+    {{#if license}}
+    <WixVariable Id="WixUILicenseRtf" Value="{{license}}"/>
+    {{/if}}
+    {{#if banner_path}}
+    <WixVariable Id="WixUIBannerBmp" Value="{{banner_path}}"/>
+    {{/if}}
+    {{#if dialog_image_path}}
+    <WixVariable Id="WixUIDialogBmp" Value="{{dialog_image_path}}"/>
+    {{/if}}
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="!(loc.LaunchApp)"/>
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1"/>
+    <CustomAction Id="LaunchApplication" Impersonate="yes" FileKey="Path"
+                  ExeCommand="[LAUNCHAPPARGS]" Return="asyncNoWait"/>
+    <UI>
+      <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="LaunchApplication">
+        WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT Installed
+      </Publish>
+      <Property Id="WIXUI_INSTALLDIR" Value="INSTALLDIR"/>
+      {{#unless license}}
+      <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="InstallDirDlg" Order="2">1</Publish>
+      <Publish Dialog="InstallDirDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg" Order="2">1</Publish>
+      {{/unless}}
+    </UI>
+    <UIRef Id="WixUI_InstallDir"/>
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="DesktopFolder" Name="Desktop">
+        <Component Id="ApplicationShortcutDesktop" Guid="*">
+          <Shortcut Id="ApplicationDesktopShortcut" Name="{{product_name}}"
+                    Target="[!Path]" WorkingDirectory="INSTALLDIR"/>
+          <RemoveFolder Id="DesktopFolder" On="uninstall"/>
+          <RegistryValue Root="HKCU" Key="Software\{{manufacturer}}\{{product_name}}"
+                         Name="Desktop Shortcut" Type="integer" Value="1" KeyPath="yes"/>
+        </Component>
+      </Directory>
+      <Directory Id="$(var.PlatformProgramFilesFolder)" Name="PFiles">
+        <Directory Id="INSTALLDIR" Name="{{product_name}}"/>
+      </Directory>
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="ApplicationProgramsFolder" Name="{{product_name}}"/>
+      </Directory>
+    </Directory>
+    <DirectoryRef Id="INSTALLDIR">
+      <Component Id="RegistryEntries" Guid="*">
+        <RegistryValue Root="HKCU" Key="Software\{{manufacturer}}\{{product_name}}"
+                       Name="InstallDir" Type="string" Value="[INSTALLDIR]" KeyPath="yes"/>
+      </Component>
+      <Component Id="Path" Guid="{{path_component_guid}}" Win64="$(var.Win64)">
+        <File Id="Path" Source="{{main_binary_path}}" KeyPath="yes" Checksum="yes"/>
+      </Component>
+      {{#each binaries as |bin|}}
+      <Component Id="{{bin.id}}" Guid="{{bin.guid}}" Win64="$(var.Win64)">
+        <File Id="Bin_{{bin.id}}" Source="{{bin.path}}" KeyPath="yes"/>
+      </Component>
+      {{/each}}
+      {{resources}}
+      <Component Id="CMP_UninstallShortcut" Guid="*">
+        <Shortcut Id="UninstallShortcut" Name="Uninstall {{product_name}}"
+                  Target="[System64Folder]msiexec.exe" Arguments="/x [ProductCode]"/>
+        <RemoveFolder Id="INSTALLDIR" On="uninstall"/>
+        <RegistryValue Root="HKCU" Key="Software\{{manufacturer}}\{{product_name}}"
+                       Name="Uninstaller Shortcut" Type="integer" Value="1" KeyPath="yes"/>
+      </Component>
+    </DirectoryRef>
+    <DirectoryRef Id="ApplicationProgramsFolder">
+      <Component Id="ApplicationShortcut" Guid="*">
+        <Shortcut Id="ApplicationStartMenuShortcut" Name="{{product_name}}"
+                  Target="[!Path]" WorkingDirectory="INSTALLDIR" Icon="ProductIcon">
+          <ShortcutProperty Key="System.AppUserModel.ID" Value="{{bundle_id}}"/>
+        </Shortcut>
+        <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall"/>
+        <RegistryValue Root="HKCU" Key="Software\{{manufacturer}}\{{product_name}}"
+                       Name="Start Menu Shortcut" Type="integer" Value="1" KeyPath="yes"/>
+      </Component>
+    </DirectoryRef>
+    <Feature Id="MainProgram" Title="Application" Level="1" ConfigurableDirectory="INSTALLDIR"
+             AllowAdvertise="no" Absent="disallow">
+      <ComponentRef Id="RegistryEntries"/>
+      <ComponentRef Id="Path"/>
+      <ComponentRef Id="CMP_UninstallShortcut"/>
+      <ComponentRef Id="ApplicationShortcut"/>
+      <ComponentRef Id="ApplicationShortcutDesktop"/>
+      {{#each binaries as |bin|}}
+      <ComponentRef Id="{{bin.id}}"/>
+      {{/each}}
+      {{#each resource_file_ids as |id|}}
+      <ComponentRef Id="{{id}}"/>
+      {{/each}}
+    </Feature>
+
+    {{#if install_webview}}
+    <Property Id="INSTALLED_WEBVIEW2_VERSION">
+      <RegistrySearch Id="Webview2VersionSystemx64" Root="HKLM"
+                      Key="SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
+                      Name="pv" Type="raw"/>
+      <RegistrySearch Id="Webview2VersionSystemx86" Root="HKLM"
+                      Key="SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
+                      Name="pv" Type="raw"/>
+      <RegistrySearch Id="Webview2VersionUser" Root="HKCU"
+                      Key="SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
+                      Name="pv" Type="raw"/>
+    </Property>
+    {{#if download_bootstrapper}}
+    <CustomAction Id="DownloadAndInvokeBootstrapper" Directory="INSTALLDIR" Execute="deferred"
+                  Return="check"
+                  ExeCommand="powershell.exe -NoProfile -NonInteractive -WindowStyle hidden -Command &quot;$ErrorActionPreference='Stop'; [\[]Net.ServicePointManager[\]]::SecurityProtocol=[\[]Net.SecurityProtocolType[\]]::Tls12; $p=Join-Path $env:TEMP 'MicrosoftEdgeWebview2Setup.exe'; Invoke-WebRequest -Uri 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile $p; $r=Start-Process -FilePath $p -ArgumentList ({{webview_installer_args}} '/install') -Wait -PassThru; exit $r.ExitCode&quot;"/>
+    <InstallExecuteSequence>
+      <Custom Action="DownloadAndInvokeBootstrapper" Before="InstallFinalize">
+        NOT (REMOVE OR INSTALLED_WEBVIEW2_VERSION)
+      </Custom>
+    </InstallExecuteSequence>
+    {{/if}}
+    {{#if webview2_bootstrapper_path}}
+    <Binary Id="MicrosoftEdgeWebview2Setup.exe" SourceFile="{{webview2_bootstrapper_path}}"/>
+    <CustomAction Id="InvokeBootstrapper" BinaryKey="MicrosoftEdgeWebview2Setup.exe" Execute="deferred"
+                  ExeCommand="{{webview_installer_args}} /install" Return="check"/>
+    <InstallExecuteSequence>
+      <Custom Action="InvokeBootstrapper" Before="InstallFinalize">NOT (REMOVE OR INSTALLED_WEBVIEW2_VERSION)</Custom>
+    </InstallExecuteSequence>
+    {{/if}}
+    {{#if webview2_installer_path}}
+    <Binary Id="MicrosoftEdgeWebView2RuntimeInstaller.exe" SourceFile="{{webview2_installer_path}}"/>
+    <CustomAction Id="InvokeStandalone" BinaryKey="MicrosoftEdgeWebView2RuntimeInstaller.exe"
+                  Execute="deferred" ExeCommand="{{webview_installer_args}} /install" Return="check"/>
+    <InstallExecuteSequence>
+      <Custom Action="InvokeStandalone" Before="InstallFinalize">NOT (REMOVE OR INSTALLED_WEBVIEW2_VERSION)</Custom>
+    </InstallExecuteSequence>
+    {{/if}}
+    {{/if}}
+
+    <InstallExecuteSequence>
+      <Custom Action="LaunchApplication" After="InstallFinalize">AUTOLAUNCHAPP AND NOT Installed</Custom>
+    </InstallExecuteSequence>
+    <SetProperty Id="ARPINSTALLLOCATION" Value="[INSTALLDIR]" After="CostFinalize"/>
+  </Product>
+</Wix>

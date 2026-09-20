@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { CatalogEntry, AppConfig, HdrApp, SupportTier } from '../types';
 import { invoke } from '@tauri-apps/api/core';
+import { configClient } from '../useConfig';
+import { findTrackedApp } from '../libraryState';
+import { catalogNotes } from '../catalogNotes';
 import {
   Search,
   CheckCircle2,
@@ -19,15 +22,13 @@ import { useI18n } from '../i18n';
 
 interface CatalogBrowserProps {
   config: AppConfig;
-  onUpdateConfig: (newConfig: AppConfig) => void;
   isDark: boolean;
 }
 
 export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
   config,
-  onUpdateConfig,
 }) => {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
@@ -57,24 +58,22 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
       exe_name: entry.exe_name.toLowerCase(),
       enabled: true,
       hdr_type: entry.hdr_type,
+      steam_id: entry.steam_id,
+      alternate_exes: entry.alternate_exes,
     };
 
     try {
-      await invoke('add_custom_app', { app: newApp });
-      const refreshed: AppConfig = await invoke('get_config');
-      onUpdateConfig(refreshed);
+      await configClient.mutate('add_custom_app', { app: newApp });
     } catch (err) {
-      console.error('Failed to add app from catalog:', err);
+      configClient.reportError(err);
     }
   };
 
   const handleRemoveGame = async (exeName: string) => {
     try {
-      await invoke('remove_app', { exeName });
-      const refreshed: AppConfig = await invoke('get_config');
-      onUpdateConfig(refreshed);
+      await configClient.mutate('remove_app', { exeName });
     } catch (err) {
-      console.error('Failed to remove app:', err);
+      configClient.reportError(err);
     }
   };
 
@@ -87,6 +86,7 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
       setTimeout(() => setMessage(null), 4000);
     } catch (err) {
       console.error('Sync failed:', err);
+      configClient.reportError(err);
       setMessage(t.catalogSyncError);
       setTimeout(() => setMessage(null), 4000);
     } finally {
@@ -150,10 +150,6 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
           </span>
         );
     }
-  };
-
-  const isGameTracked = (exe: string) => {
-    return config.apps.some((a) => a.exe_name.toLowerCase() === exe.toLowerCase());
   };
 
   const countForTier = (tier: string) => {
@@ -246,7 +242,7 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
       ) : (
         <div className="space-y-2">
           {filtered.map((item) => {
-            const tracked = isGameTracked(item.exe_name);
+            const tracked = findTrackedApp(config.apps, item);
 
             return (
               <div
@@ -272,7 +268,7 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
                     {item.notes && (
                       <>
                         <span>•</span>
-                        <span className="truncate max-w-[400px]">{item.notes}</span>
+                        <span className="truncate max-w-[400px]">{catalogNotes(item.notes, lang)}</span>
                       </>
                     )}
                   </div>
@@ -285,7 +281,7 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
                       variant="outline"
                       size="sm"
                       icon={<Check className="w-3.5 h-3.5 text-emerald-400" />}
-                      onClick={() => handleRemoveGame(item.exe_name)}
+                      onClick={() => handleRemoveGame(tracked.exe_name)}
                     />
                   ) : (
                     <GlitchButton

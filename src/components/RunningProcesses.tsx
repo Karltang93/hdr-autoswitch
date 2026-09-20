@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { RunningProcessInfo, AppConfig, HdrApp } from '../types';
 import { invoke } from '@tauri-apps/api/core';
+import { configClient } from '../useConfig';
+import { findTrackedApp } from '../libraryState';
 import { RefreshCw, Search, Plus, Check, AppWindow } from 'lucide-react';
 import { GlitchButton } from './GlitchButton';
 import { GlitchText } from './GlitchText';
@@ -8,13 +10,11 @@ import { useI18n } from '../i18n';
 
 interface RunningProcessesProps {
   config: AppConfig;
-  onUpdateConfig: (newConfig: AppConfig) => void;
   isDark: boolean;
 }
 
 export const RunningProcesses: React.FC<RunningProcessesProps> = ({
   config,
-  onUpdateConfig,
 }) => {
   const { t } = useI18n();
   const [processes, setProcesses] = useState<RunningProcessInfo[]>([]);
@@ -49,11 +49,9 @@ export const RunningProcesses: React.FC<RunningProcessesProps> = ({
     };
 
     try {
-      await invoke('add_custom_app', { app: newApp });
-      const refreshed: AppConfig = await invoke('get_config');
-      onUpdateConfig(refreshed);
+      await configClient.mutate('add_custom_app', { app: newApp });
     } catch (err) {
-      console.error('Failed to add app:', err);
+      configClient.reportError(err);
     } finally {
       setAddingExe(null);
     }
@@ -65,10 +63,6 @@ export const RunningProcesses: React.FC<RunningProcessesProps> = ({
       p.exe_name.toLowerCase().includes(search.toLowerCase()) ||
       p.title.toLowerCase().includes(search.toLowerCase())
   );
-
-  const isTracked = (exe: string) => {
-    return config.apps.some((a) => a.exe_name.toLowerCase() === exe.toLowerCase());
-  };
 
   return (
     <div className="space-y-5 font-mono">
@@ -122,7 +116,7 @@ export const RunningProcesses: React.FC<RunningProcessesProps> = ({
       ) : (
         <div className="space-y-2">
           {filtered.map((proc) => {
-            const tracked = isTracked(proc.exe_name);
+            const tracked = findTrackedApp(config.apps, proc);
             const isAdding = addingExe === proc.exe_name;
 
             return (

@@ -6,6 +6,7 @@ export interface Translations {
   // Brand & Header
   appTitle: string;
   hdrActive: string;
+  hdrMixed: string;
   sdrStandby: string;
   themeToggle: string;
   langToggle: string;
@@ -20,6 +21,7 @@ export interface Translations {
   // Dashboard Hero
   heroHdrActiveTitle: string;
   heroSdrTitle: string;
+  heroMixedTitle: string;
   heroHdrRec2020: string;
   heroSdrBt709: string;
   heroHookActive: string;
@@ -37,6 +39,7 @@ export interface Translations {
   displaysTargetHdr: string;
   displaysHdrSupported: string;
   displaysSdrOnly: string;
+  displaysStateUnknown: string;
   displaysTargetId: string;
   displaysHdrOn: string;
   displaysSdr: string;
@@ -51,6 +54,8 @@ export interface Translations {
   recentTierMod: string;
   recentHdrOk: string;
   recentEmpty: string;
+  recentYesterday: string;
+  recentToday: string;
 
   // Activity Log
   activityTitle: string;
@@ -58,6 +63,8 @@ export interface Translations {
   activityInitDetect: string;
   activityHdrManualOn: string;
   activityHdrManualOff: string;
+  activityHdrObserved: string;
+  activityHdrMixed: string;
   activityHookWindowFocus: (app: string) => string;
   activityHookReturnSdr: string;
 
@@ -101,6 +108,11 @@ export interface Translations {
   scanModalDeselectAll: string;
   appsPathMissing: string;
   appsPathMissingTooltip: string;
+  appsGridView: string;
+  appsListView: string;
+  scanModalSelected: (count: number) => string;
+  manualNamePlaceholder: string;
+  manualExePlaceholder: string;
 
   // Manual Add Modal & Drag & Drop
   manualModalTitle: string;
@@ -194,11 +206,45 @@ export interface Translations {
   settingsBlacklistEmpty: string;
   settingsStateOn: string;
   settingsStateOff: string;
+  configLoading: string;
+  configFirstRun: string;
+  configInitialize: string;
+  configImportAvailable: string;
+  configImport: string;
+  configRecovery: string;
+  configRestore: string;
+  configReset: string;
+  configResetConfirm: string;
+  configUnsupported: string;
+  configUnavailable: string;
+  configRestartHint: string;
+  configFile: string;
+  configSaving: string;
+  configError: string;
+  configControlPaused: string;
+  configConfirmTarget: string;
+  configMissingTarget: string;
+  configNativeConsent: string;
+  configAcceptNative: string;
+  configTargetHint: string;
+  configSelectRecovery: string;
+  configMonitorIdentityError: string;
+  configManualPolicy: string;
+  configManualUnavailable: string;
+  configAllOn: string;
+  configAllOff: string;
+  configStatusUnknown: string;
+  configActiveTarget: string;
+  configRecheck: string;
+  settingsNoFlicker: string;
+  settingsEnglish: string;
+  settingsCzech: string;
 }
 
 const cs: Translations = {
   appTitle: 'HDR AUTO-SWITCH',
   hdrActive: 'HDR AKTIVNÍ',
+  hdrMixed: 'SMÍŠENÝ STAV HDR / SDR',
   sdrStandby: 'SDR STANDBY',
   themeToggle: 'Přepnout motiv',
   langToggle: 'Jazyk (Language)',
@@ -209,14 +255,15 @@ const cs: Translations = {
   navProcesses: 'BĚŽÍCÍ OKNA',
   navSettings: 'NASTAVENÍ',
 
-  heroHdrActiveTitle: 'WINDOWS HIGH DYNAMIC RANGE JE AKTIVNÍ',
-  heroSdrTitle: 'WINDOWS BĚŽÍ VE STANDARDNÍM SDR REŽIMU',
+  heroHdrActiveTitle: 'VYBRANÉ DISPLEJE JSOU V REŽIMU HDR',
+  heroSdrTitle: 'VYBRANÉ DISPLEJE JSOU V REŽIMU SDR',
+  heroMixedTitle: 'VYBRANÉ DISPLEJE MAJÍ SMÍŠENÝ STAV HDR / SDR',
   heroHdrRec2020: 'HDR10 REC.2020 AKTIVNÍ',
   heroSdrBt709: 'SDR BT.709 STANDBY',
   heroHookActive: 'HOOK AKTIVOVÁN',
   heroDisplaysReady: (count) => `[${count} HDR ${count === 1 ? 'DISPLEJ PŘIPRAVEN' : count < 5 ? 'DISPLEJE PŘIPRAVENY' : 'DISPLEJŮ PŘIPRAVENO'}]`,
   heroActiveProcess: 'Aktivní HDR proces:',
-  heroSdrSubtext: '> WinEventHook sleduje okna — jakmile spustíte hru, displej se bleskově přepne.',
+  heroSdrSubtext: '> WinEventHook sleduje fokus; lehký watchdog zachytí i zmeškanou událost Windows.',
   heroTurnOffHdr: 'VYPNOUT HDR',
   heroTurnOnHdr: 'ZAPNOUT HDR RUČNĚ',
   heroSwitching: 'PŘEPÍNÁM...',
@@ -227,6 +274,7 @@ const cs: Translations = {
   displaysTargetHdr: 'CÍL HDR',
   displaysHdrSupported: 'HDR10 PODPOROVÁNO',
   displaysSdrOnly: 'POUZE SDR',
+  displaysStateUnknown: 'STAV HDR NEZNÁMÝ / NEDOSTUPNÝ',
   displaysTargetId: 'TARGET ID',
   displaysHdrOn: 'HDR ZAPNUTO',
   displaysSdr: 'SDR',
@@ -240,14 +288,18 @@ const cs: Translations = {
   recentTierMod: 'HDR MOD/FIX',
   recentHdrOk: 'HDR10 OK',
   recentEmpty: 'Zatím nebyly spuštěny žádné HDR hry. Spusťte libovolnou HDR hru a telemetrie se zde automaticky zobrazí.',
+  recentYesterday: 'Včera',
+  recentToday: 'Dnes',
 
   activityTitle: 'ZÁZNAM AKTIVITY HOOKU',
-  activityInitSystem: 'WinEventHook služba inicializována. Zero CPU režim aktivní.',
-  activityInitDetect: 'Sledování popředí oken běží — bleskový přechod HDR10 připraven.',
+  activityInitSystem: 'Rozhraní HDR Auto-Switch bylo inicializováno.',
+  activityInitDetect: 'Čekání na ověřený stav ovládání HDR.',
   activityHdrManualOn: 'HDR zapnuto ručně přes ovládací panel.',
   activityHdrManualOff: 'HDR vypnuto ručně.',
+  activityHdrObserved: 'Na vybraných displejích je aktivní HDR.',
+  activityHdrMixed: 'Vybrané displeje mají smíšený stav HDR a SDR.',
   activityHookWindowFocus: (app) => `WinEventHook zachytil okno: ${app} -> HDR aktivováno`,
-  activityHookReturnSdr: 'WinEventHook: Návrat do SDR (okno opuštěno).',
+  activityHookReturnSdr: 'Vybrané displeje jsou v režimu SDR.',
 
   appsTitle: 'MOJE KNIHOVNA HER',
   appsCountSummary: (total, active) => `${total} CELKEM • ${active} SLEDOVÁNO`,
@@ -274,7 +326,7 @@ const cs: Translations = {
   scanModalSubtitle: 'Hry s ověřenou podporou HDR jsou předvybrány nahoře. Ostatní nainstalované hry můžete zařadit níže:',
   scanModalCancel: 'ZRUŠIT',
   scanModalAddSelected: 'PŘIDAT VYBRANÉ',
-  scanModalSuccess: (count) => `Úspěšně přidáno ${count} nových her do sledování!`,
+  scanModalSuccess: (count) => `Úspěšně importováno nebo aktualizováno ${count} her.`,
   scanModalError: 'Chyba při prohledávání disků.',
   scanModalSectionHdr: (count) => `HRY S PODPOROU HDR (${count}) — AUTOMATICKY AKTIVNÍ`,
   scanModalSectionSdr: (count) => `OSTATNÍ NAINSTALOVANÉ HRY (${count}) — SDR (LZE VYUŽÍT RTX HDR / MODY)`,
@@ -287,6 +339,11 @@ const cs: Translations = {
   scanModalDeselectAll: 'ODZNAČIT VŠE',
   appsPathMissing: 'SOUBOR NENALEZEN',
   appsPathMissingTooltip: 'Soubor nebyl nalezen na zadané cestě. Hra mohla být přesunuta na jiný disk nebo odinstalována. Spusťte Skenovat hry v PC pro aktualizaci.',
+  appsGridView: 'Mřížka',
+  appsListView: 'Seznam',
+  scanModalSelected: (count) => `${count} vybráno`,
+  manualNamePlaceholder: 'např. Silent Hill 2 / Cyberpunk 2077',
+  manualExePlaceholder: 'např. SHProto-Win64-Shipping.exe',
 
   manualModalTitle: 'PŘIDAT HRU RUČNĚ',
   manualModalName: 'NÁZEV HRY',
@@ -376,14 +433,48 @@ const cs: Translations = {
   settingsBlacklistEmpty: '> Žádné blokované procesy.',
   settingsStateOn: 'ZAPNUTO',
   settingsStateOff: 'VYPNUTO',
+  configLoading: 'Načítání nastavení. Přepínání HDR zatím není dostupné.',
+  configFirstRun: 'Nebylo nalezeno nastavení. Vytvořte místní konfiguraci pro tento počítač.',
+  configInitialize: 'VYTVOŘIT NASTAVENÍ',
+  configImportAvailable: 'Bylo nalezeno starší nastavení. Import zachová knihovnu a předvolby; původní soubor zůstane beze změny. Konkrétní monitor je nutné znovu potvrdit.',
+  configImport: 'IMPORTOVAT STARŠÍ NASTAVENÍ',
+  configRecovery: 'Nastavení vyžaduje obnovu. Automatické HDR je pozastavené; původní soubory nebudou přepsány výchozími hodnotami.',
+  configRestore: 'OBNOVIT VYBRANOU KOPII',
+  configReset: 'VYTVOŘIT NOVÉ VÝCHOZÍ NASTAVENÍ',
+  configResetConfirm: 'Chci začít s prázdnou knihovnou a výchozím nastavením. Původní soubory budou zachovány pro obnovu.',
+  configUnsupported: 'Toto nastavení pochází z novější verze aplikace. Otevřete jej v novější verzi; obnova ani reset zde nejsou povoleny.',
+  configUnavailable: 'Nastavení není dostupné. Změny a automatické HDR jsou pozastavené.',
+  configRestartHint: 'Soubory nastavení upravujte pouze při vypnuté aplikaci. Po vyřešení problému aplikaci restartujte.',
+  configFile: 'SOUBOR NASTAVENÍ',
+  configSaving: 'UKLÁDÁNÍ...',
+  configError: 'Akci se nepodařilo dokončit:',
+  configControlPaused: 'OVLÁDÁNÍ HDR POZASTAVENO',
+  configConfirmTarget: 'Staré ID monitoru není trvalé. V Nastavení znovu vyberte monitor; jiné displeje se mezitím nebudou přepínat.',
+  configMissingTarget: 'Vybraný monitor není dostupný',
+  configNativeConsent: 'Klávesová zkratka Win + Alt + B nemůže bezpečně ovládat konkrétní monitor. Automatické HDR čeká na váš souhlas s nativním ovládáním.',
+  configAcceptNative: 'POVOLIT AUTOMATICKÉ NATIVNÍ HDR',
+  configTargetHint: 'Výběr platí pro příští spuštění hry. Odpojený monitor zůstane vybraný; aplikace jej nenahradí jiným.',
+  configSelectRecovery: 'Vyberte ověřenou kopii nastavení',
+  configMonitorIdentityError: 'Trvalá identita displeje není dostupná; ovládání je zablokované.',
+  configManualPolicy: 'Ruční nativní Zapnout/Vypnout platí jen pro výslovně zvolený displej nebo Vše. Funguje i při pozastavené automatizaci; nemění nastavení ani souhlas s automatickým HDR. Konflikt ovladače, ukončování nebo nedostupná autorita ovládání blokují.',
+  configManualUnavailable: 'Ruční HDR není dostupné: ověřte autoritu ovládání, identitu a stav displeje.',
+  configAllOn: 'ZAPNOUT HDR NA VŠECH DISPLEJÍCH',
+  configAllOff: 'VYPNOUT HDR NA VŠECH DISPLEJÍCH',
+  configStatusUnknown: 'STAV HDR NEZNÁMÝ / POZASTAVENO',
+  configActiveTarget: 'CÍL AKTUÁLNÍ RELACE',
+  configRecheck: 'ZNOVU OVĚŘIT OVLÁDÁNÍ HDR',
+  settingsNoFlicker: 'BEZ PŘEPÍNÁNÍ PŘI ALT+TAB',
+  settingsEnglish: 'Angličtina (EN)',
+  settingsCzech: 'Čeština (CZ)',
 };
 
 const en: Translations = {
   appTitle: 'HDR AUTO-SWITCH',
   hdrActive: 'HDR ACTIVE',
+  hdrMixed: 'MIXED HDR / SDR',
   sdrStandby: 'SDR STANDBY',
   themeToggle: 'Toggle theme',
-  langToggle: 'Language (Jazyk)',
+  langToggle: 'Language',
 
   navOverview: 'OVERVIEW',
   navApps: 'MY GAMES',
@@ -391,14 +482,15 @@ const en: Translations = {
   navProcesses: 'RUNNING WINDOWS',
   navSettings: 'SETTINGS',
 
-  heroHdrActiveTitle: 'WINDOWS HIGH DYNAMIC RANGE IS ACTIVE',
-  heroSdrTitle: 'WINDOWS IS RUNNING IN STANDARD SDR MODE',
+  heroHdrActiveTitle: 'SELECTED DISPLAYS ARE IN HDR MODE',
+  heroSdrTitle: 'SELECTED DISPLAYS ARE IN SDR MODE',
+  heroMixedTitle: 'SELECTED DISPLAYS HAVE MIXED HDR / SDR STATES',
   heroHdrRec2020: 'HDR10 REC.2020 ACTIVE',
   heroSdrBt709: 'SDR BT.709 STANDBY',
   heroHookActive: 'HOOK TRIGGERED',
   heroDisplaysReady: (count) => `[${count} HDR ${count === 1 ? 'DISPLAY READY' : 'DISPLAYS READY'}]`,
   heroActiveProcess: 'Active HDR process:',
-  heroSdrSubtext: '> WinEventHook monitoring window focus — lightning-fast HDR toggle when launching games.',
+  heroSdrSubtext: '> WinEventHook monitors focus; a lightweight watchdog recovers missed Windows events.',
   heroTurnOffHdr: 'TURN OFF HDR',
   heroTurnOnHdr: 'TURN ON HDR MANUALLY',
   heroSwitching: 'SWITCHING...',
@@ -409,6 +501,7 @@ const en: Translations = {
   displaysTargetHdr: 'HDR TARGET',
   displaysHdrSupported: 'HDR10 SUPPORTED',
   displaysSdrOnly: 'SDR ONLY',
+  displaysStateUnknown: 'HDR STATE UNKNOWN / UNAVAILABLE',
   displaysTargetId: 'TARGET ID',
   displaysHdrOn: 'HDR ENABLED',
   displaysSdr: 'SDR',
@@ -422,14 +515,18 @@ const en: Translations = {
   recentTierMod: 'HDR MOD/FIX',
   recentHdrOk: 'HDR10 OK',
   recentEmpty: 'No HDR games played yet. Launch any HDR-supported game and telemetry will automatically appear here.',
+  recentYesterday: 'Yesterday',
+  recentToday: 'Today',
 
   activityTitle: 'HOOK ACTIVITY LOG',
-  activityInitSystem: 'WinEventHook service initialized. Zero CPU overhead mode active.',
-  activityInitDetect: 'Window focus detection active — zero-latency HDR10 switching armed.',
+  activityInitSystem: 'HDR Auto-Switch interface initialized.',
+  activityInitDetect: 'Waiting for a verified HDR controller status.',
   activityHdrManualOn: 'HDR enabled manually via dashboard control.',
   activityHdrManualOff: 'HDR disabled manually.',
+  activityHdrObserved: 'HDR is active on the selected displays.',
+  activityHdrMixed: 'The selected displays have mixed HDR and SDR states.',
   activityHookWindowFocus: (app) => `WinEventHook foreground focus: ${app} -> HDR enabled`,
-  activityHookReturnSdr: 'WinEventHook: Reverted to SDR (game window lost focus).',
+  activityHookReturnSdr: 'The selected displays are in SDR mode.',
 
   appsTitle: 'MY GAME LIBRARY',
   appsCountSummary: (total, active) => `${total} TOTAL • ${active} TRACKED`,
@@ -456,7 +553,7 @@ const en: Translations = {
   scanModalSubtitle: 'Games with verified HDR support are pre-selected at the top. Other installed games can be included below:',
   scanModalCancel: 'CANCEL',
   scanModalAddSelected: 'ADD SELECTED',
-  scanModalSuccess: (count) => `Successfully imported ${count} new games to HDR library!`,
+  scanModalSuccess: (count) => `Successfully imported or updated ${count} games.`,
   scanModalError: 'Failed to scan storage drives.',
   scanModalSectionHdr: (count) => `HDR SUPPORTED GAMES (${count}) — ENABLED BY DEFAULT`,
   scanModalSectionSdr: (count) => `OTHER INSTALLED GAMES (${count}) — SDR (COMPATIBLE WITH RTX HDR / MODS)`,
@@ -469,6 +566,11 @@ const en: Translations = {
   scanModalDeselectAll: 'DESELECT ALL',
   appsPathMissing: 'FILE NOT FOUND',
   appsPathMissingTooltip: 'File not found at specified path. Game may have been moved to another drive or uninstalled. Run Scan PC for games to update.',
+  appsGridView: 'Grid view',
+  appsListView: 'List view',
+  scanModalSelected: (count) => `${count} selected`,
+  manualNamePlaceholder: 'e.g. Silent Hill 2 / Cyberpunk 2077',
+  manualExePlaceholder: 'e.g. SHProto-Win64-Shipping.exe',
 
   manualModalTitle: 'ADD GAME MANUALLY',
   manualModalName: 'GAME TITLE',
@@ -558,6 +660,39 @@ const en: Translations = {
   settingsBlacklistEmpty: '> No blocked applications defined.',
   settingsStateOn: 'ENABLED',
   settingsStateOff: 'DISABLED',
+  configLoading: 'Loading settings. HDR controls are not available yet.',
+  configFirstRun: 'No settings were found. Create a machine-local configuration to get started.',
+  configInitialize: 'CREATE SETTINGS',
+  configImportAvailable: 'Older settings were found. Import preserves your library and preferences and leaves the original file untouched. A specific monitor must be confirmed again.',
+  configImport: 'IMPORT OLDER SETTINGS',
+  configRecovery: 'Settings need recovery. Automatic HDR is paused; the original files will not be overwritten with defaults.',
+  configRestore: 'RESTORE SELECTED COPY',
+  configReset: 'CREATE NEW DEFAULT SETTINGS',
+  configResetConfirm: 'Start with an empty library and default settings. Preserve the original files as recovery evidence.',
+  configUnsupported: 'These settings belong to a newer application version. Open them with that version; restore and reset are disabled here.',
+  configUnavailable: 'Settings are unavailable. Changes and automatic HDR are paused.',
+  configRestartHint: 'Edit settings files only while the app is closed. Restart the app after resolving the problem.',
+  configFile: 'SETTINGS FILE',
+  configSaving: 'SAVING...',
+  configError: 'The action could not be completed:',
+  configControlPaused: 'HDR CONTROL PAUSED',
+  configConfirmTarget: 'The old monitor ID is not persistent. Choose your monitor again in Settings; other displays will not be substituted.',
+  configMissingTarget: 'Selected monitor is unavailable',
+  configNativeConsent: 'Win + Alt + B cannot safely control a specific monitor. Automatic HDR is paused until you consent to native display control.',
+  configAcceptNative: 'ENABLE AUTOMATIC NATIVE HDR',
+  configTargetHint: 'Selection changes apply to the next game activation. A disconnected display stays selected; no other display is substituted.',
+  configSelectRecovery: 'Choose a validated settings copy',
+  configMonitorIdentityError: 'A persistent display identity is unavailable; control is blocked.',
+  configManualPolicy: 'Manual native On/Off applies only to the explicitly chosen display or All. It remains available while automation is paused and never changes settings or automatic HDR consent. Controller conflicts, shutdown, or unavailable authority block manual control.',
+  configManualUnavailable: 'Manual HDR is unavailable: check controller authority, display identity, and state.',
+  configAllOn: 'TURN HDR ON FOR ALL DISPLAYS',
+  configAllOff: 'TURN HDR OFF FOR ALL DISPLAYS',
+  configStatusUnknown: 'HDR STATE UNKNOWN / PAUSED',
+  configActiveTarget: 'CURRENT SESSION TARGET',
+  configRecheck: 'RECHECK HDR CONTROLLER',
+  settingsNoFlicker: 'NO SWITCHING ON ALT+TAB',
+  settingsEnglish: 'English (EN)',
+  settingsCzech: 'Czech (CZ)',
 };
 
 export const dictionaries: Record<Language, Translations> = { cs, en };
@@ -566,7 +701,7 @@ export function detectDefaultLanguage(): Language {
   try {
     const saved = localStorage.getItem('hdr_lang');
     if (saved === 'cs' || saved === 'en') return saved;
-    const navLang = navigator.language || (navigator as any).userLanguage || '';
+    const navLang = navigator.language || '';
     if (navLang.toLowerCase().startsWith('cs') || navLang.toLowerCase().startsWith('sk')) {
       return 'cs';
     }
