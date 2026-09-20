@@ -242,6 +242,19 @@ catalog's `game.exe` enables that canonical row and records the alias. Catalog
 removal targets `renderer.exe`, and the running-process view recognizes the
 enabled alias rather than offering a duplicate Add.
 
+Debug builds can exercise the real native window and read the live display
+inventory without using the installed profile:
+
+```powershell
+$env:HDR_AUTOSWITCH_SAFE_TEST_DIR = 'C:\absolute\temporary\test-directory'
+.\src-tauri\target\debug\tauri-app.exe
+```
+
+This debug-only mode stores settings under the supplied directory and blocks HDR
+writes, autostart changes, the foreground hook, and background synchronization.
+Manual controls remain blocked in setup and recovery modes, too. Release builds
+ignore this environment variable.
+
 These checks do not certify real-monitor reboot/hotplug behavior, power-loss
 durability, or NSIS/MSI upgrades of installed older releases. Those scenarios need
 separate Windows VM/hardware release validation. The display query and setter
