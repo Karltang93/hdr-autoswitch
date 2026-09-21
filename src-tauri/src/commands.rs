@@ -1,7 +1,7 @@
 use crate::config::{ConfigMode, ConfigSnapshot, HdrApp, SettingsPatch, TargetMonitor};
 use crate::database::CatalogEntry;
 use crate::display::MonitorInfo;
-use crate::monitor_hook::{HdrStatePayload, ManualSetResult};
+use crate::monitor_hook::{HdrStatePayload, ManualRequestIdentity, ManualSetResult};
 use crate::process::RunningProcessInfo;
 use crate::{database, display, emit_config, legacy_upgrade, library, scanner, AppState};
 use serde::{Deserialize, Serialize};
@@ -113,12 +113,16 @@ pub async fn set_hdr(
     state: State<'_, AppState>,
     scope: TargetMonitor,
     enable: bool,
+    request: ManualRequestIdentity,
 ) -> Result<ManualSetResult, String> {
     state.ensure_admission()?;
     if state.safe_test_mode {
         return Err(crate::SAFE_TEST_ISSUE.into());
     }
-    state.monitor_service.manual_set(scope, enable)?.resolve().await
+    if !request.client_id.starts_with("gui:") {
+        return Err("Window manual requests require a GUI correlation identity.".into());
+    }
+    state.monitor_service.manual_set(scope, enable, request)?.resolve().await
 }
 
 #[tauri::command]

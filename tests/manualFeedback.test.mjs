@@ -8,6 +8,7 @@ const all = { kind: 'all' };
 const other = { kind: 'monitor', device_path: 'other', display_name: 'Other' };
 const outcome = (revision, scope = all, verified = true) => ({
   revision: String(revision), scope, verified, error: null,
+  request: { client_id: 'gui:test', sequence: String(revision) },
 });
 const status = (revision, results, warning = null) => ({
   status_revision: String(revision), inventory_revision: '1',
@@ -15,14 +16,14 @@ const status = (revision, results, warning = null) => ({
 });
 
 function harness() {
-  const feedback = new display.ManualFeedbackOrder();
+  const feedback = new display.ManualFeedbackOrder('gui:test');
   const order = new display.DisplayObservationOrder();
   let current;
   return {
     feedback,
     accept(next) {
-      if (!order.acceptStatus(next)) return false;
       feedback.acceptStatus(next);
+      if (!order.acceptStatus(next)) return false;
       current = next;
       return true;
     },
@@ -30,7 +31,7 @@ function harness() {
   };
 }
 
-test('late tray failure cannot resurrect an error after newer GUI same-scope recovery', () => {
+test('late failure cannot resurrect an error after a correlated later same-client retry', () => {
   const h = harness();
   h.accept(status(0, []));
   const old = h.feedback.capture(all);
@@ -126,7 +127,7 @@ function actualDashboardHandler(h, invoke) {
   return new Function(...Object.keys(environment), `${handler}\nreturn handleSet;`)(...Object.values(environment));
 }
 
-test('actual GUI handler rejects a late transport error after a newer tray recovery', async () => {
+test('actual GUI handler rejects a late transport error after its matching result was observed', async () => {
   const h = harness();
   h.accept(status(0, []));
   let rejectReply;
@@ -175,11 +176,11 @@ test('manual feedback preserves large revisions and normalized monitor identity'
   h.accept(status('9007199254740993', [outcome('9007199254740993', other)]));
   assert.equal(h.feedback.acceptError({
     scope: { ...other, device_path: 'OTHER', display_name: 'Renamed' },
-    after_revision: '9007199254740992', message: 'Old failure',
+    request: { client_id: 'gui:test', sequence: '9007199254740992' }, message: 'Old failure',
   }), false);
   const origin = h.feedback.capture(other);
-  assert.equal(origin.after_revision, '9007199254740993');
+  assert.equal(origin.request.sequence, '9007199254740994');
   for (const invalid of ['', '-1', '1.5', '01']) {
-    assert.equal(h.feedback.acceptError({ ...origin, after_revision: invalid, message: 'Invalid' }), false);
+    assert.equal(h.feedback.acceptError({ ...origin, request: { ...origin.request, sequence: invalid }, message: 'Invalid' }), false);
   }
 });

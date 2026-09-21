@@ -66,7 +66,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     manualPending.current = true;
     setToggling(true);
     try {
-      const result = await invoke<ManualSetResult>('set_hdr', { scope, enable });
+      const result = await invoke<ManualSetResult>('set_hdr', { scope, enable, request: origin.request });
       onManualResult(result);
     } catch (err) {
       onControlError({ ...origin, message: String(err) });

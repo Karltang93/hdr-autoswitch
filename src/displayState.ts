@@ -1,4 +1,4 @@
-import type { HdrStatePayload, ManualControlError, ManualRequestOrigin, MonitorInfo, MonitorInventorySnapshot, TargetMonitor } from './types.ts';
+import type { HdrStatePayload, ManualControlError, ManualRequestIdentity, ManualRequestOrigin, MonitorInfo, MonitorInventorySnapshot, TargetMonitor } from './types.ts';
 
 function revision(value: string): bigint | null {
   return /^(0|[1-9]\d*)$/.test(value) ? BigInt(value) : null;
@@ -50,30 +50,47 @@ function scopeKey(scope: TargetMonitor): string {
   }
 }
 
-// Native result errors live in ordered actor status. Only local/admission/transport
-// errors need this channel; any newer same-scope actor result supersedes them.
+const maxRequestSequence = 18446744073709551615n;
+
+function requestSequence(request: ManualRequestIdentity | undefined): bigint | null {
+  if (!request || typeof request.client_id !== 'string' || typeof request.sequence !== 'string'
+    || !/^[A-Za-z0-9:-]{1,128}$/.test(request.client_id)) return null;
+  const value = revision(request.sequence);
+  return value !== null && value > 0n && value <= maxRequestSequence ? value : null;
+}
+
+// A result can prove completion only for its client/request, not an unrelated
+// submission made after the last actor revision that happened to reach this UI.
 export class ManualFeedbackOrder {
-  private manualRevision = 0n;
-  private scopeRevisions = new Map<string, bigint>();
+  private sequence = 0n;
+  private clientId: string;
+  private completedRequests = new Map<string, bigint>();
   private pendingErrors = new Map<string, ManualControlError>();
 
+  constructor(clientId = `gui:${crypto.randomUUID()}`) {
+    this.clientId = clientId;
+  }
+
   capture(scope: TargetMonitor): ManualRequestOrigin {
-    return { scope, after_revision: this.manualRevision.toString() };
+    if (this.sequence === maxRequestSequence) throw new Error('Manual request sequence exhausted. Reopen the window.');
+    ++this.sequence;
+    return { scope, request: { client_id: this.clientId, sequence: this.sequence.toString() } };
   }
 
   acceptStatus(status: Pick<HdrStatePayload, 'manual_revision' | 'manual_results'>): boolean {
     const next = revision(status.manual_revision);
-    if (next === null || next < this.manualRevision) return false;
-    this.manualRevision = next;
+    if (next === null) return false;
     let changed = false;
     for (const result of status.manual_results) {
       const observed = revision(result.revision);
-      if (observed === null || observed > next) continue;
-      const key = scopeKey(result.scope);
-      if (observed < (this.scopeRevisions.get(key) ?? -1n)) continue;
-      this.scopeRevisions.set(key, observed);
+      const completed = requestSequence(result.request);
+      if (observed === null || observed > next || completed === null) continue;
+      const key = JSON.stringify([scopeKey(result.scope), result.request.client_id]);
+      if (completed < (this.completedRequests.get(key) ?? 0n)) continue;
+      this.completedRequests.set(key, completed);
+      if (result.request.client_id === this.clientId && completed > this.sequence) this.sequence = completed;
       const error = this.pendingErrors.get(key);
-      if (error && observed > BigInt(error.after_revision)) {
+      if (error && completed >= BigInt(error.request.sequence)) {
         this.pendingErrors.delete(key);
         changed = true;
       }
@@ -82,12 +99,12 @@ export class ManualFeedbackOrder {
   }
 
   acceptError(error: ManualControlError): boolean {
-    const after = revision(error.after_revision);
-    const key = scopeKey(error.scope);
-    if (after === null || after < (this.scopeRevisions.get(key) ?? -1n)) return false;
+    const sequence = requestSequence(error.request);
+    if (sequence === null) return false;
+    const key = JSON.stringify([scopeKey(error.scope), error.request.client_id]);
+    if (sequence <= (this.completedRequests.get(key) ?? 0n)) return false;
     const previous = this.pendingErrors.get(key);
-    if (previous && (BigInt(previous.after_revision) > after
-      || (previous.after_revision === error.after_revision && previous.message === error.message))) return false;
+    if (previous && BigInt(previous.request.sequence) >= sequence) return false;
     this.pendingErrors.set(key, error);
     return true;
   }

@@ -80,8 +80,29 @@ fn manual_admission(snapshot: &ConfigSnapshot, admitted: bool) -> ManualControl 
 pub struct ManualScopeResult {
     pub revision: String,
     pub scope: TargetMonitor,
+    pub request: ManualRequestIdentity,
     pub verified: bool,
     pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ManualRequestIdentity {
+    pub client_id: String,
+    pub sequence: String,
+}
+
+impl ManualRequestIdentity {
+    fn validate(&self) -> Result<u64, String> {
+        let sequence = self.sequence.parse::<u64>().map_err(|_| "Invalid manual request sequence")?;
+        if sequence == 0 || sequence.to_string() != self.sequence || self.client_id.is_empty()
+            || self.client_id.len() > 128
+            || !self.client_id.bytes().all(|c| c.is_ascii_alphanumeric() || b":-".contains(&c))
+        {
+            return Err("Invalid manual request identity".into());
+        }
+        Ok(sequence)
+    }
 }
 
 #[derive(Default)]
@@ -96,9 +117,27 @@ impl ManualObservations {
         Ok(())
     }
 
-    fn finish(&mut self, scope: TargetMonitor, verified: bool, error: Option<String>) {
-        let observed = ManualScopeResult { revision: self.revision.to_string(), scope, verified, error };
-        if let Some(previous) = self.scopes.iter_mut().find(|entry| same_target(&entry.scope, &observed.scope)) {
+    fn admit(&self, scope: &TargetMonitor, request: &ManualRequestIdentity) -> Result<(), String> {
+        let sequence = request.validate()?;
+        if self.scopes.iter().any(|entry| same_target(&entry.scope, scope)
+            && entry.request.client_id == request.client_id
+            && entry.request.validate().is_ok_and(|completed| completed >= sequence))
+        {
+            return Err("This manual request was superseded or already completed. Retry the control.".into());
+        }
+        Ok(())
+    }
+
+    fn finish(&mut self, scope: TargetMonitor, request: ManualRequestIdentity, verified: bool, error: Option<String>) {
+        // Keep correlation proofs across origins, but current admission errors belong
+        // to the latest executed request for this scope, not each client's history.
+        for entry in self.scopes.iter_mut().filter(|entry| same_target(&entry.scope, &scope)) {
+            entry.error = None;
+        }
+        let observed = ManualScopeResult { revision: self.revision.to_string(), scope, request, verified, error };
+        if let Some(previous) = self.scopes.iter_mut().find(|entry| same_target(&entry.scope, &observed.scope)
+            && entry.request.client_id == observed.request.client_id)
+        {
             *previous = observed;
         } else {
             self.scopes.push(observed);
@@ -175,6 +214,7 @@ impl HdrStatePayload {
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ManualSetResult {
     pub scope: TargetMonitor,
+    pub request: ManualRequestIdentity,
     pub outcomes: Vec<MonitorOutcome>,
     pub partial: bool,
     pub status: HdrStatePayload,
@@ -190,7 +230,7 @@ enum Command {
     ForegroundObserved,
     ConfigCommitted,
     Refresh(Sender<Result<MonitorInventorySnapshot, String>>),
-    ManualSet(TargetMonitor, bool, Sender<Result<ManualSetResult, String>>),
+    ManualSet(TargetMonitor, bool, ManualRequestIdentity, Sender<Result<ManualSetResult, String>>),
     Status(Sender<Result<HdrStatePayload, String>>),
     GameExited {
         generation: u64,
@@ -399,10 +439,12 @@ impl MonitorService {
         &self,
         scope: TargetMonitor,
         enable: bool,
+        request: ManualRequestIdentity,
     ) -> Result<PendingRequest<ManualSetResult>, String> {
+        request.validate()?;
         manual_admission(&self.config.snapshot()?, self.events.admitted.load(Ordering::Acquire))
             .require()?;
-        self.enqueue(|reply| Command::ManualSet(scope, enable, reply))
+        self.enqueue(|reply| Command::ManualSet(scope, enable, request, reply))
     }
 
     pub fn status(&self) -> Result<PendingRequest<HdrStatePayload>, String> {
@@ -1137,8 +1179,8 @@ impl Actor {
                     self.publish();
                     let _ = reply.send(result);
                 }
-                Command::ManualSet(scope, enable, reply) => {
-                    let result = self.manual_set(scope, enable);
+                Command::ManualSet(scope, enable, request, reply) => {
+                    let result = self.manual_set(scope, enable, request);
                     self.publish();
                     let _ = reply.send(result);
                 }
@@ -1426,7 +1468,9 @@ impl Actor {
         &mut self,
         scope: TargetMonitor,
         enable: bool,
+        request: ManualRequestIdentity,
     ) -> Result<ManualSetResult, String> {
+        self.manual_observations.admit(&scope, &request)?;
         self.manual_observations.begin()?;
         let result = self.execute_manual_set(&scope, enable);
         let verified = result.as_ref().is_ok_and(|(outcomes, _)| {
@@ -1437,9 +1481,9 @@ impl Actor {
             Ok((outcomes, _)) if outcomes.is_empty() => Some("No display result was returned.".into()),
             Ok(_) => None,
         };
-        self.manual_observations.finish(scope.clone(), verified, error);
+        self.manual_observations.finish(scope.clone(), request.clone(), verified, error);
         result.map(|(outcomes, snapshot)| ManualSetResult {
-            scope, outcomes, partial: !verified, status: self.payload(&snapshot),
+            scope, request, outcomes, partial: !verified, status: self.payload(&snapshot),
         })
     }
 
@@ -1652,6 +1696,14 @@ impl Actor {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn test_request() -> ManualRequestIdentity {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+        ManualRequestIdentity {
+            client_id: "gui:test".into(),
+            sequence: NEXT.fetch_add(1, Ordering::Relaxed).to_string(),
+        }
+    }
     use crate::config::HdrType;
     use crate::display::{NativeApi, RuntimeAddress};
 
@@ -1836,15 +1888,15 @@ mod tests {
             let fixture = manual_fixture(mode);
             let (service, receiver) = idle_service(fixture.manager.clone());
             if mode == ConfigMode::Unavailable {
-                assert!(service.manual_set(TargetMonitor::All, true).is_err());
+                assert!(service.manual_set(TargetMonitor::All, true, test_request()).is_err());
                 let mut authority = fixture.authority(OperationKind::Manual);
                 assert!(authority.authorize(&mock_attempt(), &mut || panic!("issued")).is_err());
             } else {
                 fixture.manager.set_controller_issue(Some("controller conflict".into())).unwrap();
-                assert!(service.manual_set(TargetMonitor::All, true).is_err());
+                assert!(service.manual_set(TargetMonitor::All, true, test_request()).is_err());
                 fixture.manager.set_controller_issue(None).unwrap();
                 service.events.admitted.store(false, Ordering::Release);
-                assert!(service.manual_set(TargetMonitor::All, false).is_err());
+                assert!(service.manual_set(TargetMonitor::All, false, test_request()).is_err());
             }
             assert!(receiver.try_recv().is_err());
         }
@@ -1884,7 +1936,7 @@ mod tests {
             ] {
                 for enabled in [true, false] {
                     assert_eq!(
-                        service.manual_set(scope.clone(), enabled).err().as_deref(),
+                        service.manual_set(scope.clone(), enabled, test_request()).err().as_deref(),
                         Some(crate::SAFE_TEST_ISSUE)
                     );
                 }
@@ -1912,14 +1964,17 @@ mod tests {
     fn manual_requests_enqueue_in_click_order_without_waiting_for_the_actor() {
         let fixture = GateFixture::new();
         let (service, receiver) = idle_service(fixture.manager.clone());
-        let on = service.manual_set(TargetMonitor::All, true).unwrap();
-        let off = service.manual_set(TargetMonitor::All, false).unwrap();
-        for (expected, result) in [(true, "first result"), (false, "second result")] {
-            let Command::ManualSet(scope, enabled, reply) = receiver.try_recv().unwrap() else {
+        let gui = test_request();
+        let tray = ManualRequestIdentity { client_id: "tray".into(), sequence: "1".into() };
+        let on = service.manual_set(TargetMonitor::All, true, gui.clone()).unwrap();
+        let off = service.manual_set(TargetMonitor::All, false, tray.clone()).unwrap();
+        for (expected, identity, result) in [(true, gui, "first result"), (false, tray, "second result")] {
+            let Command::ManualSet(scope, enabled, request, reply) = receiver.try_recv().unwrap() else {
                 panic!("Expected manual request");
             };
             assert_eq!(scope, TargetMonitor::All);
             assert_eq!(enabled, expected);
+            assert_eq!(request, identity, "admission must preserve the caller's correlation identity");
             reply.send(Err(result.into())).unwrap();
         }
         // Awaiting in the opposite order cannot change the already-enqueued native order.
@@ -1932,11 +1987,11 @@ mod tests {
     fn manual_waiter_reports_a_dropped_actor_response_without_hanging() {
         let fixture = GateFixture::new();
         let (service, receiver) = idle_service(fixture.manager.clone());
-        let pending = service.manual_set(TargetMonitor::All, false).unwrap();
+        let pending = service.manual_set(TargetMonitor::All, false, test_request()).unwrap();
         drop(receiver);
         assert!(tauri::async_runtime::block_on(pending.resolve())
             .unwrap_err().contains("stopped before responding"));
-        assert!(service.manual_set(TargetMonitor::All, true).is_err());
+        assert!(service.manual_set(TargetMonitor::All, true, test_request()).is_err());
     }
 
     #[test]
@@ -1946,13 +2001,13 @@ mod tests {
         for conflict in [true, false] {
             let fixture = GateFixture::new();
             let (service, receiver) = idle_service(fixture.manager.clone());
-            let pending = service.manual_set(TargetMonitor::All, true).unwrap();
+            let pending = service.manual_set(TargetMonitor::All, true, test_request()).unwrap();
             if conflict {
                 fixture.manager.set_controller_issue(Some("new conflict".into())).unwrap();
             } else {
                 service.events.admitted.store(false, Ordering::Release);
             }
-            let Command::ManualSet(scope, enabled, reply) = receiver.try_recv().unwrap() else {
+            let Command::ManualSet(scope, enabled, _, reply) = receiver.try_recv().unwrap() else {
                 panic!("Expected queued manual request");
             };
             let mut authority = fixture.authority(OperationKind::Manual);
@@ -2368,20 +2423,74 @@ mod tests {
     }
 
     #[test]
+    fn correlation_proofs_survive_later_cross_origin_results_without_retaining_old_condition_errors() {
+        let mut observations = ManualObservations::default();
+        let gui = ManualRequestIdentity { client_id: "gui:window".into(), sequence: "2".into() };
+        let tray = ManualRequestIdentity { client_id: "tray".into(), sequence: "1".into() };
+        observations.admit(&TargetMonitor::All, &gui).unwrap();
+        observations.begin().unwrap();
+        observations.finish(TargetMonitor::All, gui.clone(), false, Some("Old GUI admission failure".into()));
+        observations.admit(&TargetMonitor::All, &tray).unwrap();
+        observations.begin().unwrap();
+        observations.finish(TargetMonitor::All, tray.clone(), true, None);
+        assert_eq!(observations.scopes.len(), 2);
+        assert_eq!(observations.scopes[0].request, gui);
+        assert_eq!(observations.scopes[1].request, tray);
+        let mut warnings = vec!["Unresolved controller conflict".into()];
+        observations.append_errors(&mut warnings);
+        assert_eq!(warnings, ["Unresolved controller conflict"]);
+        let serialized = serde_json::to_value(&observations.scopes).unwrap();
+        assert_eq!(serialized[0]["request"]["client_id"], "gui:window");
+        assert_eq!(serialized[0]["request"]["sequence"], "2");
+    }
+
+    #[test]
+    fn correlation_rejects_duplicate_or_reordered_same_client_commands_before_another_operation() {
+        let mut observations = ManualObservations::default();
+        let request = |sequence: &str| ManualRequestIdentity { client_id: "gui:window".into(), sequence: sequence.into() };
+        observations.admit(&TargetMonitor::All, &request("2")).unwrap();
+        observations.begin().unwrap();
+        observations.finish(TargetMonitor::All, request("2"), true, None);
+        for sequence in ["1", "2"] {
+            assert!(observations.admit(&TargetMonitor::All, &request(sequence)).is_err());
+        }
+        assert_eq!(observations.revision, 1);
+        observations.admit(&TargetMonitor::All, &request("3")).unwrap();
+        observations.admit(&TargetMonitor::Monitor {
+            device_path: "another".into(), display_name: "Another".into(),
+        }, &request("1")).unwrap();
+    }
+
+    #[test]
+    fn correlation_rejects_malformed_identifiers_before_queue_admission() {
+        let fixture = GateFixture::new();
+        let (service, receiver) = idle_service(fixture.manager.clone());
+        for (client_id, sequence) in [
+            ("", "1"), ("gui:bad\nid", "1"), ("gui:test", "0"), ("gui:test", "01"),
+            ("gui:test", "-1"), ("gui:test", "18446744073709551616"),
+        ] {
+            assert!(service.manual_set(TargetMonitor::All, true, ManualRequestIdentity {
+                client_id: client_id.into(), sequence: sequence.into(),
+            }).is_err());
+        }
+        assert!(receiver.try_recv().is_err());
+    }
+
+    #[test]
     fn review_manual_observations_order_both_origins_and_keep_scope_recovery_proofs() {
         let mut observations = ManualObservations::default();
         let other = TargetMonitor::Monitor { device_path: "other".into(), display_name: "Other".into() };
         observations.begin().unwrap();
-        observations.finish(TargetMonitor::All, false, Some("All request refused".into()));
+        observations.finish(TargetMonitor::All, test_request(), false, Some("All request refused".into()));
         let failed_all = observations.scopes.clone();
         observations.begin().unwrap();
-        observations.finish(other.clone(), true, None);
+        observations.finish(other.clone(), test_request(), true, None);
         let mut warnings = vec!["Unresolved controller conflict".into()];
         observations.append_errors(&mut warnings);
         assert_eq!(warnings, ["Unresolved controller conflict", "All request refused"]);
         assert_eq!(observations.scopes[0], failed_all[0]);
         observations.begin().unwrap();
-        observations.finish(TargetMonitor::All, true, None);
+        observations.finish(TargetMonitor::All, test_request(), true, None);
         assert_eq!(observations.scopes.len(), 2);
         assert_eq!(observations.scopes[0].revision, "3");
         assert!(observations.scopes[0].verified);
@@ -2390,7 +2499,7 @@ mod tests {
         observations.append_errors(&mut current);
         assert_eq!(current, ["Unresolved controller conflict"]);
         observations.begin().unwrap();
-        observations.finish(other, false, Some("Newer Other failure".into()));
+        observations.finish(other, test_request(), false, Some("Newer Other failure".into()));
         assert_eq!(observations.scopes[0].revision, "3", "full snapshots retain missed recovery proofs");
         assert_eq!(observations.scopes[1].revision, "4");
         assert!(!observations.scopes[1].verified);
@@ -2404,7 +2513,7 @@ mod tests {
             observations.begin().unwrap();
             observations.finish(TargetMonitor::Monitor {
                 device_path: path.into(), display_name: name.into(),
-            }, false, Some("Request refused".into()));
+            }, test_request(), false, Some("Request refused".into()));
         }
         assert_eq!(observations.scopes.len(), 1);
         assert_eq!(observations.scopes[0].revision, "2");

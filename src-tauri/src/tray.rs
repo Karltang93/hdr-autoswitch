@@ -1,7 +1,7 @@
 use crate::{
     config::TargetMonitor,
     display::{ScopeHdrState, TargetStatus},
-    monitor_hook::{HdrStatePayload, ManualControl, ManualSetResult},
+    monitor_hook::{HdrStatePayload, ManualControl, ManualRequestIdentity, ManualSetResult},
     show_main_window, AppState,
 };
 use std::sync::{
@@ -28,7 +28,7 @@ type PresentationAction = Box<dyn FnOnce() + Send>;
 #[derive(Clone, serde::Serialize)]
 struct ManualControlError {
     scope: TargetMonitor,
-    after_revision: String,
+    request: ManualRequestIdentity,
     message: String,
 }
 
@@ -326,7 +326,7 @@ fn report_manual_result(
     app: &AppHandle,
     presentation: Arc<ManualPresentation>,
     request: u64,
-    after_revision: String,
+    identity: ManualRequestIdentity,
     result: Result<ManualSetResult, String>,
 ) {
     let handle = app.clone();
@@ -344,7 +344,7 @@ fn report_manual_result(
             let published = match result {
                 Ok(result) => handle.emit("manual-control-result", result),
                 Err(message) => handle.emit("controller-error", ManualControlError {
-                    scope: TargetMonitor::All, after_revision, message,
+                    scope: TargetMonitor::All, request: identity, message,
                 }),
             };
             if let Err(error) = published {
@@ -358,16 +358,6 @@ fn report_manual_result(
 }
 
 fn manual_all(app: &AppHandle, enable: bool, presentation: &Arc<ManualPresentation>) {
-    let after_revision = match app.try_state::<TrayLabels>() {
-        Some(labels) => match labels.latest_status.lock() {
-            Ok(status) => status.as_ref().map(|status| status.manual_revision.clone()).unwrap_or_else(|| "0".into()),
-            Err(_) => {
-                eprintln!("Cannot read the manual HDR origin: tray status lock is poisoned");
-                return;
-            }
-        },
-        None => "0".into(),
-    };
     let sequence = match presentation.begin() {
         Ok(sequence) => sequence,
         Err(error) => {
@@ -375,18 +365,19 @@ fn manual_all(app: &AppHandle, enable: bool, presentation: &Arc<ManualPresentati
             return;
         }
     };
+    let identity = ManualRequestIdentity { client_id: "tray".into(), sequence: sequence.to_string() };
     let Some(state) = app.try_state::<AppState>() else {
         report_manual_result(
-            app, presentation.clone(), sequence, after_revision, Err("HDR control has not initialized.".into()),
+            app, presentation.clone(), sequence, identity, Err("HDR control has not initialized.".into()),
         );
         return;
     };
     let request = state.ensure_admission()
-        .and_then(|()| state.monitor_service.manual_set(TargetMonitor::All, enable));
+        .and_then(|()| state.monitor_service.manual_set(TargetMonitor::All, enable, identity.clone()));
     let request = match request {
         Ok(request) => request,
         Err(error) => {
-            report_manual_result(app, presentation.clone(), sequence, after_revision, Err(error));
+            report_manual_result(app, presentation.clone(), sequence, identity, Err(error));
             return;
         }
     };
@@ -394,7 +385,7 @@ fn manual_all(app: &AppHandle, enable: bool, presentation: &Arc<ManualPresentati
     let handle = app.clone();
     let presentation = presentation.clone();
     tauri::async_runtime::spawn(async move {
-        report_manual_result(&handle, presentation, sequence, after_revision, request.resolve().await);
+        report_manual_result(&handle, presentation, sequence, identity, request.resolve().await);
     });
 }
 
@@ -493,6 +484,7 @@ mod tests {
     fn manual_reply(enable: bool, uncertain: bool) -> Result<ManualSetResult, String> {
         Ok(ManualSetResult {
             scope: TargetMonitor::All,
+            request: ManualRequestIdentity { client_id: "tray".into(), sequence: "1".into() },
             outcomes: vec![MonitorOutcome {
                 device_path: Some("fixture-display".into()),
                 display_name: Some("Fixture display".into()),

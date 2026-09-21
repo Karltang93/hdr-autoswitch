@@ -62,10 +62,15 @@ function manualScopeKey(scope) {
     : scope.kind === 'all' ? 'all' : `legacy:${scope.legacy_runtime_id}`;
 }
 
-function recordManual(scope, verified, error) {
+function recordManual(scope, request, verified, error) {
   ++manualRevision;
-  manualResults.set(manualScopeKey(scope), {
-    revision: String(manualRevision), scope: structuredClone(scope), verified, error,
+  for (const [key, entry] of manualResults) {
+    if (manualScopeKey(entry.scope) === manualScopeKey(scope)) {
+      manualResults.set(key, { ...entry, error: null });
+    }
+  }
+  manualResults.set(JSON.stringify([manualScopeKey(scope), request.client_id]), {
+    revision: String(manualRevision), scope: structuredClone(scope), request: structuredClone(request), verified, error,
   });
 }
 
@@ -217,7 +222,7 @@ function status() {
     : selected.some((monitor) => monitor.is_hdr_enabled) ? 'mixed' : 'sdr';
   const payload = {
     inventory_revision: observeInventory(),
-    manual_revision: String(manualRevision), manual_results: [...manualResults.values()],
+    manual_revision: String(manualRevision), manual_results: structuredClone([...manualResults.values()]),
     is_hdr_active: scope_hdr_state === 'hdr', scope_hdr_state,
     manual_control: manualControl(),
     current_app_name: null, current_exe: null, switched_by_app: false,
@@ -351,11 +356,18 @@ mockIPC(async (command, args = {}) => {
     case 'pick_game_exe': return null;
     case 'sync_database': return games.length;
     case 'set_hdr': {
+      const request = args.request;
+      if (!request?.client_id?.startsWith('gui:') || !/^[1-9]\d*$/.test(request.sequence)
+        || BigInt(request.sequence) > 18446744073709551615n) throw new Error('Invalid GUI correlation identity');
+      const previous = manualResults.get(JSON.stringify([manualScopeKey(args.scope), request.client_id]));
+      if (previous && BigInt(previous.request.sequence) >= BigInt(request.sequence)) {
+        throw new Error('Manual request superseded or already completed');
+      }
       const admission = manualControl();
       const rejection = admission.status === 'blocked' ? admission.reason
         : !manualScopeAvailable(args.scope, monitors) ? 'Fixture scope unavailable' : null;
       if (rejection) {
-        recordManual(args.scope, false, rejection);
+        recordManual(args.scope, request, false, rejection);
         await emit('hdr-status-changed', status());
         throw new Error(rejection);
       }
@@ -376,9 +388,9 @@ mockIPC(async (command, args = {}) => {
           previous_hdr_user_enabled: previous, observed_hdr_user_enabled: monitor.is_hdr_enabled,
         };
       });
-      recordManual(args.scope, !failure, null);
+      recordManual(args.scope, request, !failure, null);
       await emit('hdr-status-changed', status());
-      return { scope: structuredClone(args.scope), outcomes, partial: !!failure, status: status() };
+      return { scope: structuredClone(args.scope), request: structuredClone(request), outcomes, partial: !!failure, status: status() };
     }
     default: throw new Error(`Unexpected fixture command: ${command}`);
   }

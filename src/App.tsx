@@ -240,10 +240,10 @@ export default function App() {
   };
 
   const acceptStatus = (next: HdrStatePayload): boolean => {
-    if (!displayOrder.current.acceptStatus(next)) return false;
     if (manualFeedback.current.acceptStatus(next)) {
       setControlErrors(manualFeedback.current.errors());
     }
+    if (!displayOrder.current.acceptStatus(next)) return false;
     setStatus(next);
     setStatusLoaded(true);
     setStatusError(null);
@@ -598,6 +598,9 @@ export default function App() {
               isDark ? 'border-amber-400/50 text-amber-200 bg-amber-950/20' : 'border-amber-500/40 text-amber-900 bg-amber-50 shadow-xs'
             }`}>{t.configError} {error}</p>
           )}
+          {controlErrors.length > 0 && <p className={`mb-4 text-xs ${isDark ? 'text-amber-200' : 'text-amber-900'}`}>
+            {t.manualRequestRetryHint}
+          </p>}
           {statusWarnings(status, t).map((warning) => (
             <p key={warning} role="alert" className={`mb-4 p-3 border text-xs ${
               isDark ? 'border-amber-400/50 text-amber-200 bg-amber-950/20' : 'border-amber-500/40 text-amber-900 bg-amber-50 shadow-xs'

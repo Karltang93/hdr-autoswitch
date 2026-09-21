@@ -206,6 +206,7 @@ export interface MonitorOutcome {
 
 export interface ManualSetResult {
   scope: TargetMonitor;
+  request: ManualRequestIdentity;
   outcomes: MonitorOutcome[];
   partial: boolean;
   status: HdrStatePayload;
@@ -214,13 +215,19 @@ export interface ManualSetResult {
 export interface ManualScopeResult {
   revision: string;
   scope: TargetMonitor;
+  request: ManualRequestIdentity;
   verified: boolean;
   error: string | null;
 }
 
 export interface ManualRequestOrigin {
   scope: TargetMonitor;
-  after_revision: string;
+  request: ManualRequestIdentity;
+}
+
+export interface ManualRequestIdentity {
+  client_id: string;
+  sequence: string;
 }
 
 export interface ManualControlError extends ManualRequestOrigin {

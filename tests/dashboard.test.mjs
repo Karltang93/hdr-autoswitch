@@ -41,7 +41,7 @@ function render(overrides = {}, language = 'en') {
     status: status(), monitors: [monitor()], libraryCount: null,
     activityLogs: [], recentGames: [], onRefreshMonitors() {}, onManualToggle() {},
     onNavigateToApps() {}, onControlError() {}, onManualResult() {},
-    captureManualOrigin(scope) { return { scope, after_revision: '0' }; },
+    captureManualOrigin(scope) { return { scope, request: { client_id: 'gui:test', sequence: '1' } }; },
     controlAvailable: true, isDark: true,
     ...overrides,
   })));

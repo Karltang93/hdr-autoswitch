@@ -237,6 +237,7 @@ export interface Translations {
   configMonitorIdentityError: string;
   configManualPolicy: string;
   configManualUnavailable: string;
+  manualRequestRetryHint: string;
   configAllOn: string;
   configAllOff: string;
   configStatusUnknown: string;
@@ -470,6 +471,7 @@ const cs: Translations = {
   configMonitorIdentityError: 'Trvalá identita displeje není dostupná; ovládání je zablokované.',
   configManualPolicy: 'Ruční nativní Zapnout/Vypnout platí jen pro výslovně zvolený displej nebo Vše. Funguje i při pozastavené automatizaci; nemění nastavení ani souhlas s automatickým HDR. Konflikt ovladače, ukončování nebo nedostupná autorita ovládání blokují.',
   configManualUnavailable: 'Ruční HDR není dostupné: ověřte autoritu ovládání, identitu a stav displeje.',
+  manualRequestRetryHint: 'Doručení požadavku nebylo potvrzeno. Zopakujte stejný ovládací prvek v původním okně nebo nabídce tray. Výsledek jiného požadavku tuto chybu nesmaže.',
   configAllOn: 'ZAPNOUT HDR NA VŠECH DISPLEJÍCH',
   configAllOff: 'VYPNOUT HDR NA VŠECH DISPLEJÍCH',
   configStatusUnknown: 'STAV HDR NEZNÁMÝ / POZASTAVENO',
@@ -703,6 +705,7 @@ const en: Translations = {
   configMonitorIdentityError: 'A persistent display identity is unavailable; control is blocked.',
   configManualPolicy: 'Manual native On/Off applies only to the explicitly chosen display or All. It remains available while automation is paused and never changes settings or automatic HDR consent. Controller conflicts, shutdown, or unavailable authority block manual control.',
   configManualUnavailable: 'Manual HDR is unavailable: check controller authority, display identity, and state.',
+  manualRequestRetryHint: 'Request delivery was not confirmed. Retry the same control from the original window or tray menu. An unrelated result will not dismiss this error.',
   configAllOn: 'TURN HDR ON FOR ALL DISPLAYS',
   configAllOff: 'TURN HDR OFF FOR ALL DISPLAYS',
   configStatusUnknown: 'HDR STATE UNKNOWN / PAUSED',

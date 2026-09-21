@@ -84,7 +84,8 @@ test('UI fixture surfaces controller conflict and blocks manual writes without r
   assert.equal(status.target_status, 'controller_conflict');
   assert.equal(status.scope_hdr_state, 'unknown');
   assert.equal(status.manual_control.status, 'blocked');
-  await assert.rejects(invoke('set_hdr', { scope: { kind: 'all' }, enable: true }), /controller conflict/);
+  await assert.rejects(invoke('set_hdr', { scope: { kind: 'all' }, enable: true,
+    request: { client_id: 'gui:test', sequence: '1' } }), /controller conflict/);
   assert.deepEqual(state.snapshot, before);
 });
 
@@ -107,15 +108,32 @@ test('UI fixture explicit update removes only retained excluded aliases while pr
 test('UI fixture manual results and status snapshots share one scoped revision sequence', async () => {
   const { invoke, state } = fixture('?mixed=1');
   state.failNextManual('Native On failed');
-  const failed = await invoke('set_hdr', { scope: { kind: 'all' }, enable: true });
+  const failed = await invoke('set_hdr', { scope: { kind: 'all' }, enable: true,
+    request: { client_id: 'gui:test', sequence: '1' } });
   assert.equal(failed.partial, true);
   assert.equal(failed.status.manual_revision, '1');
-  const recovered = await invoke('set_hdr', { scope: { kind: 'all' }, enable: false });
+  const recovered = await invoke('set_hdr', { scope: { kind: 'all' }, enable: false,
+    request: { client_id: 'gui:test', sequence: '2' } });
   assert.equal(recovered.partial, false);
   assert.equal(recovered.scope.kind, 'all');
+  assert.deepEqual(recovered.request, { client_id: 'gui:test', sequence: '2' });
   assert.equal(recovered.status.manual_revision, '2');
   assert.equal(recovered.status.manual_results[0].verified, true);
   assert.equal(recovered.status.warning, null);
   assert.equal(failed.status.manual_results[0].verified, false);
   assert.equal(failed.status.warning, 'Native On failed');
+});
+
+test('UI fixture refuses older same-client requests without changing displays or result history', async () => {
+  const { invoke, state } = fixture('?mixed=1');
+  await invoke('set_hdr', { scope: { kind: 'all' }, enable: false,
+    request: { client_id: 'gui:test', sequence: '2' } });
+  const status = structuredClone(state.status);
+  const monitors = state.monitors;
+  for (const sequence of ['1', '2']) {
+    await assert.rejects(invoke('set_hdr', { scope: { kind: 'all' }, enable: true,
+      request: { client_id: 'gui:test', sequence } }), /superseded|completed/);
+  }
+  assert.deepEqual(structuredClone(state.status), status);
+  assert.deepEqual(state.monitors, monitors);
 });
