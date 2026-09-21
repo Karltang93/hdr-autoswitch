@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import gsap from 'gsap';
 import {
   MonitorInfo,
+  MonitorInventorySnapshot,
   ConfigSnapshot,
   HdrStatePayload,
   ActivityLogEntry,
@@ -17,7 +18,7 @@ import { Settings } from './components/Settings';
 import { ConfigNotice } from './components/ConfigNotice';
 import { configClient, useConfig } from './useConfig';
 import { describeHdrScope, statusWarnings } from './telemetryText';
-import { manualControlAvailable, scopeVisuals } from './displayState';
+import { DisplayObservationOrder, manualControlAvailable, scopeVisuals } from './displayState';
 import { HdrLogo } from './components/HdrLogo';
 import { GlitchNavItem } from './components/GlitchNavItem';
 import { Sun, Moon, Globe } from 'lucide-react';
@@ -134,6 +135,8 @@ export default function App() {
   const config = snapshot?.mode === 'ready' ? snapshot.settings : null;
   const monitorRequest = useRef(0);
   const statusRequest = useRef(0);
+  const displayOrder = useRef(new DisplayObservationOrder());
+  const monitorRefreshRevision = useRef<string | null>(null);
   const [statusLoaded, setStatusLoaded] = useState(false);
   const [controlError, setControlError] = useState<string | null>(null);
   const [monitorError, setMonitorError] = useState<string | null>(null);
@@ -141,6 +144,8 @@ export default function App() {
   const loggedObservation = useRef<string | null>(null);
 
   const [status, setStatus] = useState<HdrStatePayload>({
+    status_revision: '0',
+    inventory_revision: '0',
     is_hdr_active: false,
     scope_hdr_state: 'unknown',
     manual_control: { status: 'blocked', reason: 'HDR controller starting' },
@@ -209,17 +214,44 @@ export default function App() {
   const refreshMonitors = async () => {
     const request = ++monitorRequest.current;
     try {
-      const list: MonitorInfo[] = await invoke('get_monitors');
-      if (request === monitorRequest.current) {
-        setMonitors(list);
+      const inventory: MonitorInventorySnapshot = await invoke('get_monitors');
+      if (request === monitorRequest.current && displayOrder.current.acceptInventory(inventory)) {
+        setMonitors(inventory.monitors);
         setMonitorError(null);
+        if (!displayOrder.current.statusCurrent) {
+          setStatusLoaded(false);
+          void refreshStatus();
+        }
       }
     } catch (err) {
       if (request === monitorRequest.current) {
+        displayOrder.current.invalidateInventory();
         setMonitors([]);
         setMonitorError(String(err));
       }
+    } finally {
+      if (request === monitorRequest.current) monitorRefreshRevision.current = null;
     }
+  };
+
+  const acceptStatus = (next: HdrStatePayload): boolean => {
+    if (!displayOrder.current.acceptStatus(next)) return false;
+    setStatus(next);
+    setStatusLoaded(true);
+    setStatusError(null);
+    if (next.inventory_stale) {
+      ++monitorRequest.current;
+      monitorRefreshRevision.current = null;
+      displayOrder.current.invalidateInventory();
+      setMonitors([]);
+    } else if (displayOrder.current.needsInventory) {
+      setMonitors([]);
+      if (monitorRefreshRevision.current !== next.inventory_revision) {
+        monitorRefreshRevision.current = next.inventory_revision;
+        void refreshMonitors();
+      }
+    }
+    return true;
   };
 
   const refreshStatus = async () => {
@@ -227,9 +259,7 @@ export default function App() {
     try {
       const stat: HdrStatePayload = await invoke('get_current_status');
       if (request === statusRequest.current) {
-        setStatus(stat);
-        setStatusLoaded(true);
-        setStatusError(null);
+        acceptStatus(stat);
       }
     } catch (err) {
       if (request === statusRequest.current) {
@@ -246,11 +276,8 @@ export default function App() {
     // Listen for live HDR status changes from Rust WinEventHook
     const unlistenPromise = listen<HdrStatePayload>('hdr-status-changed', (event) => {
       const newStatus = event.payload;
+      if (!active || !acceptStatus(newStatus)) return;
       ++statusRequest.current;
-      setStatus(newStatus);
-      setStatusLoaded(true);
-      setStatusError(null);
-      refreshMonitors();
 
       if (describeHdrScope(newStatus, dictionaries.en).mode === 'unknown') return;
       const observation = JSON.stringify([
@@ -368,6 +395,8 @@ export default function App() {
 
     return () => {
       active = false;
+      ++monitorRequest.current;
+      ++statusRequest.current;
       unlistenPromise.then((unlisten) => unlisten()).catch(configClient.reportError);
       unlistenConfigPromise.then((unlisten) => unlisten()).catch(configClient.reportError);
       unlistenControlPromise.then((unlisten) => unlisten()).catch(configClient.reportError);
@@ -559,7 +588,7 @@ export default function App() {
           </p>}
           {activeTab === 'dashboard' && (
             <Dashboard
-              status={status}
+              status={statusLoaded ? status : { ...status, inventory_stale: true }}
               monitors={monitors}
               libraryCount={config?.apps.length ?? null}
               activityLogs={activityLogs}
@@ -582,7 +611,7 @@ export default function App() {
           <fieldset disabled={pending} className={`min-w-0 ${pending ? 'pointer-events-none opacity-70' : ''}`}>
           {config && activeTab === 'apps' && (
             <AppsManager
-              quarantinedExes={(status.quarantined_apps ?? []).map((row) => row.exe_name)}
+              quarantinedRows={status.quarantined_apps ?? []}
               config={config}
               isDark={isDark}
               onNavigateToCatalog={() => setActiveTab('catalog')}

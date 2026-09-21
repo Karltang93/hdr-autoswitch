@@ -14,6 +14,12 @@ pub struct MonitorView {
     is_selected: bool,
 }
 
+#[derive(Serialize)]
+pub struct MonitorInventoryView {
+    inventory_revision: String,
+    monitors: Vec<MonitorView>,
+}
+
 fn monitor_view(monitor: MonitorInfo, snapshot: &ConfigSnapshot) -> MonitorView {
     let is_selected = snapshot.mode == ConfigMode::Ready
         && display::monitor_is_selected(&monitor, &snapshot.settings.target_monitor);
@@ -24,7 +30,7 @@ fn monitor_view(monitor: MonitorInfo, snapshot: &ConfigSnapshot) -> MonitorView 
 pub struct ScanResult {
     context_token: String,
     library_generation: String,
-    games: Vec<HdrApp>,
+    games: Vec<scanner::ScanGame>,
 }
 
 #[derive(Deserialize)]
@@ -90,13 +96,16 @@ fn check_predecessor(app: &AppHandle, state: &AppState) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn get_monitors(state: State<'_, AppState>) -> Result<Vec<MonitorView>, String> {
-    let monitors = display::get_monitors()?;
+pub async fn get_monitors(state: State<'_, AppState>) -> Result<MonitorInventoryView, String> {
+    let inventory = state.monitor_service.refresh()?.resolve().await?;
     let snapshot = state.config_mgr.snapshot()?;
-    Ok(monitors
+    Ok(MonitorInventoryView {
+        inventory_revision: inventory.inventory_revision,
+        monitors: inventory.monitors
         .into_iter()
         .map(|monitor| monitor_view(monitor, &snapshot))
-        .collect())
+        .collect(),
+    })
 }
 
 #[tauri::command]
@@ -247,7 +256,11 @@ pub fn get_catalog() -> Vec<CatalogEntry> {
 }
 
 #[tauri::command]
-pub async fn sync_database() -> Result<usize, String> {
+pub async fn sync_database(state: State<'_, AppState>) -> Result<usize, String> {
+    state.ensure_admission()?;
+    if state.safe_test_mode {
+        return Err("Safe test mode blocks catalog network synchronization and cache writes.".into());
+    }
     Ok(database::fetch_online_database().await?.len())
 }
 
@@ -312,14 +325,14 @@ pub fn repair_app_executable(
     state: State<'_, AppState>,
     expected_context: String,
     expected_library_generation: String,
-    exe_name: String,
+    row: library::AppRowIdentity,
     path: String,
 ) -> Result<ConfigSnapshot, String> {
     require_context(&state, &expected_context)?;
     let selected = scanner::inspect_exe_path(&path)?;
     let result = state.config_mgr.mutate(
         &expected_context, Some(&expected_library_generation), true,
-        |settings| library::repair_executable(settings, &exe_name, &selected.exe_name, &selected.path),
+        |settings| library::repair_executable(settings, &row, &selected.exe_name, &selected.path),
     );
     publish(&app, &state, result)
 }
@@ -329,23 +342,14 @@ pub fn remove_app(
     app: AppHandle,
     state: State<'_, AppState>,
     expected_context: String,
-    exe_name: String,
+    expected_library_generation: String,
+    row: library::AppRowIdentity,
 ) -> Result<ConfigSnapshot, String> {
     state.ensure_admission()?;
     let result = state
         .config_mgr
-        .mutate(&expected_context, None, true, |settings| {
-            let before = settings.apps.len();
-            settings
-                .apps
-                .retain(|entry| !entry.exe_name.eq_ignore_ascii_case(&exe_name));
-            if settings.apps.len() == before {
-                return Err(
-                    "This game is no longer in the library. Refresh before editing it.".into(),
-                );
-            }
-            Ok(())
-        });
+        .mutate(&expected_context, Some(&expected_library_generation), true,
+            |settings| library::remove_app(settings, &row));
     publish(&app, &state, result)
 }
 
@@ -354,21 +358,15 @@ pub fn toggle_app(
     app: AppHandle,
     state: State<'_, AppState>,
     expected_context: String,
-    exe_name: String,
+    expected_library_generation: String,
+    row: library::AppRowIdentity,
     enabled: bool,
 ) -> Result<ConfigSnapshot, String> {
     state.ensure_admission()?;
     let result = state
         .config_mgr
-        .mutate(&expected_context, None, true, |settings| {
-            let entry = settings
-                .apps
-                .iter_mut()
-                .find(|entry| entry.exe_name.eq_ignore_ascii_case(&exe_name))
-                .ok_or("This game is no longer in the library. Refresh before editing it.")?;
-            entry.enabled = enabled;
-            Ok(())
-        });
+        .mutate(&expected_context, Some(&expected_library_generation), true,
+            |settings| library::toggle_app(settings, &row, enabled));
     publish(&app, &state, result)
 }
 

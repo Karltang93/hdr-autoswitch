@@ -36,6 +36,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 const SHUTDOWN_ATTEMPT_BUDGET: usize = 32;
 const FOREGROUND_WATCHDOG_INTERVAL: Duration = Duration::from_secs(1);
+const INVENTORY_WATCHDOG_INTERVAL: Duration = Duration::from_secs(5);
 const FOREGROUND_RETRY_DELAYS: [Duration; 3] = [
     Duration::from_secs(1),
     Duration::from_secs(2),
@@ -77,6 +78,9 @@ fn manual_admission(snapshot: &ConfigSnapshot, admitted: bool) -> ManualControl 
 
 #[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
 pub struct HdrStatePayload {
+    /// Decimal strings preserve ordering beyond JavaScript's integer precision.
+    pub status_revision: String,
+    pub inventory_revision: String,
     /// Observed frozen activation scope, or the saved scope when no activation exists.
     pub is_hdr_active: bool,
     pub scope_hdr_state: ScopeHdrState,
@@ -102,6 +106,8 @@ pub struct HdrStatePayload {
 impl HdrStatePayload {
     fn unavailable(message: String) -> Self {
         Self {
+            status_revision: "0".into(),
+            inventory_revision: "0".into(),
             is_hdr_active: false,
             scope_hdr_state: ScopeHdrState::Unknown,
             manual_control: ManualControl::Blocked { reason: message.clone() },
@@ -131,10 +137,16 @@ pub struct ManualSetResult {
     pub status: HdrStatePayload,
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct MonitorInventorySnapshot {
+    pub inventory_revision: String,
+    pub monitors: Vec<MonitorInfo>,
+}
+
 enum Command {
     ForegroundObserved,
     ConfigCommitted,
-    Refresh(Sender<Result<Vec<MonitorInfo>, String>>),
+    Refresh(Sender<Result<MonitorInventorySnapshot, String>>),
     ManualSet(TargetMonitor, bool, Sender<Result<ManualSetResult, String>>),
     Status(Sender<Result<HdrStatePayload, String>>),
     GameExited {
@@ -336,7 +348,7 @@ impl MonitorService {
         Ok(PendingRequest { receiver: receive })
     }
 
-    pub fn refresh(&self) -> Result<PendingRequest<Vec<MonitorInfo>>, String> {
+    pub fn refresh(&self) -> Result<PendingRequest<MonitorInventorySnapshot>, String> {
         self.enqueue(Command::Refresh)
     }
 
@@ -607,6 +619,35 @@ fn take_expired_debounce(debounce: &mut Option<Debounce>, now: Instant) -> Optio
     }
 }
 
+struct InventoryObservation {
+    deadline: Instant,
+}
+
+impl InventoryObservation {
+    fn new(now: Instant) -> Self {
+        Self { deadline: now + INVENTORY_WATCHDOG_INTERVAL }
+    }
+
+    fn due(&self, now: Instant) -> bool {
+        self.deadline <= now
+    }
+
+    fn refreshed(&mut self, finished: Instant) {
+        self.deadline = finished + INVENTORY_WATCHDOG_INTERVAL;
+    }
+}
+
+#[derive(Default)]
+struct ActivationPreparation {
+    warning: Option<String>,
+}
+
+impl ActivationPreparation {
+    fn observed(&mut self, result: Result<(), String>) {
+        self.warning = result.err();
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct ForegroundKey {
     pid: u32,
@@ -774,9 +815,21 @@ fn unmatched_action(eligible: bool, alive: bool, exit_only: bool, expired: bool)
 #[derive(Default)]
 struct StatusPublication {
     last: Option<HdrStatePayload>,
+    current: Option<HdrStatePayload>,
+    revision: u64,
 }
 
 impl StatusPublication {
+    fn observe(&mut self, mut payload: HdrStatePayload) -> HdrStatePayload {
+        payload.status_revision = self.revision.to_string();
+        if self.current.as_ref() != Some(&payload) {
+            self.revision += 1;
+            payload.status_revision = self.revision.to_string();
+            self.current = Some(payload.clone());
+        }
+        payload
+    }
+
     fn changed(&self, payload: &HdrStatePayload) -> bool {
         self.last.as_ref() != Some(payload)
     }
@@ -924,6 +977,8 @@ struct Actor {
     watcher: Option<ProcessWatcher>,
     debounce: Option<Debounce>,
     foreground_observation: ForegroundObservation,
+    inventory_observation: InventoryObservation,
+    activation_preparation: ActivationPreparation,
     last_outcomes: Vec<MonitorOutcome>,
     publication: StatusPublication,
 }
@@ -939,6 +994,8 @@ impl Actor {
             watcher: None,
             debounce: None,
             foreground_observation: ForegroundObservation::default(),
+            inventory_observation: InventoryObservation::new(Instant::now()),
+            activation_preparation: ActivationPreparation::default(),
             last_outcomes: Vec::new(),
             publication: StatusPublication::default(),
         }
@@ -959,22 +1016,36 @@ impl Actor {
         }
     }
 
+    fn refresh_inventory(&mut self) -> Result<Vec<MonitorInfo>, String> {
+        let result = self.controller.refresh_inventory();
+        self.inventory_observation.refreshed(Instant::now());
+        result
+    }
+
     fn run(mut self, receiver: Receiver<Command>) {
         let mut watchdog_deadline = Instant::now() + FOREGROUND_WATCHDOG_INTERVAL;
         loop {
             let now = Instant::now();
             let expired = take_expired_debounce(&mut self.debounce, now);
             let watchdog_due = watchdog_deadline <= now;
-            if expired.is_some() || watchdog_due {
+            let inventory_due = self.inventory_observation.due(now);
+            if expired.is_some() || watchdog_due || inventory_due {
                 if self.events.admitted.load(Ordering::Acquire) {
                     if expired.is_some()
-                        || self.foreground_observation.needs_observation(
+                        || (watchdog_due && self.foreground_observation.needs_observation(
                             self.events.foreground_key(), now,
-                        )
+                        ))
                     {
                         let _ = self.observe(expired, true);
                         self.publish();
+                    } else if inventory_due {
+                        // Inventory can change without a foreground hint. This read-only probe
+                        // never retries automatic writes or replaces the activation's members.
+                        let _ = self.refresh_inventory();
+                        self.publish();
                     }
+                } else if inventory_due {
+                    self.inventory_observation.refreshed(Instant::now());
                 }
                 if watchdog_due {
                     // Schedule from completion rather than hot-looping to catch up after slow work.
@@ -983,7 +1054,8 @@ impl Actor {
                 continue;
             }
             let received = receiver.recv_timeout(actor_wait_timeout(
-                self.debounce, watchdog_deadline, Instant::now(),
+                self.debounce, watchdog_deadline.min(self.inventory_observation.deadline),
+                Instant::now(),
             ));
             let command = match received {
                 Ok(command) => command,
@@ -1010,12 +1082,9 @@ impl Actor {
                 }
                 Command::Refresh(reply) => {
                     let result = if self.events.admitted.load(Ordering::Acquire) {
-                        self.observe(None, true).and_then(|_| {
-                            if let Some(error) = self.controller.inventory_error() {
-                                Err(error.to_string())
-                            } else {
-                                Ok(self.controller.inventory().to_vec())
-                            }
+                        self.refresh_inventory().map(|monitors| MonitorInventorySnapshot {
+                            inventory_revision: self.controller.inventory_revision(),
+                            monitors,
                         })
                     } else {
                         Err("The HDR controller is shutting down".into())
@@ -1064,7 +1133,7 @@ impl Actor {
                     if self.events.admitted.load(Ordering::Acquire)
                         && self.controller.matches_activation(generation, process)
                     {
-                        self.controller.warn(message);
+                        self.activation_preparation.observed(Err(message));
                         self.finish_activation(usize::MAX);
                         self.publish();
                     }
@@ -1149,6 +1218,7 @@ impl Actor {
         if self.watcher.as_ref().is_some_and(|watcher| {
             watcher.generation == active.generation && watcher.process == active.process
         }) {
+            self.activation_preparation.observed(Ok(()));
             return Ok(());
         }
         let generation = active.generation;
@@ -1158,11 +1228,12 @@ impl Actor {
             generation,
             self.events.clone(),
         )?);
+        self.activation_preparation.observed(Ok(()));
         Ok(())
     }
 
     fn observe(&mut self, expired: Option<Debounce>, enable_automatic: bool) -> Result<(), String> {
-        let _ = self.controller.refresh_inventory();
+        let _ = self.refresh_inventory();
         let origin = match self.config.snapshot() {
             Ok(snapshot) => snapshot,
             Err(error) => {
@@ -1241,13 +1312,15 @@ impl Actor {
                         outcomes = skipped;
                         self.tracked = Some(process);
                     }
-                    Err(error) => self.controller.warn(error.message),
+                    Err(error) => self.activation_preparation.observed(Err(error.message)),
                 }
+            } else {
+                self.activation_preparation.observed(Ok(()));
             }
         }
         if self.controller.activation().is_some() {
             if let Err(error) = self.ensure_watcher() {
-                self.controller.warn(error);
+                self.activation_preparation.observed(Err(error));
                 self.finish_activation(usize::MAX);
             } else if enable_automatic {
                 let mut authority = self.authority(OperationKind::AutomaticEnable);
@@ -1255,7 +1328,7 @@ impl Actor {
                 if !outcomes.is_empty() {
                     self.last_outcomes = outcomes.clone();
                 }
-                let _ = self.controller.refresh_inventory();
+                let _ = self.refresh_inventory();
                 self.reconcile_gate();
                 if self.controller.activation().is_some()
                     && self
@@ -1304,7 +1377,7 @@ impl Actor {
             self.last_outcomes = outcomes.clone();
         }
         self.tracked = None;
-        let _ = self.controller.refresh_inventory();
+        let _ = self.refresh_inventory();
         self.notify_verified(&outcomes, false);
     }
 
@@ -1317,46 +1390,15 @@ impl Actor {
         manual_admission(&snapshot, self.events.admitted.load(Ordering::Acquire)).require()?;
         // Establish the logical interval without enabling HDR first. A manual Off while a game is
         // foreground must not produce an automatic On followed by a second hidden setter.
-        let _ = self.controller.refresh_inventory();
-        if let Ok(Some(process)) = observe_foreground() {
-            if automatic_pause_for_path(&snapshot, Some(&process.path), &process.exe, &snapshot.context_token).is_none() {
-                if self.controller.activation().is_none() {
-                    match self.controller.begin(
-                        process.identity,
-                        process.exe.clone(),
-                        snapshot.context_token.clone(),
-                        snapshot.settings.target_monitor.clone(),
-                    ) {
-                        Ok(_) => self.tracked = Some(process),
-                        Err(error) => self.controller.warn(error.message),
-                    }
-                } else if self
-                    .controller
-                    .activation()
-                    .is_some_and(|active| active.context_token == snapshot.context_token)
-                {
-                    self.controller
-                        .transfer(process.identity, process.exe.clone());
-                    self.tracked = Some(process);
-                    self.debounce = None;
-                }
-                if let Err(error) = self.ensure_watcher() {
-                    self.controller.warn(error);
-                }
-            }
+        let _ = self.refresh_inventory();
+        if let Ok(process) = observe_foreground() {
+            let preparation = self.prepare_manual_activation(&snapshot, process);
+            self.activation_preparation.observed(preparation);
         }
         let mut authority = self.authority(OperationKind::Manual);
         let outcomes = self.controller.manual_set(&scope, enable, &mut authority);
         self.last_outcomes = outcomes.clone();
-        for outcome in &outcomes {
-            if outcome.outcome == OutcomeKind::Failed {
-                if let Some(message) = &outcome.message {
-                    self.controller
-                        .warn(format!("The last manual HDR request failed: {message}"));
-                }
-            }
-        }
-        let _ = self.controller.refresh_inventory();
+        let _ = self.refresh_inventory();
         self.reconcile_gate();
         let snapshot = self.config.snapshot()?;
         let partial = outcomes.is_empty() || outcomes.iter().any(|outcome| !outcome.is_verified());
@@ -1368,6 +1410,34 @@ impl Actor {
             partial,
             status: self.payload(&snapshot),
         })
+    }
+
+    fn prepare_manual_activation(
+        &mut self,
+        snapshot: &ConfigSnapshot,
+        process: Option<TrackedProcess>,
+    ) -> Result<(), String> {
+        if let Some(process) = process.filter(|process| automatic_pause_for_path(
+            snapshot, Some(&process.path), &process.exe, &snapshot.context_token,
+        ).is_none()) {
+            if self.controller.activation().is_none() {
+                self.controller.begin(
+                    process.identity,
+                    process.exe.clone(),
+                    snapshot.context_token.clone(),
+                    snapshot.settings.target_monitor.clone(),
+                ).map_err(|error| error.message)?;
+                self.tracked = Some(process);
+            } else if self.controller.activation()
+                .is_some_and(|active| active.context_token == snapshot.context_token)
+            {
+                self.controller.transfer(process.identity, process.exe.clone());
+                self.tracked = Some(process);
+                self.debounce = None;
+            }
+        }
+        // A retained exit-only activation still needs its watcher when focus leaves the game.
+        self.ensure_watcher()
     }
 
     fn notify_verified(&self, outcomes: &[MonitorOutcome], enabled: bool) {
@@ -1399,7 +1469,7 @@ impl Actor {
             .show();
     }
 
-    fn payload(&self, snapshot: &ConfigSnapshot) -> HdrStatePayload {
+    fn payload(&mut self, snapshot: &ConfigSnapshot) -> HdrStatePayload {
         let active = self.controller.activation();
         let app = active.and_then(|active| {
             snapshot.settings.resolve_app(
@@ -1407,6 +1477,7 @@ impl Actor {
             ).matched()
         });
         let mut warnings = self.foreground_observation.warnings(self.controller.warning());
+        warnings.extend(self.activation_preparation.warning.clone());
         if let Some(issue) = &snapshot.issue {
             warnings.push(issue.clone());
         }
@@ -1447,7 +1518,9 @@ impl Actor {
         let scope_hdr_state = observed_scope
             .map(|scope| self.controller.scope_hdr_state(scope))
             .unwrap_or(ScopeHdrState::Unknown);
-        HdrStatePayload {
+        let payload = HdrStatePayload {
+            status_revision: "0".into(),
+            inventory_revision: self.controller.inventory_revision(),
             is_hdr_active: scope_hdr_state == ScopeHdrState::Hdr,
             scope_hdr_state,
             manual_control: manual_admission(snapshot, self.events.admitted.load(Ordering::Acquire)),
@@ -1478,7 +1551,8 @@ impl Actor {
             inventory_stale: self.controller.inventory_error().is_some(),
             uncertain_targets: self.controller.uncertain_targets(),
             operation_outcomes: self.last_outcomes.clone(),
-        }
+        };
+        self.publication.observe(payload)
     }
 
     fn publish(&mut self) {
@@ -1486,8 +1560,11 @@ impl Actor {
             Ok(snapshot) => self.payload(&snapshot),
             Err(error) => {
                 let mut warnings = self.foreground_observation.warnings(self.controller.warning());
+                warnings.extend(self.activation_preparation.warning.clone());
                 warnings.push(error);
-                HdrStatePayload::unavailable(warnings.join("\n"))
+                let mut payload = HdrStatePayload::unavailable(warnings.join("\n"));
+                payload.inventory_revision = self.controller.inventory_revision();
+                self.publication.observe(payload)
             }
         };
         if !self.publication.changed(&payload) {
@@ -2036,9 +2113,9 @@ mod tests {
             assert_eq!(latest.settings.resolve_app(None, "BsSndRpt64.exe"), Resolution::Excluded);
             let mut payload = HdrStatePayload::unavailable("test display unavailable".into());
             payload.quarantined_apps = quarantined_apps(&latest.settings);
-            assert_eq!(payload.quarantined_apps, [QuarantinedApp {
-                name: "My Age of Empires IV".into(), exe_name: "BsSndRpt64.exe".into(),
-            }]);
+            assert_eq!(payload.quarantined_apps.len(), 1);
+            assert_eq!(payload.quarantined_apps[0].name, "My Age of Empires IV");
+            assert_eq!(payload.quarantined_apps[0].exe_name, "BsSndRpt64.exe");
             if publication.changed(&payload) {
                 publications += 1;
                 publication.published(payload);
@@ -2051,9 +2128,10 @@ mod tests {
 
         let invalid = fixture.manager.mutate(
             &before.context_token, Some(&before.library_generation), true,
-            |settings| crate::library::repair_executable(
-                settings, "BsSndRpt64.exe", "GameLaunchHelper.exe", r"D:\AOE4\GameLaunchHelper.exe",
-            ),
+            |settings| {
+                let row = crate::library::AppRowIdentity::at(settings, 0)?;
+                crate::library::repair_executable(settings, &row, "GameLaunchHelper.exe", r"D:\AOE4\GameLaunchHelper.exe")
+            },
         );
         assert!(invalid.is_err());
         assert_eq!(fixture.manager.snapshot().unwrap(), before);
@@ -2062,9 +2140,10 @@ mod tests {
         // A fixture-selected executable, not a claim about AOE4's real binary.
         let repaired = fixture.manager.mutate(
             &before.context_token, Some(&before.library_generation), true,
-            |settings| crate::library::repair_executable(
-                settings, "BsSndRpt64.exe", "user-selected.exe", r"D:\AOE4\user-selected.exe",
-            ),
+            |settings| {
+                let row = crate::library::AppRowIdentity::at(settings, 0)?;
+                crate::library::repair_executable(settings, &row, "user-selected.exe", r"D:\AOE4\user-selected.exe")
+            },
         ).unwrap();
         let mut expected = before.settings.apps[0].clone();
         expected.exe_name = "user-selected.exe".into();
@@ -2222,6 +2301,98 @@ mod tests {
         let serialized = serde_json::to_value(payload).unwrap();
         assert_eq!(serialized["scope_hdr_state"], "unknown");
         assert_eq!(serialized["is_hdr_active"], false);
+    }
+
+    #[test]
+    fn status_exposes_inventory_and_status_versions_as_decimal_strings() {
+        let serialized = serde_json::to_value(
+            HdrStatePayload::unavailable("Read failed".into()),
+        ).unwrap();
+        assert_eq!(serialized["inventory_revision"], "0");
+        assert_eq!(serialized["status_revision"], "0");
+    }
+
+    #[test]
+    fn inventory_changes_publish_with_unchanged_aggregate_and_identical_polls_stay_quiet() {
+        let mut publication = StatusPublication::default();
+        let mut payload = HdrStatePayload::unavailable("unchanged automatic policy".into());
+        payload.inventory_revision = "1".into();
+        let first = publication.observe(payload.clone());
+        assert_eq!(first.status_revision, "1");
+        publication.published(first.clone());
+        let repeated = publication.observe(payload.clone());
+        assert!(!publication.changed(&repeated));
+
+        payload.inventory_revision = "2".into();
+        let connected = publication.observe(payload.clone());
+        assert_eq!(connected.scope_hdr_state, first.scope_hdr_state);
+        assert_eq!(connected.any_hdr_active, first.any_hdr_active);
+        assert_eq!(connected.status_revision, "2");
+        assert!(publication.changed(&connected));
+        publication.published(connected);
+        for _ in 0..100 {
+            let repeated = publication.observe(payload.clone());
+            assert_eq!(repeated.status_revision, "2");
+            assert!(!publication.changed(&repeated));
+        }
+    }
+
+    #[test]
+    fn manual_warning_recovery_has_a_new_status_revision_without_inventory_changes() {
+        let mut publication = StatusPublication::default();
+        let mut payload = HdrStatePayload::unavailable("The last manual HDR request failed".into());
+        payload.inventory_revision = "7".into();
+        let failed = publication.observe(payload.clone());
+        publication.published(failed.clone());
+        payload.warning = None;
+        let recovered = publication.observe(payload);
+        assert_eq!(recovered.inventory_revision, failed.inventory_revision);
+        assert_ne!(recovered.status_revision, failed.status_revision);
+        assert!(publication.changed(&recovered));
+        publication.published(recovered.clone());
+        assert!(!publication.changed(&recovered));
+    }
+
+    #[test]
+    fn manual_native_success_does_not_clear_unresolved_preparation_but_verified_retry_does() {
+        use crate::display::tests::{monitor, MockDisplay};
+
+        struct NoWrite;
+        impl WriteAuthority for NoWrite {
+            fn authorize(
+                &mut self, _: &NativeAttempt, _: &mut dyn FnMut(),
+            ) -> Result<(), DisplayFailure> {
+                panic!("an already-satisfied mock observation must not issue a native write");
+            }
+        }
+        let mut controller = HdrController::new(MockDisplay::new(vec![monitor("chosen", 1, false)]));
+        controller.warn("Unresolved controller conflict");
+        for failure in ["Activation target unavailable", "Process watcher unavailable"] {
+            let mut preparation = ActivationPreparation::default();
+            preparation.observed(Err(failure.into()));
+            let mut publication = StatusPublication::default();
+            let mut failed = HdrStatePayload::unavailable(failure.into());
+            failed.inventory_revision = "1".into();
+            let failed = publication.observe(failed);
+            publication.published(failed.clone());
+
+            // A native state verification alone does not prove automatic setup recovered.
+            let manual = controller.manual_set(
+                &TargetMonitor::All, false, &mut NoWrite,
+            );
+            assert!(manual[0].is_verified());
+            assert_eq!(preparation.warning.as_deref(), Some(failure));
+            // The actor records this only after successful begin/watch setup, or a verified
+            // observation that automatic setup is not required for the foreground process.
+            preparation.observed(Ok(()));
+            assert!(preparation.warning.is_none());
+            assert_eq!(controller.warning().as_deref(), Some("Unresolved controller conflict"));
+            let mut recovered = failed.clone();
+            recovered.warning = controller.warning();
+            let recovered = publication.observe(recovered);
+            assert!(publication.changed(&recovered));
+            assert_ne!(recovered.status_revision, failed.status_revision);
+        }
     }
 
     #[test]
@@ -2434,6 +2605,67 @@ mod tests {
         }
         let same_process_new_hint = ForegroundKey { generation: 2, ..key };
         assert!(!observation.needs_observation(same_process_new_hint, now));
+    }
+
+    #[test]
+    fn inventory_watchdog_skips_four_idle_ticks_and_deduplicates_unchanged_observations() {
+        use crate::display::tests::{monitor, MockDisplay};
+
+        let now = Instant::now();
+        let mut schedule = InventoryObservation::new(now);
+        let mut controller = HdrController::new(MockDisplay::new(vec![monitor("chosen", 1, false)]));
+        controller.refresh_inventory().unwrap();
+        schedule.refreshed(now);
+        let mut publication = StatusPublication::default();
+        let mut payload = HdrStatePayload::unavailable("unchanged policy".into());
+        payload.inventory_revision = controller.inventory_revision();
+        let first = publication.observe(payload.clone());
+        publication.published(first);
+        let mut probes = 0;
+        for tick in 1..=60 {
+            let at = now + FOREGROUND_WATCHDOG_INTERVAL * tick;
+            assert_eq!(schedule.due(at), tick % 5 == 0);
+            if schedule.due(at) {
+                controller.refresh_inventory().unwrap();
+                schedule.refreshed(at);
+                probes += 1;
+                payload.inventory_revision = controller.inventory_revision();
+                let observed = publication.observe(payload.clone());
+                assert!(!publication.changed(&observed));
+            }
+        }
+        assert_eq!(probes, 12, "the one-second foreground watchdog must not query inventory");
+    }
+
+    #[test]
+    fn event_refreshes_rearm_inventory_deadline_from_completion_without_catch_up() {
+        let now = Instant::now();
+        let mut schedule = InventoryObservation::new(now);
+        assert!(!schedule.due(now + Duration::from_secs(4)));
+        // Foreground/config/manual/explicit refreshes all reset the independent probe.
+        schedule.refreshed(now + Duration::from_secs(4));
+        assert!(!schedule.due(now + Duration::from_secs(5)));
+        assert!(!schedule.due(now + Duration::from_secs(8)));
+        assert!(schedule.due(now + Duration::from_secs(9)));
+        // A slow successful or failed query receives a complete quiet interval afterwards.
+        schedule.refreshed(now + Duration::from_secs(20));
+        for tick in 20..25 {
+            assert!(!schedule.due(now + Duration::from_secs(tick)));
+        }
+        assert!(schedule.due(now + Duration::from_secs(25)));
+    }
+
+    #[test]
+    fn independent_inventory_deadline_wakes_between_foreground_watchdog_ticks() {
+        let now = Instant::now();
+        let mut schedule = InventoryObservation::new(now);
+        schedule.refreshed(now + Duration::from_millis(4500));
+        let at = now + Duration::from_secs(9);
+        let foreground = now + Duration::from_secs(10);
+        assert_eq!(
+            actor_wait_timeout(None, foreground.min(schedule.deadline), at),
+            Duration::from_millis(500),
+        );
     }
 
     #[test]

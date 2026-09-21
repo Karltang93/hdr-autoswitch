@@ -578,6 +578,8 @@ mod tests {
 
     fn status(scope: ScopeHdrState) -> HdrStatePayload {
         HdrStatePayload {
+            status_revision: "1".into(),
+            inventory_revision: "1".into(),
             is_hdr_active: scope == ScopeHdrState::Hdr,
             scope_hdr_state: scope,
             manual_control: ManualControl::Available,
@@ -615,6 +617,7 @@ mod tests {
         let mut state = status(ScopeHdrState::Sdr);
         state.quarantined_apps.push(crate::runtime_policy::QuarantinedApp {
             name: "Age of Empires IV".into(), exe_name: "BsSndRpt64.exe".into(),
+            row_index: 0, path: None, reason: crate::runtime_policy::RepairReason::Helper,
         });
         assert_eq!(status_label(false, Some(&state)), "Game executable blocked - open My Games");
         assert!(status_label(true, Some(&state)).contains("Moje hry"));

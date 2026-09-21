@@ -20,6 +20,30 @@ export interface HdrApp {
   launcher?: string | null;
 }
 
+export interface AppRowIdentity {
+  index: number;
+  exe_name: string;
+  path: string | null;
+}
+
+export interface QuarantinedApp {
+  row_index: number;
+  name: string;
+  exe_name: string;
+  path: string | null;
+  reason: 'helper' | 'primary_path_mismatch';
+}
+
+export type ScanEvidence =
+  | { status: 'verified' }
+  | { status: 'unverified'; reason: 'unresolved' };
+
+export interface ScanGame extends Omit<HdrApp, 'enabled'> {
+  is_hdr_supported: boolean;
+  default_selected: boolean;
+  evidence: ScanEvidence;
+}
+
 export interface PickedGameInfo {
   name: string;
   exe_name: string;
@@ -41,6 +65,7 @@ export interface ActivityLogEntry {
 
 export interface CatalogEntry {
   name: string;
+  name_aliases?: string[];
   exe_name: string;
   hdr_type: HdrType;
   support_tier: SupportTier;
@@ -64,6 +89,11 @@ export interface MonitorInfo {
   hdr_state_known: boolean;
   state_error: string | null;
   is_primary: boolean;
+}
+
+export interface MonitorInventorySnapshot {
+  inventory_revision: string;
+  monitors: MonitorInfo[];
 }
 
 export type SwitchMethod = 'native' | 'shortcut';
@@ -115,7 +145,7 @@ export interface ConfigSnapshot {
 export interface ScanResult {
   context_token: string;
   library_generation: string;
-  games: HdrApp[];
+  games: ScanGame[];
 }
 
 export interface RunningProcessInfo {
@@ -128,6 +158,8 @@ export interface RunningProcessInfo {
 }
 
 export interface HdrStatePayload {
+  status_revision: string;
+  inventory_revision: string;
   is_hdr_active: boolean;
   scope_hdr_state: 'hdr' | 'sdr' | 'mixed' | 'unknown';
   manual_control: { status: 'available' } | { status: 'blocked'; reason: string };
@@ -138,7 +170,7 @@ export interface HdrStatePayload {
   launcher?: string | null;
   hdr_type?: string | null;
   warning: string | null;
-  quarantined_apps: { name: string; exe_name: string }[];
+  quarantined_apps: QuarantinedApp[];
   target_status: TargetStatus;
   active_target: TargetMonitor | null;
   target_deferred: boolean;

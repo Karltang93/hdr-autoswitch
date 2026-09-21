@@ -1,4 +1,46 @@
-import type { HdrStatePayload, MonitorInfo, TargetMonitor } from './types.ts';
+import type { HdrStatePayload, MonitorInfo, MonitorInventorySnapshot, TargetMonitor } from './types.ts';
+
+function revision(value: string): bigint | null {
+  return /^(0|[1-9]\d*)$/.test(value) ? BigInt(value) : null;
+}
+
+export class DisplayObservationOrder {
+  private statusRevision = -1n;
+  private statusInventoryRevision = -1n;
+  private inventoryRevision = 0n;
+  private loadedInventoryRevision = -1n;
+
+  acceptStatus(status: Pick<HdrStatePayload, 'status_revision' | 'inventory_revision'>): boolean {
+    const nextStatus = revision(status.status_revision);
+    const nextInventory = revision(status.inventory_revision);
+    if (nextStatus === null || nextInventory === null
+      || nextStatus < this.statusRevision || nextInventory < this.inventoryRevision) return false;
+    this.statusRevision = nextStatus;
+    this.statusInventoryRevision = nextInventory;
+    this.inventoryRevision = nextInventory;
+    return true;
+  }
+
+  acceptInventory(snapshot: Pick<MonitorInventorySnapshot, 'inventory_revision'>): boolean {
+    const next = revision(snapshot.inventory_revision);
+    if (next === null || next < this.inventoryRevision) return false;
+    this.inventoryRevision = next;
+    this.loadedInventoryRevision = next;
+    return true;
+  }
+
+  invalidateInventory(): void {
+    this.loadedInventoryRevision = -1n;
+  }
+
+  get needsInventory(): boolean {
+    return this.loadedInventoryRevision < this.inventoryRevision;
+  }
+
+  get statusCurrent(): boolean {
+    return this.statusInventoryRevision === this.inventoryRevision;
+  }
+}
 
 export function monitorReady(monitor: MonitorInfo): monitor is MonitorInfo & { device_path: string } {
   return !!monitor.device_path?.trim()
