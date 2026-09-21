@@ -13,8 +13,9 @@
 [![Rust](https://img.shields.io/badge/Rust-Backend-orange?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![React 19](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-Buy%20me%20a%20coffee-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/s0pt1k)
 
-[**Download Latest Release (.exe Installer)**](https://github.com/Soptik1290/hdr-autoswitch/releases/latest) • [**Release Notes**](RELEASE_NOTES_v1.0.7.md) • [**Report Bug**](https://github.com/Soptik1290/hdr-autoswitch/issues)
+[**Download Latest Release (.exe Installer)**](https://github.com/Soptik1290/hdr-autoswitch/releases/latest) • [**Release Notes**](RELEASE_NOTES_v1.0.7.md) • [**Support on Ko-fi**](https://ko-fi.com/s0pt1k) • [**Report Bug**](https://github.com/Soptik1290/hdr-autoswitch/issues)
 
 
 </div>
@@ -324,7 +325,7 @@ fully atomic by the application.
 
 If you find HDR Auto-Switch helpful and want to support ongoing development, maintenance, and catalog updates, you can support the project on Ko-fi!
 
-[![Support on Ko-fi](https://img.shields.io/badge/Ko--fi-Support%20the%20Project-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/soptik1290)
+[![Support on Ko-fi](https://img.shields.io/badge/Ko--fi-Support%20the%20Project-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/s0pt1k)
 
 ---
 
