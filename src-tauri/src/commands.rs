@@ -261,7 +261,8 @@ pub async fn scan_installed_games(
     if origin.library_generation != expected_library_generation {
         return Err("The library changed before scanning. Start the scan again.".into());
     }
-    let games = tauri::async_runtime::spawn_blocking(scanner::scan_installed_games)
+    let auto_detect = origin.settings.auto_detect_new_games;
+    let games = tauri::async_runtime::spawn_blocking(move || scanner::scan_installed_games(auto_detect))
         .await
         .map_err(|error| format!("Game scan failed: {error}"))?;
     Ok(ScanResult {

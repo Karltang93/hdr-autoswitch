@@ -1,5 +1,6 @@
 use crate::config::{HdrApp, HdrType};
 use crate::database;
+use crate::automatic_authority::{self, Authority, InstallEvidence, LaunchField, Provider};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -22,7 +23,7 @@ pub struct PickedGameInfo {
     pub launcher: Option<String>,
 }
 
-pub fn scan_installed_games() -> Vec<HdrApp> {
+pub fn scan_installed_games(auto_detect: bool) -> Vec<HdrApp> {
     let catalog = database::get_full_catalog();
     let mut detected_map: HashMap<String, HdrApp> = HashMap::new();
 
@@ -42,16 +43,20 @@ pub fn scan_installed_games() -> Vec<HdrApp> {
     scan_xbox_games(&catalog, &mut detected_map);
 
     // 6. Scan common media players
-    scan_media_players(&mut detected_map);
+    scan_media_players(&catalog, &mut detected_map);
 
     let mut result: Vec<HdrApp> = detected_map.into_values().collect();
+    for game in &mut result {
+        game.enabled &= auto_detect;
+    }
 
     // Sort: HDR-enabled games first (alphabetically), then SDR games (alphabetically)
     result.sort_by(|a, b| {
         match (a.enabled, b.enabled) {
             (true, false) => std::cmp::Ordering::Less,
             (false, true) => std::cmp::Ordering::Greater,
-            _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+            _ => a.name.to_lowercase().cmp(&b.name.to_lowercase())
+                .then(a.exe_name.cmp(&b.exe_name)).then(a.path.cmp(&b.path)),
         }
     });
 
@@ -260,10 +265,20 @@ fn scan_steam_manifests(catalog: &[database::CatalogEntry], map: &mut HashMap<St
                 if let Ok(content) = fs::read_to_string(&path) {
                     let mut game_name = String::new();
                     let mut install_dir_name = String::new();
+                    let mut declared_appid = None;
 
                     for line in content.lines() {
                         let trimmed = line.trim();
-                        if trimmed.starts_with("\"name\"") {
+                        if trimmed.starts_with("\"appid\"") {
+                            let parts: Vec<&str> = trimmed.split('"').collect();
+                            if parts.len() >= 4 {
+                                if declared_appid.is_some() {
+                                    declared_appid = Some(String::new());
+                                    break;
+                                }
+                                declared_appid = Some(parts[3].to_string());
+                            }
+                        } else if trimmed.starts_with("\"name\"") {
                             let parts: Vec<&str> = trimmed.split('"').collect();
                             if parts.len() >= 4 {
                                 game_name = parts[3].replace(r#"™"#, "").replace(r#"®"#, "").trim().to_string();
@@ -288,6 +303,12 @@ fn scan_steam_manifests(catalog: &[database::CatalogEntry], map: &mut HashMap<St
                         continue;
                     }
 
+                    if declared_appid.as_deref() != Some(&steam_appid)
+                        || !valid_steam_install_dir(&install_dir_name)
+                    {
+                        eprintln!("Skipping Steam manifest with invalid installation identity: {}", path.display());
+                        continue;
+                    }
                     if !install_dir_name.is_empty() {
                         let full_game_dir = steamapps.join("common").join(&install_dir_name);
                         if full_game_dir.exists() {
@@ -301,9 +322,9 @@ fn scan_steam_manifests(catalog: &[database::CatalogEntry], map: &mut HashMap<St
                                 catalog,
                                 &clean_game_name,
                                 &full_game_dir,
-                                None,
+                                &[],
                                 map,
-                                Some("Steam"),
+                                Provider::Steam,
                                 Some(&steam_appid),
                             );
                         }
@@ -355,13 +376,14 @@ fn scan_epic_manifests(catalog: &[database::CatalogEntry], map: &mut HashMap<Str
 
                         let game_dir = PathBuf::from(install_loc);
                         if game_dir.exists() {
+                            let declarations = parsed_launch(&game_dir, launch_exe, LaunchField::Path);
                             match_and_insert_game(
                                 catalog,
                                 display_name,
                                 &game_dir,
-                                if !launch_exe.is_empty() { Some(launch_exe) } else { None },
+                                &declarations,
                                 map,
-                                Some("Epic Games"),
+                                Provider::Epic,
                                 None,
                             );
                         }
@@ -420,13 +442,18 @@ fn scan_gog_registry(catalog: &[database::CatalogEntry], map: &mut HashMap<Strin
                         let game_dir = PathBuf::from(&path_str);
                         if game_dir.exists() && game_dir.is_dir() {
                             let launch_exe = read_registry_string(HKEY_LOCAL_MACHINE, &child_path, "exe").ok();
+                            let declarations = launch_exe.map(|raw| {
+                                // GOG's exe value is a path; quoted command forms also occur.
+                                let field = if raw.trim().starts_with('"') { LaunchField::Command } else { LaunchField::Path };
+                                parsed_launch(&game_dir, &raw, field)
+                            }).unwrap_or_default();
                             match_and_insert_game(
                                 catalog,
                                 &game_name,
                                 &game_dir,
-                                launch_exe.as_deref(),
+                                &declarations,
                                 map,
-                                Some("GOG"),
+                                Provider::Gog,
                                 None,
                             );
                         }
@@ -491,6 +518,9 @@ fn scan_registry_uninstall_hive(
             index += 1;
 
             let child_name = String::from_utf16_lossy(&key_name_buf[..key_name_len as usize]);
+            if child_name.to_ascii_lowercase().starts_with("steam app ") {
+                continue;
+            }
             let child_path = format!(r"{}\{}", subkey, child_name);
 
             if let Ok(display_name) = read_registry_string(root, &child_path, "DisplayName") {
@@ -519,78 +549,29 @@ fn scan_registry_uninstall_hive(
                     continue;
                 }
 
-                let mut direct_exe: Option<PathBuf> = None;
-                if let Ok(icon) = read_registry_string(root, &child_path, "DisplayIcon") {
-                    let raw = icon.split(',').next().unwrap_or(&icon).trim().trim_matches('"');
-                    if raw.to_lowercase().ends_with(".exe") {
-                        let icon_p = PathBuf::from(raw);
-                        if icon_p.exists() && icon_p.is_file() {
-                            direct_exe = Some(icon_p);
-                        }
-                    }
-                }
+                let icon = read_registry_string(root, &child_path, "DisplayIcon").ok();
 
                 if let Ok(install_location) = read_registry_string(root, &child_path, "InstallLocation") {
                     let clean_dir = install_location.trim().trim_matches('"');
                     let p = PathBuf::from(clean_dir);
                     // NEVER scan entire Program Files or Drive root!
-                    if p.exists() && p.is_dir() && p.parent().is_some() && p.components().count() >= 3 {
+                    if p.exists() && p.is_dir() && p.parent().is_some()
+                        && p.components().count() >= 3 && windows_fallback_root(&p)
+                    {
                         let path_lower = clean_dir.to_lowercase();
                         if !path_lower.ends_with(r"program files")
                             && !path_lower.ends_with(r"program files (x86)")
                             && !path_lower.ends_with(r"windows")
                         {
-                            let is_cat = catalog.iter().any(|c| {
-                                (!display_name.is_empty() && is_title_match(&c.name, &display_name))
-                                    || direct_exe.as_ref().map(|e| e.file_name().unwrap_or_default().to_string_lossy().eq_ignore_ascii_case(&c.exe_name)).unwrap_or(false)
-                            });
-
-                            let is_game_path = path_lower.contains(r"\games")
-                                || path_lower.contains(r"\hry")
-                                || path_lower.contains(r"\steam")
-                                || path_lower.contains(r"\epic")
-                                || path_lower.contains(r"\ubisoft")
-                                || path_lower.contains(r"\ea ")
-                                || path_lower.contains(r"\electronic arts")
-                                || path_lower.contains(r"\riot")
-                                || path_lower.contains(r"\gog")
-                                || path_lower.contains(r"\battle.net")
-                                || path_lower.contains(r"\battlestate")
-                                || path_lower.contains(r"\wargaming")
-                                || path_lower.contains(r"\vintage story")
-                                || path_lower.contains(r"\tarkov");
-
-                            if is_cat || is_game_path {
-                                let pref_exe = direct_exe.as_ref().and_then(|e| e.file_name().map(|n| n.to_string_lossy().to_string()));
-                                match_and_insert_game(catalog, &display_name, &p, pref_exe.as_deref(), map, Some("Windows"), None);
-                                continue;
+                            if let Some(icon) = &icon {
+                                let declarations = parsed_launch(&p, icon, LaunchField::DisplayIcon);
+                                match_and_insert_game(catalog, &display_name, &p, &declarations, map, Provider::Windows, None);
                             }
                         }
                     }
                 }
 
-                if let Some(exe_path) = direct_exe {
-                    if let Some(parent_dir) = exe_path.parent() {
-                        let exe_name = exe_path.file_name().unwrap_or_default().to_string_lossy().to_string();
-                        let is_cat = catalog.iter().any(|c| c.exe_name.eq_ignore_ascii_case(&exe_name) || is_title_match(&c.name, &display_name));
-                        let pl = exe_path.to_string_lossy().to_lowercase();
-                        let is_game_path = pl.contains("games")
-                            || pl.contains("hry")
-                            || pl.contains("steam")
-                            || pl.contains("epic")
-                            || pl.contains("ubisoft")
-                            || pl.contains("ea")
-                            || pl.contains("riot")
-                            || pl.contains("gog")
-                            || pl.contains("battle.net")
-                            || pl.contains("battlestate")
-                            || pl.contains("wargaming")
-                            || pl.contains("tarkov");
-                        if is_cat || is_game_path {
-                            match_and_insert_game(catalog, &display_name, parent_dir, Some(&exe_name), map, Some("Windows"), None);
-                        }
-                    }
-                }
+                // DisplayIcon alone does not establish an install root.
             }
         }
 
@@ -617,7 +598,10 @@ fn scan_xbox_games(catalog: &[database::CatalogEntry], map: &mut HashMap<String,
             let p = entry.path();
             if p.is_dir() {
                 let name = entry.file_name().to_string_lossy().to_string();
-                match_and_insert_game(catalog, &name, &p, None, map, Some("Xbox"), None);
+                match crate::xbox_config::declarations(&p) {
+                    Ok(declarations) => match_and_insert_game(catalog, &name, &p, &declarations, map, Provider::Xbox, None),
+                    Err(error) => eprintln!("Skipping Xbox installation {}: {error}", p.display()),
+                }
             }
         }
     }
@@ -626,8 +610,8 @@ fn scan_xbox_games(catalog: &[database::CatalogEntry], map: &mut HashMap<String,
 // --------------------------------------------------------------------------------------
 // 6. Media Players
 // --------------------------------------------------------------------------------------
-fn scan_media_players(map: &mut HashMap<String, HdrApp>) {
-    for (prog_name, exe_str, paths) in [
+fn scan_media_players(catalog: &[database::CatalogEntry], map: &mut HashMap<String, HdrApp>) {
+    for (prog_name, _exe_str, paths) in [
         ("VLC Media Player", "vlc.exe", vec![r"C:\Program Files\VideoLAN\VLC\vlc.exe", r"C:\Program Files (x86)\VideoLAN\VLC\vlc.exe"]),
         ("MPC-HC", "mpc-hc64.exe", vec![r"C:\Program Files\MPC-HC\mpc-hc64.exe", r"C:\Program Files (x86)\MPC-HC\mpc-hc.exe"]),
         ("MPC-BE", "mpc-be64.exe", vec![r"C:\Program Files\MPC-BE\mpc-be64.exe", r"C:\Program Files (x86)\MPC-BE\mpc-be.exe"]),
@@ -636,21 +620,12 @@ fn scan_media_players(map: &mut HashMap<String, HdrApp>) {
         ("Kodi", "kodi.exe", vec![r"C:\Program Files\Kodi\kodi.exe"]),
     ] {
         for p in paths {
-            if Path::new(p).exists() {
-                map.insert(
-                    prog_name.to_string(),
-                    HdrApp {
-                        name: prog_name.to_string(),
-                        exe_name: exe_str.to_string(),
-                        enabled: true,
-                        hdr_type: HdrType::Media,
-                        path: Some(p.to_string()),
-                        alternate_exes: Vec::new(),
-                        steam_id: None,
-                        launcher: Some("Média".to_string()),
-                    },
-                );
-                break;
+            let path = Path::new(p);
+            if path.is_file() {
+                if let Some(root) = path.parent() {
+                    let declarations = parsed_launch(root, p, LaunchField::Path);
+                    match_and_insert_game(catalog, prog_name, root, &declarations, map, Provider::Windows, None);
+                }
             }
         }
     }
@@ -663,312 +638,82 @@ fn match_and_insert_game(
     catalog: &[database::CatalogEntry],
     hint_name: &str,
     game_dir: &Path,
-    preferred_exe: Option<&str>,
+    declarations: &[String],
     map: &mut HashMap<String, HdrApp>,
-    launcher: Option<&str>,
-    steam_id: Option<&str>,
+    provider: Provider,
+    product_id: Option<&str>,
 ) {
-    // 1. Collect all executable candidates in directory hierarchy (depth up to 5)
-    let mut exes = Vec::new();
-    collect_exes(game_dir, 0, 5, &mut exes);
-
-    // Filter out helper/diagnostic/installer exes
-    let game_exes: Vec<(String, String)> = exes
-        .into_iter()
-        .filter(|(name, _)| {
-            let lower = name.to_lowercase();
-            !lower.contains("crash")
-                && !lower.contains("setup")
-                && !lower.contains("installer")
-                && !lower.contains("unins")
-                && !lower.contains("unitycrashhandler")
-                && !lower.contains("crashreportclient")
-                && !lower.contains("protocol")
-                && !lower.contains("helper")
-                && !lower.contains("eula")
-                && !lower.contains("reporter")
-                && !lower.contains("prereq")
-                && !lower.contains("redist")
-                && !lower.contains("benchmark")
-                && !lower.contains("dxsetup")
-                && !lower.contains("vcredist")
-                && !lower.contains("touchup")
-                && !lower.contains("config")
-        })
-        .collect();
-
-    if game_exes.is_empty() {
+    if declarations.is_empty() && provider != Provider::Steam {
         return;
     }
-
-    // 2. Check for catalog match
-    let mut matched_cat = None;
-    let mut primary_exe_pair = None;
-
-    // Strategy 0: Direct Steam AppID match against catalog
-    if let Some(s_id) = steam_id {
-        if let Some(cat) = catalog.iter().find(|c| c.steam_id.as_deref() == Some(s_id)) {
-            matched_cat = Some(cat);
+    let evidence = match InstallEvidence::observe(provider, product_id, game_dir, declarations) {
+        Ok(evidence) => evidence,
+        Err(error) => {
+            eprintln!("Skipping {} installation {}: {error}", provider.launcher(), game_dir.display());
+            return;
         }
-    }
-
-    // Strategy A: Exe match against catalog
-    if matched_cat.is_none() {
-        for (exe_name, exe_path) in &game_exes {
-            if let Some(cat) = catalog.iter().find(|c| {
-                c.exe_name.eq_ignore_ascii_case(exe_name)
-                    || c.alternate_exes.iter().any(|alt| alt.eq_ignore_ascii_case(exe_name))
-            }) {
-                matched_cat = Some(cat);
-                primary_exe_pair = Some((exe_name.clone(), exe_path.clone()));
-                break;
-            }
-        }
-    }
-
-    // Strategy B: Match by game title
-    if matched_cat.is_none() && !hint_name.trim().is_empty() {
-        if let Some(cat) = catalog.iter().find(|c| is_title_match(&c.name, hint_name)) {
-            matched_cat = Some(cat);
-        }
-    }
-
-    // If matched via Strategy 0 or B, try to find preferred exe from catalog entry
-    if primary_exe_pair.is_none() {
-        if let Some(cat) = matched_cat {
-            for (exe_name, exe_path) in &game_exes {
-                if cat.exe_name.eq_ignore_ascii_case(exe_name)
-                    || cat.alternate_exes.iter().any(|alt| alt.eq_ignore_ascii_case(exe_name))
-                {
-                    primary_exe_pair = Some((exe_name.clone(), exe_path.clone()));
-                    break;
-                }
-            }
-        }
-    }
-
-
-    // 3. Determine the primary executable
-    let (main_exe_name, main_exe_path) = if let Some(pair) = primary_exe_pair {
-        pair
-    } else if let Some(pref) = preferred_exe {
-        // If preferred exe exists in game_exes, pick it
-        if let Some(found) = game_exes.iter().find(|(name, _)| name.eq_ignore_ascii_case(pref)) {
-            found.clone()
-        } else {
-            pick_best_primary_exe(&game_exes, hint_name, game_dir)
-        }
-    } else {
-        pick_best_primary_exe(&game_exes, hint_name, game_dir)
     };
-
-    let mut alternate_exes = Vec::new();
-    for (e_name, _) in &game_exes {
-        let e_lower = e_name.to_lowercase();
-        if e_lower != main_exe_name.to_lowercase() && !alternate_exes.contains(&e_lower) {
-            alternate_exes.push(e_lower);
-        }
-    }
-
-    // 4. Construct HdrApp based on catalog match
-    let (final_name, is_hdr_supported, final_hdr_type) = if let Some(cat) = matched_cat {
-        (cat.name.clone(), true, cat.hdr_type.clone())
-    } else {
-        // Installed SDR game (not in catalog, but detected as installed on PC)
-        let clean_name = if !hint_name.trim().is_empty() {
-            hint_name.trim().to_string()
-        } else {
-            clean_title_from_folder(&game_dir.file_name().unwrap_or_default().to_string_lossy())
-        };
-        (clean_name, false, HdrType::Custom)
-    };
-
-    let key = final_name.clone();
-
-    if let Some(existing) = map.get_mut(&key) {
-        if existing.steam_id.is_none() && steam_id.is_some() {
-            existing.steam_id = steam_id.map(|s| s.to_string());
-        }
-        if existing.launcher.is_none() && launcher.is_some() {
-            existing.launcher = launcher.map(|s| s.to_string());
-        }
-        for alt in alternate_exes {
-            if !existing.alternate_exes.contains(&alt) && existing.exe_name.to_lowercase() != alt {
-                existing.alternate_exes.push(alt);
-            }
-        }
-        if existing.path.is_none() {
-            existing.path = Some(main_exe_path);
-        }
-    } else {
-        map.insert(
-            key,
+    let app = match automatic_authority::resolve(catalog, Some(&evidence)) {
+        Authority::Resolved(resolved) => resolved.as_app(true),
+        Authority::Unresolved if matches!(provider, Provider::Epic | Provider::Gog | Provider::Windows) => {
+            let Some(selected) = evidence.manual_suggestion() else {
+                eprintln!("No unique declared executable for {}", game_dir.display());
+                return;
+            };
             HdrApp {
-                name: final_name,
-                exe_name: main_exe_name.to_lowercase(),
-                enabled: is_hdr_supported, // HDR games are enabled by default (top), SDR games are disabled by default (bottom)
-                hdr_type: final_hdr_type,
-                path: Some(main_exe_path),
-                alternate_exes,
-                steam_id: steam_id.map(|s| s.to_string()),
-                launcher: launcher.map(|s| s.to_string()),
-            },
-        );
-    }
-}
-
-fn pick_best_primary_exe(
-    candidates: &[(String, String)],
-    hint_name: &str,
-    game_dir: &Path,
-) -> (String, String) {
-    let clean_hint = clean_string(hint_name);
-    let folder_name = game_dir
-        .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_default();
-    let clean_folder = clean_string(&folder_name);
-
-    // 1. Unreal Engine Shipping binary (e.g. *-Win64-Shipping.exe)
-    for (name, path) in candidates {
-        let lower = name.to_lowercase();
-        if lower.ends_with("-win64-shipping.exe") || lower.ends_with("_win64_shipping.exe") {
-            return (name.clone(), path.clone());
-        }
-    }
-
-    // 2. Exe name strictly contains game title or folder title
-    for (name, path) in candidates {
-        let clean_exe = clean_string(name.trim_end_matches(".exe"));
-        if (!clean_hint.is_empty() && (clean_exe == clean_hint || clean_hint.contains(&clean_exe) || clean_exe.contains(&clean_hint)))
-            || (!clean_folder.is_empty() && (clean_exe == clean_folder || clean_folder.contains(&clean_exe) || clean_exe.contains(&clean_folder)))
-        {
-            return (name.clone(), path.clone());
-        }
-    }
-
-    // 3. Executable directly in root folder
-    for (name, path) in candidates {
-        let p = Path::new(path);
-        if p.parent() == Some(game_dir) {
-            return (name.clone(), path.clone());
-        }
-    }
-
-    // 4. Largest executable by file size
-    let mut largest = &candidates[0];
-    let mut max_size = 0u64;
-
-    for candidate in candidates {
-        if let Ok(meta) = fs::metadata(&candidate.1) {
-            if meta.len() > max_size {
-                max_size = meta.len();
-                largest = candidate;
+                name: hint_name.trim().to_owned(),
+                exe_name: selected.basename,
+                enabled: false,
+                hdr_type: HdrType::Custom,
+                path: Some(selected.path.to_string_lossy().into_owned()),
+                alternate_exes: Vec::new(),
+                steam_id: None,
+                launcher: Some(provider.launcher().into()),
             }
         }
-    }
-
-    largest.clone()
-}
-
-fn collect_exes(dir: &Path, depth: usize, max_depth: usize, out: &mut Vec<(String, String)>) {
-    if depth > max_depth || out.len() >= 12 {
-        return;
-    }
-
-    let entries = match fs::read_dir(dir) {
-        Ok(e) => e,
-        Err(_) => return,
+        result => {
+            eprintln!("Unresolved automatic {} authority for {}: {result:?}", provider.launcher(), game_dir.display());
+            return;
+        }
     };
+    // Detection is not saved-row association: same titles on different storefronts stay separate.
+    let key = format!("{:?}|{}|{}|{}", provider, product_id.unwrap_or_default(), app.exe_name, app.path.as_deref().unwrap_or_default().to_lowercase());
+    map.entry(key).and_modify(|existing| {
+        if app.name < existing.name {
+            *existing = app.clone();
+        }
+    }).or_insert(app);
+}
 
-    let mut subdirs = Vec::new();
-
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_dir() {
-            let dir_name = path
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_default()
-                .to_lowercase();
-
-            let should_skip = dir_name.starts_with('.')
-                || dir_name == "content"
-                || dir_name == "assets"
-                || dir_name == "data"
-                || dir_name == "paks"
-                || dir_name == "pak"
-                || dir_name == "vehicles"
-                || dir_name == "levels"
-                || dir_name == "maps"
-                || dir_name == "textures"
-                || dir_name == "shaders"
-                || dir_name == "movies"
-                || dir_name == "audio"
-                || dir_name == "sound"
-                || dir_name == "sounds"
-                || dir_name == "music"
-                || dir_name == "plugins"
-                || dir_name == "dlc"
-                || dir_name == "localization"
-                || dir_name == "languages"
-                || dir_name == "ui"
-                || dir_name == "scripts"
-                || dir_name == "mods"
-                || dir_name == "user_data"
-                || dir_name == "temp"
-                || dir_name == "cache"
-                || dir_name == "docs"
-                || dir_name == "documentation"
-                || dir_name == "_commonredist"
-                || dir_name == "engine"
-                || dir_name == "easyanticheat"
-                || dir_name == "battleye"
-                || dir_name == "crashreportclient"
-                || dir_name == "directx"
-                || dir_name == "dotnet"
-                || dir_name == "installers"
-                || dir_name == "support"
-                || dir_name == "prerequisites"
-                || dir_name == "$recycle.bin"
-                || dir_name == "saved"
-                || dir_name == "save";
-
-            if !should_skip {
-                let is_binary_folder = dir_name == "bin"
-                    || dir_name == "binaries"
-                    || dir_name == "bin64"
-                    || dir_name == "bin32"
-                    || dir_name == "win64"
-                    || dir_name == "win32"
-                    || dir_name == "x64"
-                    || dir_name == "x86";
-
-                if depth == 0 || is_binary_folder {
-                    subdirs.push((path, is_binary_folder));
-                }
-            }
-        } else if let Some(ext) = path.extension() {
-            if ext.eq_ignore_ascii_case("exe") {
-                if let Some(file_name) = path.file_name() {
-                    out.push((
-                        file_name.to_string_lossy().to_string(),
-                        path.to_string_lossy().to_string(),
-                    ));
-                }
-            }
+fn parsed_launch(root: &Path, raw: &str, field: LaunchField) -> Vec<String> {
+    if raw.is_empty() {
+        return Vec::new();
+    }
+    match automatic_authority::launch_declaration(root, raw, field) {
+        Ok(declaration) => vec![declaration],
+        Err(error) => {
+            eprintln!("Ignoring invalid provider launch field for {}: {error}", root.display());
+            Vec::new()
         }
     }
+}
 
-    // Prioritize binary directories first!
-    subdirs.sort_by_key(|(_, is_bin)| if *is_bin { 0 } else { 1 });
+fn valid_steam_install_dir(value: &str) -> bool {
+    !value.contains(['\\', '/'])
+        && automatic_authority::normalize_relative_exe(&format!("{value}.exe")).is_ok()
+        && !value.is_empty()
+        && value != "."
+        && value != ".."
+        && !value.ends_with(['.', ' '])
+}
 
-    for (sub, _) in subdirs {
-        collect_exes(&sub, depth + 1, max_depth, out);
-        if out.len() >= 10 {
-            break;
-        }
-    }
+fn windows_fallback_root(root: &Path) -> bool {
+    // Registry fallback cannot reinterpret a known Steam/Xbox install as generic Windows
+    // authority when that storefront's manifest, binding, or config did not resolve.
+    !root.components().any(|component| {
+        let name = component.as_os_str().to_string_lossy();
+        name.eq_ignore_ascii_case("steamapps") || name.eq_ignore_ascii_case("xboxgames")
+    })
 }
 
 // --------------------------------------------------------------------------------------
@@ -1179,6 +924,87 @@ fn read_registry_string(root: HKEY, subkey: &str, value_name: &str) -> Result<St
 mod tests {
     use super::*;
 
+    fn create_files(root: &Path, files: &[&str]) {
+        for name in files {
+            let path = root.join(name);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, b"fixture, never executed").unwrap();
+        }
+    }
+
+    #[test]
+    fn scanner_never_guesses_aoe4_helper_rows_or_aliases_and_repeats_without_churn() {
+        let catalog = database::get_full_catalog();
+        let root = tempfile::tempdir().unwrap();
+        create_files(root.path(), &["BsSndRpt.exe", "BsSndRpt64.exe", "BugSplat.exe", "editor.exe", "tool.exe"]);
+        let mut map = HashMap::new();
+        match_and_insert_game(&catalog, "Age of Empires IV", root.path(), &[], &mut map, Provider::Steam, Some("1466860"));
+        assert!(map.is_empty());
+        let binding = database::find_storefront_binding(&catalog, database::StorefrontProvider::Steam, Some("1466860")).unwrap().unwrap().1;
+        create_files(root.path(), &[&binding.game_executables[0]]);
+        match_and_insert_game(&catalog, "Age of Empires IV", root.path(), &[], &mut map, Provider::Steam, Some("1466860"));
+        assert_eq!(map.len(), 1);
+        let app = map.values().next().unwrap();
+        assert_eq!(app.exe_name, binding.game_executables[0]);
+        assert!(app.alternate_exes.is_empty());
+        let before = map.clone();
+        match_and_insert_game(&catalog, "Changed display title", root.path(), &[], &mut map, Provider::Steam, Some("1466860"));
+        assert_eq!(map, before);
+    }
+
+    #[test]
+    fn every_provider_ignores_recursive_candidates_and_nonhdr_launch_is_only_a_suggestion() {
+        let root = tempfile::tempdir().unwrap();
+        create_files(root.path(), &["unlisted.exe", "re7.exe", "tool.exe"]);
+        let catalog = database::get_full_catalog();
+        for provider in [Provider::Steam, Provider::Xbox, Provider::Epic, Provider::Gog, Provider::Windows] {
+            let mut map = HashMap::new();
+            match_and_insert_game(&catalog, "Resident Evil 7: Biohazard", root.path(), &[], &mut map, provider, None);
+            assert!(map.is_empty(), "{provider:?}");
+            if matches!(provider, Provider::Epic | Provider::Gog | Provider::Windows) {
+                match_and_insert_game(&catalog, "Resident Evil 7: Biohazard", root.path(), &["unlisted.exe".into()], &mut map, provider, None);
+                let app = map.values().next().unwrap();
+                assert!(!app.enabled);
+                assert_eq!(app.hdr_type, HdrType::Custom);
+                assert_eq!(app.exe_name, "unlisted.exe");
+                assert!(app.alternate_exes.is_empty());
+            }
+        }
+    }
+
+    #[test]
+    fn same_title_storefront_detections_do_not_merge_or_inherit_executables() {
+        let root = tempfile::tempdir().unwrap();
+        create_files(root.path(), &["steam.exe", "xbox.exe", "global.exe"]);
+        let catalog = vec![serde_json::from_value(serde_json::json!({
+            "name": "Shared title", "exe_name": "steam.exe", "steam_id": "123",
+            "hdr_type": "native", "support_tier": "native", "alternate_exes": ["global.exe"],
+            "storefronts": [{"provider": "xbox", "game_executables": ["xbox.exe"]}]
+        })).unwrap()];
+        let mut map = HashMap::new();
+        match_and_insert_game(&catalog, "Shared title", root.path(), &[], &mut map, Provider::Steam, Some("123"));
+        match_and_insert_game(&catalog, "Shared title", root.path(), &["xbox.exe".into()], &mut map, Provider::Xbox, None);
+        assert_eq!(map.len(), 2);
+        assert!(map.values().all(|app| app.alternate_exes.is_empty()));
+        assert!(map.values().any(|app| app.exe_name == "xbox.exe" && app.steam_id.is_none()));
+    }
+
+    #[test]
+    fn steam_install_folder_is_a_single_safe_component() {
+        for invalid in ["", ".", "..", r"..\outside", r"C:\outside", r"\\server\share", "game.", "game ", "NUL"] {
+            assert!(!valid_steam_install_dir(invalid), "{invalid}");
+        }
+        assert!(valid_steam_install_dir("Age of Empires IV"));
+    }
+
+    #[test]
+    fn windows_registry_fallback_cannot_bypass_steam_or_xbox_authority() {
+        for path in [r"C:\Steam\steamapps\common\Game", r"D:\XboxGames\Game\Content"] {
+            assert!(!windows_fallback_root(Path::new(path)));
+        }
+        assert!(windows_fallback_root(Path::new(r"D:\Games\Standalone")));
+    }
+
     #[test]
     fn test_assetto_corsa_does_not_match_competizione() {
         assert!(!is_title_match("Assetto Corsa Competizione", "Assetto Corsa"));
@@ -1246,5 +1072,3 @@ mod tests {
         assert!(by_re7.is_some(), "Should find Resident Evil 7 by re7.exe");
     }
 }
-
-

@@ -1070,22 +1070,16 @@ impl Actor {
         {
             return;
         }
-        let Some(entry) = crate::database::find_in_catalog(&process.exe) else {
+        // A foreground basename is not verified provider/install evidence.
+        let crate::automatic_authority::Authority::Resolved(resolved) =
+            crate::automatic_authority::resolve(&crate::database::get_full_catalog(), None)
+        else {
             return;
         };
         if !process.is_foreground() {
             return;
         }
-        let app = HdrApp {
-            name: entry.name,
-            exe_name: process.exe.clone(),
-            enabled: true,
-            hdr_type: entry.hdr_type,
-            path: None,
-            alternate_exes: Vec::new(),
-            steam_id: entry.steam_id,
-            launcher: None,
-        };
+        let app = resolved.as_app(origin.settings.auto_detect_new_games);
         let admitted = self.events.admitted.clone();
         let hook_available = self.events.hook_available.clone();
         let result = self.config.mutate(
@@ -1802,6 +1796,27 @@ mod tests {
             reply.send(Err(outcomes[0].message.clone().unwrap())).unwrap();
             assert!(tauri::async_runtime::block_on(pending.resolve()).is_err());
         }
+    }
+
+    #[test]
+    fn verified_metadata_noop_does_not_write_publish_or_wake() {
+        let fixture = GateFixture::new();
+        let before = fixture.ready();
+        let bytes = std::fs::read(&before.config_path).unwrap();
+        let (service, receiver) = idle_service(fixture.manager.clone());
+        let unchanged = fixture.manager.mutate_if_changed(
+            &before.context_token, Some(&before.library_generation), true, |settings| {
+                assert!(!crate::library::enrich_verified_metadata(settings, &before.settings.apps));
+                Ok(())
+            },
+        );
+        assert!(matches!(&unchanged, Ok(None)));
+        crate::background::publish_enrichment_result(
+            &fixture.manager, &service, unchanged, |_| panic!("no-op emitted"),
+        );
+        assert!(receiver.try_recv().is_err());
+        assert_eq!(fixture.manager.snapshot().unwrap(), before);
+        assert_eq!(std::fs::read(&before.config_path).unwrap(), bytes);
     }
 
     #[test]

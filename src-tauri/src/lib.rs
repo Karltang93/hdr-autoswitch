@@ -1,3 +1,4 @@
+mod automatic_authority;
 mod background;
 mod commands;
 mod config;
@@ -11,6 +12,7 @@ mod monitor_hook;
 mod process;
 mod scanner;
 mod tray;
+mod xbox_config;
 
 use background::BackgroundWork;
 use config::{ConfigManager, ConfigMode, ConfigSnapshot};
