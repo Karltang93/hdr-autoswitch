@@ -27,9 +27,9 @@ export const GlitchNavItem: React.FC<GlitchNavItemProps> = ({
   const theme = useTheme();
   const isDark = propIsDark ?? theme.isDark ?? true;
   const uniqueId = useId().replace(/[:]/g, '');
-  const filterId = `displace-${uniqueId}`;
-  const patternId = `scanline-${uniqueId}`;
-  const fadeId = `fade-${uniqueId}`;
+  const filterId = `displace-${uniqueId}-${isDark ? 'dark' : 'light'}`;
+  const patternId = `scanline-${uniqueId}-${isDark ? 'dark' : 'light'}`;
+  const fadeId = `fade-${uniqueId}-${isDark ? 'dark' : 'light'}`;
 
   const containerRef = useRef<SVGSVGElement | null>(null);
   const redTextRef = useRef<SVGTextElement | null>(null);
@@ -118,7 +118,7 @@ export const GlitchNavItem: React.FC<GlitchNavItemProps> = ({
 
     // Scanline animation
     timelines.scanline
-      .to(scanlineRef.current, { fill: isDark ? '#521d20' : '#f5c6cb', duration: 0.2 }, 0)
+      .to(scanlineRef.current, { fill: '#521d20', duration: 0.2 }, 0)
       .to(scanlineRef.current, { opacity: 0.3, duration: 0.1, repeat: -1, yoyo: true }, 0);
 
     timelines.scanlinePattern.to(scanlinePatternRef.current, {
@@ -130,6 +130,11 @@ export const GlitchNavItem: React.FC<GlitchNavItemProps> = ({
 
     timelinesRef.current = timelines;
 
+    if (isActive) {
+      timelines.active.progress(1);
+      timelines.displacementActive.play();
+    }
+
     return () => {
       timelines.text.kill();
       timelines.active.kill();
@@ -137,8 +142,15 @@ export const GlitchNavItem: React.FC<GlitchNavItemProps> = ({
       timelines.scanlinePattern.kill();
       timelines.displacement.kill();
       timelines.displacementActive.kill();
+      if (scanlineRef.current) gsap.set(scanlineRef.current, { clearProps: 'all' });
+      if (scanlinePatternRef.current) gsap.set(scanlinePatternRef.current, { clearProps: 'all' });
+      if (displaceRef.current) gsap.set(displaceRef.current, { clearProps: 'all' });
+      if (redTextRef.current) gsap.set(redTextRef.current, { clearProps: 'all' });
+      if (blueTextRef.current) gsap.set(blueTextRef.current, { clearProps: 'all' });
+      if (fillBlueRef.current) gsap.set(fillBlueRef.current, { clearProps: 'all' });
+      if (fillRedRef.current) gsap.set(fillRedRef.current, { clearProps: 'all' });
     };
-  }, [width, height]);
+  }, [width, height, isDark]);
 
   // Update active state animation
   useEffect(() => {
@@ -188,6 +200,7 @@ export const GlitchNavItem: React.FC<GlitchNavItemProps> = ({
       style={{ width, height }}
     >
       <svg
+        key={`${uniqueId}-${isDark ? 'dark' : 'light'}`}
         ref={containerRef}
         width="100%"
         height="100%"
@@ -259,8 +272,8 @@ export const GlitchNavItem: React.FC<GlitchNavItemProps> = ({
             width="5"
             height="10"
           >
-            <rect ref={scanlineRef} className="scanline" x="0" y="0" width="5" height="1" fill={isDark ? '#221314' : '#faebeb'} />
-            <rect x="0" y="1" width="5" height="9" fill={isDark ? '#0f0b0b' : '#ffffff'} />
+            <rect ref={scanlineRef} className="scanline" x="0" y="0" width="5" height="1" fill="#221314" />
+            <rect x="0" y="1" width="5" height="9" fill="#0f0b0b" />
           </pattern>
 
           <radialGradient
@@ -271,15 +284,27 @@ export const GlitchNavItem: React.FC<GlitchNavItemProps> = ({
             r="40"
             gradientTransform={`translate(${width / 2} ${height / 2}) scale(${width / 40} 1) translate(-${width / 2} -${height / 2})`}
           >
-            <stop offset="0%" stopColor={isDark ? '#0f0b0b' : '#ffffff'} stopOpacity="0" />
-            <stop offset="60%" stopColor={isDark ? '#0f0b0b' : '#ffffff'} stopOpacity="0" />
-            <stop offset="100%" stopColor={isDark ? '#0f0b0b' : '#ffffff'} stopOpacity={isDark ? 0.8 : 0.3} />
+            <stop offset="0%" stopColor="#0f0b0b" stopOpacity="0" />
+            <stop offset="60%" stopColor="#0f0b0b" stopOpacity="0" />
+            <stop offset="100%" stopColor="#0f0b0b" stopOpacity="0.8" />
           </radialGradient>
         </defs>
 
-        {/* Scanline background */}
-        <rect x="0" y="0" width="100%" height={height} fill={`url(#${patternId})`} />
-        <rect x="0" y="0" width="100%" height={height} fill={`url(#${fadeId})`} />
+        {/* Background */}
+        {isDark ? (
+          <>
+            <rect x="0" y="0" width="100%" height={height} fill={`url(#${patternId})`} />
+            <rect x="0" y="0" width="100%" height={height} fill={`url(#${fadeId})`} />
+          </>
+        ) : (
+          <rect
+            x="0"
+            y="0"
+            width="100%"
+            height={height}
+            fill={isActive ? '#ffffff' : 'rgba(255, 255, 255, 0.7)'}
+          />
+        )}
 
         {/* Displaced text elements (red + blue for chromatic aberration) */}
         <g filter={`url(#${filterId})`}>
