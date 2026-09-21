@@ -677,7 +677,7 @@ fn match_and_insert_game(
             if !map.verified.iter().any(|known| {
                 known.provider == resolved.provider
                     && known.product_id == resolved.product_id
-                    && known.catalog.exe_name.eq_ignore_ascii_case(&resolved.catalog.exe_name)
+                    && known.catalog.authoritative_primary() == resolved.catalog.authoritative_primary()
                     && known.executables == resolved.executables
             }) {
                 map.verified.push(resolved);
@@ -1010,11 +1010,11 @@ mod tests {
     fn same_title_storefront_detections_do_not_merge_or_inherit_executables() {
         let root = tempfile::tempdir().unwrap();
         create_files(root.path(), &["steam.exe", "xbox.exe", "global.exe"]);
-        let catalog = vec![serde_json::from_value(serde_json::json!({
+        let catalog = database::authored_test_catalog(vec![serde_json::from_value(serde_json::json!({
             "name": "Shared title", "exe_name": "steam.exe", "steam_id": "123",
             "hdr_type": "native", "support_tier": "native", "alternate_exes": ["global.exe"],
             "storefronts": [{"provider": "xbox", "game_executables": ["xbox.exe"]}]
-        })).unwrap()];
+        })).unwrap()]);
         let mut map = ScanCollection::default();
         match_and_insert_game(&catalog, "Shared title", root.path(), &[], &mut map, Provider::Steam, Some("123"));
         match_and_insert_game(&catalog, "Shared title", root.path(), &["xbox.exe".into()], &mut map, Provider::Xbox, None);
@@ -1022,6 +1022,64 @@ mod tests {
         assert_eq!(map.verified.len(), 2);
         assert!(map.detected.values().all(|app| app.alternate_exes.is_empty()));
         assert!(map.detected.values().any(|app| app.exe_name == "xbox.exe" && app.steam_id.is_none()));
+    }
+
+    #[test]
+    fn correction_cache_scanner_never_authorizes_deserialized_suggestion_rows() {
+        let root = tempfile::tempdir_in(std::env::current_dir().unwrap()).unwrap();
+        create_files(root.path(), &["fetched.exe", "fetched-alternate.exe"]);
+        let catalog = vec![serde_json::from_value(serde_json::json!({
+            "name": "Fetched title", "exe_name": "fetched.exe", "steam_id": "123",
+            "hdr_type": "native", "support_tier": "native",
+            "alternate_exes": ["fetched-alternate.exe"]
+        })).unwrap()];
+        for provider in [Provider::Epic, Provider::Gog, Provider::Windows] {
+            for exe in ["fetched.exe", "fetched-alternate.exe"] {
+                let mut scan = ScanCollection::default();
+                match_and_insert_game(
+                    &catalog, "Fetched title", root.path(), &[exe.into()], &mut scan, provider, None,
+                );
+                assert!(scan.verified.is_empty(), "{provider:?}: {exe} became verified without source authority");
+                assert!(scan.detected.values().all(|app| !app.enabled && app.hdr_type == HdrType::Custom));
+            }
+        }
+    }
+
+    #[test]
+    fn correction_declared_scanner_emits_neither_verified_rows_nor_recursive_manual_suggestions() {
+        let root = tempfile::tempdir_in(std::env::current_dir().unwrap()).unwrap();
+        create_files(root.path(), &[r"Tools\game.exe"]);
+        let catalog = database::authored_test_catalog(vec![serde_json::from_value(serde_json::json!({
+            "name": "Game", "exe_name": "game.exe", "hdr_type": "native", "support_tier": "native"
+        })).unwrap()]);
+        for provider in [Provider::Epic, Provider::Gog, Provider::Windows] {
+            for entries in [&catalog[..], &[][..]] {
+                let mut scan = ScanCollection::default();
+                match_and_insert_game(
+                    entries, "Game", root.path(), &["game.exe".into()], &mut scan, provider, None,
+                );
+                assert!(scan.detected.is_empty(), "{provider:?}: nonexistent root declaration emitted a row");
+                assert!(scan.verified.is_empty());
+            }
+        }
+    }
+
+    #[test]
+    fn correction_declared_xbox_config_root_filename_cannot_select_tools_aoe3() {
+        let root = tempfile::tempdir_in(std::env::current_dir().unwrap()).unwrap();
+        create_files(root.path(), &[r"Tools\AoE3DE.exe"]);
+        fs::write(root.path().join("MicrosoftGame.config"),
+            r#"<Game><ExecutableList><Executable Name="AoE3DE.exe"/></ExecutableList></Game>"#,
+        ).unwrap();
+        let catalog: Vec<database::CatalogEntry> = serde_json::from_str(include_str!("../catalog.json")).unwrap();
+        let catalog = database::authored_test_catalog(catalog);
+        let declarations = crate::xbox_config::declarations(root.path()).unwrap();
+        let mut scan = ScanCollection::default();
+        match_and_insert_game(
+            &catalog, "Age of Empires III", root.path(), &declarations, &mut scan, Provider::Xbox, None,
+        );
+        assert!(scan.detected.is_empty(), "An Xbox root declaration selected Tools\\AoE3DE.exe");
+        assert!(scan.verified.is_empty());
     }
 
     #[test]
@@ -1080,7 +1138,7 @@ mod tests {
         let mut injected = canonical.clone();
         injected.exe_name = "age3y.exe".into();
         let mut alternate_catalog = ScanCollection::default();
-        match_and_insert_game(&[injected], "Irrelevant title", &install, &declarations, &mut alternate_catalog, Provider::Xbox, None);
+        match_and_insert_game(&database::authored_test_catalog(vec![injected]), "Irrelevant title", &install, &declarations, &mut alternate_catalog, Provider::Xbox, None);
         startup.apps[0].exe_name = "age3y.exe".into();
         startup.apps[0].alternate_exes.clear();
         assert!(library::enrich_verified_aliases(&mut startup, &alternate_catalog.verified));

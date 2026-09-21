@@ -139,6 +139,12 @@ without waiting for a foreground-window change.
 ### Storefront executables and legacy helper repair
 
 Executable support is provider-specific, not a universal storefront mapping.
+Only embedded executable authority can authorize automatic matching or canonical
+row enrichment; downloaded/cache-only names and aliases remain suggestions, for
+every provider. Provider declarations resolve exactly relative to the installation
+root, even a single filename: a similarly named executable under `Tools` cannot
+substitute for a missing root file. Steam catalog basename nominations alone allow
+unique recursive lookup; competing files stay unresolved.
 Xbox discovery covers accessible local `XboxGames` installations with a bounded,
 valid `MicrosoftGame.config`; it does not enumerate packages or bypass protected
 WindowsApps folders. The verified AOE3 Xbox binding selects `AoE3DE.exe`, never
@@ -168,6 +174,12 @@ actual game executable** on the blocked row. This explicit repair replaces only
 its primary/path, removes suspect historical aliases, and preserves other choices.
 The warning retires after repair. Manual selection of these helpers is rejected;
 generic editor/server names are not permanent runtime bans.
+
+Scan selections distinguish provider and executable path, not just the filename.
+Select one installation when several detected records share a primary executable:
+conflicting batches are rejected without saving, rather than letting the last path
+overwrite earlier selections. Importing one explicitly selected installation still
+supports the existing moved-path update workflow.
 
 Manual native **On**/**Off** explicitly targets one display or **All**. These
 actions remain available during first-run, recovery, unsupported settings, and

@@ -79,8 +79,37 @@ fn apply_explicit_executables(existing: &mut HdrApp, item: &HdrApp) {
 }
 
 pub fn import_games(config: &mut AppConfig, detected: Vec<HdrApp>) -> Result<(), String> {
+    let mut primaries = std::collections::HashMap::<String, (&HdrApp, Option<&str>)>::new();
+    for item in &detected {
+        validate_app(item)?;
+        let primary = item.exe_name.to_lowercase();
+        if let Some((previous, known_id)) = primaries.get_mut(&primary) {
+            let same_provider = match (&previous.launcher, &item.launcher) {
+                (Some(left), Some(right)) => left.eq_ignore_ascii_case(right),
+                (None, None) => true,
+                _ => false,
+            };
+            let same_installation = match (&previous.path, &item.path) {
+                (Some(left), Some(right)) => same_path(left, right),
+                (None, None) => true,
+                _ => false,
+            };
+            let conflicting_id = matches!((*known_id, item.steam_id.as_deref()),
+                (Some(left), Some(right)) if left != right);
+            if !same_provider || !same_installation || conflicting_id {
+                return Err(format!(
+                    "Multiple detected installations use '{}'. Select only one installation for this executable before importing.",
+                    item.exe_name,
+                ));
+            }
+            if known_id.is_none() {
+                *known_id = item.steam_id.as_deref();
+            }
+        } else {
+            primaries.insert(primary, (item, item.steam_id.as_deref()));
+        }
+    }
     for mut item in detected {
-        validate_app(&item)?;
         item.enabled = true;
         if let Some(existing) = config.apps.iter_mut().find(|app| same_game(app, &item)) {
             apply_explicit_executables(existing, &item);
@@ -120,19 +149,20 @@ pub fn enrich_existing(config: &mut AppConfig, detected: &[HdrApp]) -> bool {
 
 fn verified_association(existing: &HdrApp, resolved: &ResolvedGame) -> bool {
     let Some(primary) = resolved.executables.first() else { return false };
+    let Some(canonical) = resolved.catalog.authoritative_primary() else { return false };
     if is_quarantined(existing)
         || resolved.executables.iter().any(|file| permanently_excluded(&file.basename))
         || !(existing.exe_name.eq_ignore_ascii_case(&primary.basename)
-            || existing.exe_name.eq_ignore_ascii_case(&resolved.catalog.exe_name))
+            || existing.exe_name.eq_ignore_ascii_case(canonical))
     {
         return false;
     }
     let known_id = if resolved.provider == Provider::Steam {
-        resolved.product_id.as_ref()
+        resolved.product_id.as_deref()
     } else {
-        resolved.catalog.steam_id.as_ref()
+        resolved.catalog.authoritative_steam_id()
     };
-    if matches!((&existing.steam_id, known_id), (Some(left), Some(right)) if left != right)
+    if matches!((existing.steam_id.as_deref(), known_id), (Some(left), Some(right)) if left != right)
         || (existing.steam_id.is_some() && resolved.provider != Provider::Steam)
         || existing.launcher.as_ref().is_some_and(|launcher| {
             !launcher.eq_ignore_ascii_case(resolved.provider.launcher())
@@ -295,6 +325,108 @@ pub fn repair_executable(
     existing.path = Some(selected_path.to_owned());
     existing.alternate_exes.clear();
     Ok(())
+}
+
+#[cfg(test)]
+mod import_selection_tests {
+    use super::*;
+    use crate::config::{ConfigManager, HdrType};
+
+    fn detection(launcher: &str, path: &str) -> HdrApp {
+        HdrApp {
+            name: "Shared game".into(), exe_name: "game.exe".into(), enabled: false,
+            hdr_type: HdrType::Native, path: Some(path.into()),
+            alternate_exes: vec![], steam_id: None, launcher: Some(launcher.into()),
+        }
+    }
+
+    #[test]
+    fn correction_import_conflicting_same_primary_batch_is_rejected_before_mutating() {
+        let steam = detection("Steam", r"C:\Steam\game.exe");
+        let gog = detection("GOG", r"D:\GOG\game.exe");
+        for rows in [vec![steam.clone(), gog.clone()], vec![gog.clone(), steam.clone()]] {
+            for existing in [vec![], vec![steam.clone()]] {
+                let mut config = AppConfig::default();
+                config.apps = existing;
+                let before = config.clone();
+                let error = import_games(&mut config, rows.clone()).expect_err("must not choose the last path");
+                assert!(error.contains("game.exe"));
+                assert_eq!(config, before);
+            }
+        }
+    }
+
+    #[test]
+    fn correction_import_conflict_preserves_config_bytes_revision_and_generation() {
+        let root = tempfile::tempdir().unwrap();
+        let manager = ConfigManager::load(root.path().join("local"), root.path().join("legacy.json")).unwrap();
+        let first = manager.snapshot().unwrap();
+        let before = manager.initialize(&first.context_token).unwrap();
+        let bytes = std::fs::read(&before.config_path).unwrap();
+        let result = manager.mutate(&before.context_token, Some(&before.library_generation), true, |settings| {
+            import_games(settings, vec![
+                detection("Steam", r"C:\Steam\game.exe"), detection("GOG", r"D:\GOG\game.exe"),
+            ])
+        });
+        assert!(result.is_err());
+        assert_eq!(manager.snapshot().unwrap(), before);
+        assert_eq!(std::fs::read(&before.config_path).unwrap(), bytes);
+    }
+
+    #[test]
+    fn correction_import_one_selected_installation_keeps_explicit_existing_row_semantics() {
+        let original = detection("Steam", r"C:\Steam\game.exe");
+        let chosen = detection("GOG", r"D:\GOG\game.exe");
+        let mut config = AppConfig::default();
+        config.apps = vec![original];
+        import_games(&mut config, vec![chosen.clone()]).unwrap();
+        assert_eq!(config.apps.len(), 1);
+        assert_eq!(config.apps[0].path, chosen.path);
+        assert_eq!(config.apps[0].launcher, chosen.launcher);
+        assert!(config.apps[0].enabled);
+    }
+
+    #[test]
+    fn correction_import_provider_path_or_known_id_conflicts_fail_closed() {
+        let first = detection("Steam", r"C:\Game\game.exe");
+        let mut conflicting_id = first.clone();
+        conflicting_id.steam_id = Some("200".into());
+        let mut with_id = first.clone();
+        with_id.steam_id = Some("100".into());
+        for (left, right) in [
+            (first.clone(), detection("GOG", r"C:\Game\game.exe")),
+            (first.clone(), detection("Steam", r"D:\Game\game.exe")),
+            (with_id, conflicting_id),
+        ] {
+            let mut config = AppConfig::default();
+            assert!(import_games(&mut config, vec![left, right]).is_err());
+            assert!(config.apps.is_empty());
+        }
+        let mut equivalent = first.clone();
+        equivalent.path = Some(r"\\?\c:\GAME\game.exe".into());
+        equivalent.exe_name = "GAME.EXE".into();
+        equivalent.launcher = Some("STEAM".into());
+        let mut config = AppConfig::default();
+        import_games(&mut config, vec![first, equivalent]).unwrap();
+        assert_eq!(config.apps.len(), 1);
+    }
+
+    #[test]
+    fn correction_import_missing_id_cannot_bridge_two_conflicting_ids() {
+        let unknown = detection("Steam", r"C:\Game\game.exe");
+        let mut first = unknown.clone();
+        first.steam_id = Some("100".into());
+        let mut second = unknown.clone();
+        second.steam_id = Some("200".into());
+        for rows in [
+            vec![unknown.clone(), first.clone(), second.clone()],
+            vec![first, unknown, second],
+        ] {
+            let mut config = AppConfig::default();
+            assert!(import_games(&mut config, rows).is_err());
+            assert!(config.apps.is_empty());
+        }
+    }
 }
 
 #[cfg(test)]
@@ -520,7 +652,7 @@ mod tests {
         let observed = InstallEvidence::observe(
             provider, (provider == Provider::Steam).then_some("123"), root.path(), &declarations,
         ).unwrap();
-        match automatic_authority::resolve(&[catalog], Some(&observed)) {
+        match automatic_authority::resolve(&crate::database::authored_test_catalog(vec![catalog]), Some(&observed)) {
             Authority::Resolved(game) => game,
             other => panic!("Expected resolved fixture, got {other:?}"),
         }

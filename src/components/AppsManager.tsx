@@ -3,6 +3,7 @@ import { HdrApp, HdrType, AppConfig, PickedGameInfo, ScanResult } from '../types
 import type { MutationOrigin } from '../configState';
 import { configClient } from '../useConfig';
 import { findLibraryApp } from '../libraryState';
+import { detectionKey, importSelectedDetections, selectDetections, selectedDetections, toggleDetection } from '../scanSelection';
 import { launcherName } from '../catalogNotes';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -137,20 +138,19 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
       });
       setScannedGames(detected);
 
-      const initialSelected: Record<string, boolean> = {};
-      for (const item of detected) {
+      const initialSelected = selectDetections(detected, (item) => {
         const existing = findExistingApp(item);
         if (existing) {
           const pathChanged = isPathDifferent(existing, item);
           // If game is already tracked:
           // - If path moved or was newly discovered: PRE-SELECT to update path!
           // - If already up to date: uncheck by default
-          initialSelected[item.exe_name] = pathChanged;
+          return pathChanged;
         } else {
           // New game: pre-select HDR games, leave SDR unselected by default
-          initialSelected[item.exe_name] = item.enabled;
+          return item.enabled;
         }
-      }
+      });
       setSelectedToImport(initialSelected);
       setShowScanModal(true);
     } catch (err) {
@@ -163,21 +163,11 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
   };
 
   const selectAllHdr = () => {
-    const next: Record<string, boolean> = {};
-    for (const item of scannedGames) {
-      if (item.enabled) {
-        next[item.exe_name] = true;
-      }
-    }
-    setSelectedToImport(next);
+    setSelectedToImport(selectDetections(scannedGames, (item) => item.enabled));
   };
 
   const selectAll = () => {
-    const next: Record<string, boolean> = {};
-    for (const item of scannedGames) {
-      next[item.exe_name] = true;
-    }
-    setSelectedToImport(next);
+    setSelectedToImport(selectDetections(scannedGames, () => true));
   };
 
   const deselectAll = () => {
@@ -229,12 +219,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
   }, []);
 
   const handleConfirmImport = async () => {
-    const toImport = scannedGames
-      .filter((g) => selectedToImport[g.exe_name])
-      .map((g) => ({
-        ...g,
-        enabled: true, // Imported games that the user selected are enabled
-      }));
+    const toImport = selectedDetections(scannedGames, selectedToImport);
 
     if (toImport.length === 0) {
       setShowScanModal(false);
@@ -243,9 +228,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
 
     try {
       if (!scanOrigin) throw new Error(t.scanModalError);
-      await configClient.mutate('import_detected_games', {
-        detected: toImport,
-      }, scanOrigin);
+      await importSelectedDetections(configClient, scannedGames, selectedToImport, scanOrigin);
       setShowScanModal(false);
       setScanMessage(t.scanModalSuccess(toImport.length));
       setTimeout(() => setScanMessage(null), 4500);
@@ -669,7 +652,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
       {showScanModal && (() => {
         const hdrGames = scannedGames.filter((g) => g.enabled);
         const sdrGames = scannedGames.filter((g) => !g.enabled);
-        const selectedCount = Object.values(selectedToImport).filter(Boolean).length;
+        const selectedCount = selectedDetections(scannedGames, selectedToImport).length;
 
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
@@ -732,19 +715,16 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
 
                     <div className="space-y-1.5">
                       {hdrGames.map((game) => {
-                        const isSelected = !!selectedToImport[game.exe_name];
+                        const isSelected = !!selectedToImport[detectionKey(game)];
                         const existing = findExistingApp(game);
                         const pathChanged = existing ? isPathDifferent(existing, game) : false;
                         const isAlreadyInLib = !!existing && !pathChanged;
 
                         return (
                           <div
-                            key={game.exe_name}
+                            key={detectionKey(game)}
                             onClick={() =>
-                              setSelectedToImport((prev) => ({
-                                ...prev,
-                                [game.exe_name]: !prev[game.exe_name],
-                              }))
+                              setSelectedToImport((prev) => toggleDetection(prev, game))
                             }
                             className={`p-2.5 border cursor-pointer flex items-center justify-between text-xs transition-all ${
                               isSelected
@@ -783,6 +763,9 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                                 )}
                               </div>
                               <div className="text-[10px] text-[#5accf5] font-mono truncate">[{game.exe_name}]</div>
+                              {game.path && !pathChanged && (
+                                <div className="text-[9px] font-mono truncate" title={game.path}>{game.path}</div>
+                              )}
                               {pathChanged && game.path && (
                                 <div className="text-[9px] text-amber-300/80 font-mono truncate" title={game.path}>
                                   ➔ {t.scanModalNewLocation}: {game.path}
@@ -819,19 +802,16 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
 
                     <div className="space-y-1.5">
                       {sdrGames.map((game) => {
-                        const isSelected = !!selectedToImport[game.exe_name];
+                        const isSelected = !!selectedToImport[detectionKey(game)];
                         const existing = findExistingApp(game);
                         const pathChanged = existing ? isPathDifferent(existing, game) : false;
                         const isAlreadyInLib = !!existing && !pathChanged;
 
                         return (
                           <div
-                            key={game.exe_name}
+                            key={detectionKey(game)}
                             onClick={() =>
-                              setSelectedToImport((prev) => ({
-                                ...prev,
-                                [game.exe_name]: !prev[game.exe_name],
-                              }))
+                              setSelectedToImport((prev) => toggleDetection(prev, game))
                             }
                             className={`p-2.5 border cursor-pointer flex items-center justify-between text-xs transition-all ${
                               isSelected
@@ -865,6 +845,9 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                                 )}
                               </div>
                               <div className="text-[10px] text-[#8a7f81] font-mono truncate">[{game.exe_name}]</div>
+                              {game.path && !pathChanged && (
+                                <div className="text-[9px] font-mono truncate" title={game.path}>{game.path}</div>
+                              )}
                               {pathChanged && game.path && (
                                 <div className="text-[9px] text-amber-300/80 font-mono truncate" title={game.path}>
                                   ➔ {t.scanModalNewLocation}: {game.path}

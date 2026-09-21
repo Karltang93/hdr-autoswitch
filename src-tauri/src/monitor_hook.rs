@@ -1849,6 +1849,52 @@ mod tests {
     }
 
     #[test]
+    fn correction_cache_untrusted_catalog_cannot_write_publish_or_wake_enrichment() {
+        use crate::automatic_authority::{self, Authority as GameAuthority, InstallEvidence, Provider};
+        let root = tempfile::tempdir().unwrap();
+        for exe in ["untrusted.exe", "extra.exe"] {
+            std::fs::write(root.path().join(exe), b"fixture, never executed").unwrap();
+        }
+        let catalog: Vec<crate::database::CatalogEntry> = serde_json::from_value(serde_json::json!([{
+            "name": "Downloaded title", "exe_name": "untrusted.exe", "steam_id": "123",
+            "hdr_type": "native", "support_tier": "native", "alternate_exes": ["extra.exe"],
+        }])).unwrap();
+        for provider in [Provider::Epic, Provider::Gog, Provider::Windows] {
+            let fixture = GateFixture::new();
+            let ready = fixture.ready();
+            let before = fixture.manager.mutate(&ready.context_token, None, true, |settings| {
+                settings.apps[0].exe_name = "untrusted.exe".into();
+                settings.apps[0].enabled = false;
+                Ok(())
+            }).unwrap();
+            let bytes = std::fs::read(&before.config_path).unwrap();
+            let evidence = InstallEvidence::observe(
+                provider, None, root.path(), &["untrusted.exe".into(), "extra.exe".into()],
+            ).unwrap();
+            let verified = match automatic_authority::resolve(&catalog, Some(&evidence)) {
+                GameAuthority::Resolved(resolved) => vec![resolved],
+                _ => Vec::new(),
+            };
+            let (service, receiver) = idle_service(fixture.manager.clone());
+            let unchanged = fixture.manager.mutate_if_changed(
+                &before.context_token, Some(&before.library_generation), true, |settings| {
+                    crate::library::enrich_verified_aliases(settings, &verified);
+                    crate::library::enrich_verified_metadata(settings, &verified);
+                    Ok(())
+                },
+            );
+            assert!(matches!(&unchanged, Ok(None)), "{provider:?}: untrusted catalog changed settings");
+            assert!(verified.is_empty(), "{provider:?}: an automatic row acquired authority");
+            crate::background::publish_enrichment_result(
+                &fixture.manager, &service, unchanged, |_| panic!("untrusted catalog emitted"),
+            );
+            assert!(receiver.try_recv().is_err());
+            assert_eq!(fixture.manager.snapshot().unwrap(), before);
+            assert_eq!(std::fs::read(&before.config_path).unwrap(), bytes);
+        }
+    }
+
+    #[test]
     fn verified_aoe3_alias_enrichment_publishes_once_then_is_byte_and_actor_noop() {
         use crate::automatic_authority::{self, Authority as GameAuthority, InstallEvidence, Provider};
         let fixture = GateFixture::new();
@@ -1864,6 +1910,7 @@ mod tests {
         let evidence = InstallEvidence::observe(Provider::Xbox, None, &install, &declarations).unwrap();
         let catalog: Vec<crate::database::CatalogEntry> =
             serde_json::from_str(include_str!("../catalog.json")).unwrap();
+        let catalog = crate::database::authored_test_catalog(catalog);
         let GameAuthority::Resolved(resolved) = automatic_authority::resolve(&catalog, Some(&evidence))
         else { panic!("AOE3 Xbox fixture must resolve"); };
         assert_eq!(resolved.as_app(true).exe_name, "aoe3de.exe");
@@ -1925,6 +1972,7 @@ mod tests {
             "name": "Catalog game", "exe_name": "game.exe", "steam_id": "123",
             "hdr_type": "native", "support_tier": "native", "alternate_exes": ["renderer.exe"],
         })).unwrap()];
+        let catalog = crate::database::authored_test_catalog(catalog);
         let evidence = InstallEvidence::observe(Provider::Steam, Some("123"), root.path(), &[]).unwrap();
         let GameAuthority::Resolved(resolved) = automatic_authority::resolve(&catalog, Some(&evidence))
         else { panic!("fixture must resolve"); };

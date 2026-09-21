@@ -33,6 +33,13 @@ pub enum StorefrontLookupError {
     ExcludedGameExecutable,
 }
 
+#[derive(Debug, Clone)]
+struct ExecutableAuthority {
+    canonical_exe: String,
+    steam_id: Option<String>,
+    nominations: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CatalogEntry {
     pub name: String,
@@ -46,10 +53,11 @@ pub struct CatalogEntry {
     pub alternate_exes: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub storefronts: Vec<StorefrontBinding>,
-    // None adapts authored rows; source boundaries set a snapshot (Some([]) for online-only rows).
-    // Never restored from disk, where suggestions could otherwise gain implicit Steam authority.
+    // Source authority is never restored from serialized display/suggestion fields.
     #[serde(skip)]
     storefront_authority: Option<Vec<StorefrontBinding>>,
+    #[serde(skip)]
+    executable_authority: Option<ExecutableAuthority>,
 }
 
 impl CatalogEntry {
@@ -63,19 +71,34 @@ impl CatalogEntry {
     }
 
     fn authoritative_bindings(&self) -> Vec<StorefrontBinding> {
-        if let Some(bindings) = &self.storefront_authority {
-            return bindings.clone();
-        }
-        let mut bindings = self.storefronts.clone();
-        if !bindings.iter().any(|binding| binding.provider == StorefrontProvider::Steam) {
-            bindings.extend(self.legacy_steam_binding());
-        }
-        bindings
+        self.storefront_authority.clone().unwrap_or_default()
     }
 
-    /// Explicit Steam data suppresses the legacy adapter, even for another product or an empty
-    /// executable list. Global alternate_exes are not provider authority. Consume get_full_catalog
-    /// for source-checked entries, not directly deserialized online records.
+    fn capture_executable_authority(&mut self) {
+        self.executable_authority = Some(ExecutableAuthority {
+            canonical_exe: self.exe_name.clone(),
+            steam_id: self.steam_id.clone(),
+            nominations: std::iter::once(self.exe_name.clone())
+                .chain(self.alternate_exes.iter().cloned()).collect(),
+        });
+    }
+
+    pub(crate) fn authoritative_primary(&self) -> Option<&str> {
+        self.executable_authority.as_ref().map(|source| source.canonical_exe.as_str())
+    }
+
+    pub(crate) fn authoritative_steam_id(&self) -> Option<&str> {
+        self.executable_authority.as_ref().and_then(|source| source.steam_id.as_deref())
+    }
+
+    pub(crate) fn authorizes_declared_executable(&self, basename: &str) -> bool {
+        self.executable_authority.as_ref().is_some_and(|source| {
+            source.nominations.iter().any(|exe| exe.eq_ignore_ascii_case(basename))
+        })
+    }
+
+    /// The source snapshot applies the legacy Steam adapter only at the embedded boundary.
+    /// Deserialization and mutable display fields cannot supply automatic authority.
     pub fn storefront_binding(
         &self,
         provider: StorefrontProvider,
@@ -84,6 +107,19 @@ impl CatalogEntry {
         find_storefront_binding(std::slice::from_ref(self), provider, product_id)
             .map(|found| found.map(|(_, binding)| binding))
     }
+}
+
+#[cfg(test)]
+pub(crate) fn authored_test_catalog(mut entries: Vec<CatalogEntry>) -> Vec<CatalogEntry> {
+    for entry in &mut entries {
+        let mut bindings = entry.storefronts.clone();
+        if !bindings.iter().any(|binding| binding.provider == StorefrontProvider::Steam) {
+            bindings.extend(entry.legacy_steam_binding());
+        }
+        entry.storefront_authority = Some(bindings);
+        entry.capture_executable_authority();
+    }
+    entries
 }
 
 fn normalized_executables(names: &[String]) -> Result<Vec<String>, StorefrontLookupError> {
@@ -224,6 +260,7 @@ fn merge_catalog(embedded: Vec<CatalogEntry>, cached: Vec<CatalogEntry>) -> Vec<
             bindings.extend(legacy_bindings.remove(key).unwrap_or_default());
         }
         entry.storefront_authority = Some(bindings);
+        entry.capture_executable_authority();
     }
 
     for mut entry in cached {
@@ -241,6 +278,7 @@ fn restrict_storefront_authority(entry: &mut CatalogEntry, embedded: Option<&Cat
     entry.storefront_authority = Some(
         embedded.map(CatalogEntry::authoritative_bindings).unwrap_or_default(),
     );
+    entry.executable_authority = embedded.and_then(|source| source.executable_authority.clone());
 }
 
 // Also used before populating the in-memory cache: sync must not bypass the disk-load boundary.
@@ -421,6 +459,7 @@ pub async fn fetch_online_database() -> Result<Vec<CatalogEntry>, String> {
                         alternate_exes: Vec::new(),
                         storefronts: Vec::new(),
                         storefront_authority: None,
+                        executable_authority: None,
                     }
                 });
         }
@@ -574,6 +613,7 @@ fn parse_pcgw_autohdr_wikitext(wikitext: &str, map: &mut HashMap<String, Catalog
             alternate_exes: Vec::new(),
             storefronts: Vec::new(),
             storefront_authority: None,
+            executable_authority: None,
         });
     }
     recognized
@@ -584,11 +624,11 @@ mod tests {
     use super::*;
 
     fn legacy_entry() -> CatalogEntry {
-        serde_json::from_str(r#"{
+        authored_test_catalog(vec![serde_json::from_str(r#"{
             "name": "Example game", "exe_name": "Legacy.EXE", "hdr_type": "native",
             "support_tier": "native", "notes": null, "steam_id": "123",
             "alternate_exes": ["global.exe"]
-        }"#).unwrap()
+        }"#).unwrap()]).remove(0)
     }
 
     fn binding(
@@ -640,6 +680,7 @@ mod tests {
         let steam = binding(StorefrontProvider::Steam, Some("456"), &["steam.exe"], &[]);
         let xbox = binding(StorefrontProvider::Xbox, None, &["xbox.exe"], &["helper.exe"]);
         entry.storefronts = vec![steam.clone(), xbox.clone()];
+        entry = authored_test_catalog(vec![entry]).remove(0);
         assert_eq!(entry.storefront_binding(StorefrontProvider::Steam, None), Ok(Some(steam)));
         assert_eq!(entry.storefront_binding(StorefrontProvider::Steam, Some("123")), Ok(None));
         assert_eq!(entry.storefront_binding(StorefrontProvider::Xbox, None), Ok(Some(xbox)));
@@ -647,9 +688,11 @@ mod tests {
         assert_eq!(entry.exe_name, "Legacy.EXE");
 
         entry.storefronts[0].game_executables.clear();
+        entry = authored_test_catalog(vec![entry]).remove(0);
         assert!(entry.storefront_binding(StorefrontProvider::Steam, None).unwrap().unwrap()
             .game_executables.is_empty());
         entry.storefronts.remove(0);
+        entry = authored_test_catalog(vec![entry]).remove(0);
         assert_eq!(entry.storefront_binding(StorefrontProvider::Steam, None).unwrap().unwrap()
             .game_executables, ["legacy.exe"]);
     }
@@ -667,10 +710,12 @@ mod tests {
         entry.storefronts = vec![binding(
             StorefrontProvider::Xbox, Some(" local-id "), &[" Z.EXE ", "a.exe"], &["Helper.EXE"],
         )];
+        entry = authored_test_catalog(vec![entry]).remove(0);
         let before = serde_json::to_value(&entry).unwrap();
         let expected = binding(StorefrontProvider::Xbox, Some("local-id"), &["a.exe", "z.exe"], &["helper.exe"]);
         assert_eq!(entry.storefront_binding(StorefrontProvider::Xbox, Some("local-id")), Ok(Some(expected.clone())));
         entry.storefronts[0].game_executables.reverse();
+        entry = authored_test_catalog(vec![entry]).remove(0);
         assert_eq!(entry.storefront_binding(StorefrontProvider::Xbox, Some(" local-id ")), Ok(Some(expected)));
         entry.storefronts[0].game_executables.reverse();
         assert_eq!(serde_json::to_value(&entry).unwrap(), before);
@@ -687,6 +732,7 @@ mod tests {
             (vec!["GAME.exe"], vec!["game.EXE"], StorefrontLookupError::ExcludedGameExecutable),
         ] {
             entry.storefronts = vec![binding(StorefrontProvider::Xbox, None, &games, &excluded)];
+            entry = authored_test_catalog(vec![entry]).remove(0);
             assert_eq!(entry.storefront_binding(StorefrontProvider::Xbox, None), Err(error));
             entry.storefronts[0].game_executables.reverse();
             entry.storefronts[0].excluded_executables.reverse();
@@ -694,9 +740,11 @@ mod tests {
         }
         for invalid in ["", ".exe", "game.dll", r"C:\game.exe", "dir/game.exe", "game:stream.exe"] {
             entry.storefronts = vec![binding(StorefrontProvider::Xbox, None, &[invalid], &[])];
+            entry = authored_test_catalog(vec![entry]).remove(0);
             assert_eq!(entry.storefront_binding(StorefrontProvider::Xbox, None), Err(StorefrontLookupError::InvalidExecutable));
         }
         entry.storefronts = vec![binding(StorefrontProvider::Steam, Some(" "), &["game.exe"], &[])];
+        entry = authored_test_catalog(vec![entry]).remove(0);
         assert_eq!(entry.storefront_binding(StorefrontProvider::Steam, None), Err(StorefrontLookupError::InvalidProductId));
         assert_eq!(entry.storefront_binding(StorefrontProvider::Steam, Some(" ")), Err(StorefrontLookupError::InvalidProductId));
     }
@@ -709,6 +757,7 @@ mod tests {
                 binding(StorefrontProvider::Steam, Some("123"), &["one.exe"], &[]),
                 binding(StorefrontProvider::Steam, Some(" 123 "), &[second_game], &[]),
             ];
+            entry = authored_test_catalog(vec![entry]).remove(0);
             for _ in 0..2 {
                 assert_eq!(entry.storefront_binding(StorefrontProvider::Steam, Some("123")), Err(StorefrontLookupError::AmbiguousBindings));
                 assert_eq!(entry.storefront_binding(StorefrontProvider::Steam, None), Err(StorefrontLookupError::AmbiguousBindings));
@@ -719,6 +768,7 @@ mod tests {
             binding(StorefrontProvider::Xbox, None, &["one.exe"], &[]),
             binding(StorefrontProvider::Xbox, None, &["two.exe"], &[]),
         ];
+        entry = authored_test_catalog(vec![entry]).remove(0);
         assert_eq!(entry.storefront_binding(StorefrontProvider::Xbox, None), Err(StorefrontLookupError::AmbiguousBindings));
     }
 
@@ -729,6 +779,7 @@ mod tests {
             binding(StorefrontProvider::Steam, Some("123"), &["game.exe"], &[]),
             binding(StorefrontProvider::Steam, Some("456"), &["game.exe"], &[]),
         ];
+        entry = authored_test_catalog(vec![entry]).remove(0);
         assert_eq!(entry.storefront_binding(StorefrontProvider::Steam, None), Err(StorefrontLookupError::AmbiguousBindings));
         assert_eq!(entry.storefront_binding(StorefrontProvider::Steam, Some("456")).unwrap().unwrap()
             .product_id.as_deref(), Some("456"));
@@ -790,6 +841,7 @@ mod tests {
     fn cached_records_cannot_override_or_add_explicit_or_implicit_authority() {
         let mut embedded = legacy_entry();
         embedded.storefronts = vec![binding(StorefrontProvider::Xbox, None, &["embedded.exe"], &["helper.exe"])];
+        embedded = authored_test_catalog(vec![embedded]).remove(0);
         let mut cached = embedded.clone();
         cached.storefronts = vec![
             binding(StorefrontProvider::Xbox, None, &["cached.exe"], &[]),
@@ -814,6 +866,7 @@ mod tests {
             assert_eq!(suggestion.storefront_binding(StorefrontProvider::Steam, None), Ok(None));
             assert_eq!(suggestion.storefront_binding(StorefrontProvider::Xbox, None), Ok(None));
             assert!(serde_json::to_value(suggestion).unwrap().get("storefront_authority").is_none());
+            assert!(serde_json::to_value(suggestion).unwrap().get("executable_authority").is_none());
         }
     }
 
@@ -849,6 +902,205 @@ mod tests {
             assert_eq!(merged.iter().find(|entry| entry.name == "Example game").unwrap()
                 .storefront_binding(StorefrontProvider::Steam, None), Ok(None));
         }
+    }
+
+    fn correction_cache_declared_suggestions(
+        provider: crate::automatic_authority::Provider,
+        alternate: bool,
+    ) {
+        use crate::automatic_authority::{self, Authority, InstallEvidence};
+        let root = tempfile::tempdir_in(std::env::current_dir().unwrap()).unwrap();
+        let nominated = if alternate { "cached-alternate.exe" } else { "cached-primary.exe" };
+        fs::write(root.path().join(nominated), b"fixture, never executed").unwrap();
+        let mut suggestion = legacy_entry();
+        suggestion.name = "Cache-only title with an existing Steam ID".into();
+        suggestion.exe_name = "cached-primary.exe".into();
+        suggestion.alternate_exes = vec!["cached-alternate.exe".into()];
+        let serialized = serde_json::to_string(&vec![suggestion.clone()]).unwrap();
+        let reloaded = serde_json::from_str(&serialized).unwrap();
+        let boundaries = [
+            ("disk reload", merge_catalog(vec![legacy_entry()], reloaded)),
+            ("in-memory cache", with_embedded_authority(vec![suggestion.clone()])),
+            ("online sync", synced_catalog(true, HashMap::from([
+                (clean_key(&suggestion.name), suggestion),
+            ])).unwrap()),
+        ];
+        let observed = InstallEvidence::observe(
+            provider, None, root.path(), &[nominated.into()],
+        ).unwrap();
+        for (boundary, catalog) in boundaries {
+            assert!(
+                matches!(automatic_authority::resolve(&catalog, Some(&observed)), Authority::Unresolved),
+                "{provider:?}: {boundary} promoted untrusted {nominated}"
+            );
+        }
+    }
+
+    #[test]
+    fn correction_cache_epic_primary_is_not_automatic_authority() {
+        correction_cache_declared_suggestions(crate::automatic_authority::Provider::Epic, false);
+    }
+
+    #[test]
+    fn correction_cache_epic_alternate_is_not_automatic_authority() {
+        correction_cache_declared_suggestions(crate::automatic_authority::Provider::Epic, true);
+    }
+
+    #[test]
+    fn correction_cache_gog_primary_is_not_automatic_authority() {
+        correction_cache_declared_suggestions(crate::automatic_authority::Provider::Gog, false);
+    }
+
+    #[test]
+    fn correction_cache_gog_alternate_is_not_automatic_authority() {
+        correction_cache_declared_suggestions(crate::automatic_authority::Provider::Gog, true);
+    }
+
+    #[test]
+    fn correction_cache_windows_primary_is_not_automatic_authority() {
+        correction_cache_declared_suggestions(crate::automatic_authority::Provider::Windows, false);
+    }
+
+    #[test]
+    fn correction_cache_windows_alternate_is_not_automatic_authority() {
+        correction_cache_declared_suggestions(crate::automatic_authority::Provider::Windows, true);
+    }
+
+    #[test]
+    fn correction_cache_absent_source_snapshot_cannot_be_laundered_by_product_or_title() {
+        use crate::automatic_authority::{self, Authority, InstallEvidence, Provider};
+        let root = tempfile::tempdir_in(std::env::current_dir().unwrap()).unwrap();
+        fs::write(root.path().join("legacy.exe"), b"fixture, never executed").unwrap();
+        let catalog: Vec<CatalogEntry> = serde_json::from_value(serde_json::json!([{
+            "name": "Example game", "exe_name": "legacy.exe", "steam_id": "123",
+            "hdr_type": "native", "support_tier": "native",
+            "storefronts": [{"provider": "xbox", "game_executables": ["legacy.exe"]}]
+        }])).unwrap();
+        for provider in [Provider::Steam, Provider::Xbox, Provider::Epic, Provider::Gog, Provider::Windows] {
+            let observed = InstallEvidence::observe(
+                provider, Some("123"), root.path(), &["legacy.exe".into()],
+            ).unwrap();
+            assert!(
+                matches!(automatic_authority::resolve(&catalog, Some(&observed)), Authority::Unresolved),
+                "{provider:?}: deserialization alone supplied source authority"
+            );
+        }
+    }
+
+    #[test]
+    fn correction_cache_fetched_title_and_id_cannot_authorize_replacement_executable() {
+        use crate::automatic_authority::{self, Authority, InstallEvidence, Provider};
+        let root = tempfile::tempdir_in(std::env::current_dir().unwrap()).unwrap();
+        fs::write(root.path().join("fetched.exe"), b"fixture, never executed").unwrap();
+        let mut fetched = embedded_catalog().into_iter()
+            .find(|entry| entry.name == "Age of Empires III: Definitive Edition").unwrap();
+        fetched.exe_name = "fetched.exe".into();
+        fetched.alternate_exes = vec!["fetched.exe".into()];
+        let catalog = with_embedded_authority(vec![fetched]);
+        for provider in [Provider::Epic, Provider::Gog, Provider::Windows] {
+            let observed = InstallEvidence::observe(
+                provider, None, root.path(), &["fetched.exe".into()],
+            ).unwrap();
+            assert!(
+                matches!(automatic_authority::resolve(&catalog, Some(&observed)), Authority::Unresolved),
+                "{provider:?}: matching fetched title acquired executable authority"
+            );
+        }
+    }
+
+    #[test]
+    fn correction_cache_embedded_primary_and_alias_survive_mutable_display_replacement() {
+        use crate::automatic_authority::{self, Authority, InstallEvidence, Provider};
+        let root = tempfile::tempdir_in(std::env::current_dir().unwrap()).unwrap();
+        for exe in ["legacy.exe", "global.exe"] {
+            fs::write(root.path().join(exe), b"fixture, never executed").unwrap();
+        }
+        let source = merge_catalog(vec![legacy_entry()], Vec::new()).remove(0);
+        let mut fetched = source.clone();
+        fetched.exe_name = "fetched.exe".into();
+        fetched.alternate_exes = vec!["fetched-alias.exe".into()];
+        fetched.steam_id = Some("999".into());
+        restrict_storefront_authority(&mut fetched, Some(&source));
+        assert_eq!(fetched.authoritative_primary(), Some("Legacy.EXE"));
+        assert_eq!(fetched.authoritative_steam_id(), Some("123"));
+        for catalog in [vec![source], vec![fetched]] {
+            for provider in [Provider::Epic, Provider::Gog, Provider::Windows] {
+                for exe in ["legacy.exe", "global.exe"] {
+                    let observed = InstallEvidence::observe(
+                        provider, None, root.path(), &[exe.into()],
+                    ).unwrap();
+                    let Authority::Resolved(resolved) = automatic_authority::resolve(&catalog, Some(&observed)) else {
+                        panic!("{provider:?}: lost embedded executable nomination {exe}");
+                    };
+                    assert_eq!(resolved.as_app(true).exe_name, exe);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn correction_cache_fetched_canonical_cannot_associate_saved_row_with_verified_xbox_file() {
+        use crate::automatic_authority::{self, Authority, InstallEvidence, Provider};
+        use crate::config::AppConfig;
+        let root = tempfile::tempdir_in(std::env::current_dir().unwrap()).unwrap();
+        fs::write(root.path().join("aoe3de.exe"), b"fixture, never executed").unwrap();
+        let mut fetched = embedded_catalog().into_iter()
+            .find(|entry| entry.name == "Age of Empires III: Definitive Edition").unwrap();
+        let canonical = fetched.exe_name.clone();
+        fetched.exe_name = "fetched-canonical.exe".into();
+        fetched.alternate_exes = vec!["fetched-alias.exe".into()];
+        fetched.steam_id = Some("999".into());
+        let catalog = with_embedded_authority(vec![fetched]);
+        let observed = InstallEvidence::observe(
+            Provider::Xbox, None, root.path(), &["aoe3de.exe".into()],
+        ).unwrap();
+        let Authority::Resolved(resolved) = automatic_authority::resolve(&catalog, Some(&observed)) else {
+            panic!("The embedded Xbox binding must still resolve its real local executable");
+        };
+        let mut existing = resolved.as_app(false);
+        existing.exe_name = "fetched-canonical.exe".into();
+        existing.name = "My custom title".into();
+        existing.hdr_type = HdrType::Custom;
+        existing.path = None;
+        existing.launcher = None;
+        let mut config = AppConfig::default();
+        config.apps = vec![existing.clone()];
+        assert!(!crate::library::enrich_verified_aliases(&mut config, std::slice::from_ref(&resolved)));
+        assert!(!crate::library::enrich_verified_metadata(&mut config, std::slice::from_ref(&resolved)));
+        assert_eq!(config.apps, [existing.clone()]);
+        let local = root.path().join("settings");
+        let manager = crate::config::ConfigManager::load(local.clone(), root.path().join("legacy.json")).unwrap();
+        let first = manager.snapshot().unwrap();
+        let ready = manager.initialize(&first.context_token).unwrap();
+        let before = manager.mutate(&ready.context_token, None, true, |settings| {
+            settings.auto_detect_new_games = true;
+            settings.apps = vec![existing.clone()];
+            Ok(())
+        }).unwrap();
+        let artifacts = || -> std::collections::BTreeMap<PathBuf, Vec<u8>> {
+            fs::read_dir(&local).unwrap().map(|entry| entry.unwrap().path())
+                .filter(|path| path.file_name().unwrap().to_string_lossy().starts_with("config-v2."))
+                .map(|path| {
+                    let bytes = fs::read(&path).unwrap();
+                    (path, bytes)
+                }).collect()
+        };
+        let before_bytes = artifacts();
+        let result = manager.mutate_if_changed(
+            &before.context_token, Some(&before.library_generation), true, |settings| {
+                assert!(!crate::library::enrich_verified_aliases(settings, std::slice::from_ref(&resolved)));
+                assert!(!crate::library::enrich_verified_metadata(settings, std::slice::from_ref(&resolved)));
+                Ok(())
+            },
+        ).unwrap();
+        assert!(result.is_none());
+        assert_eq!(manager.snapshot().unwrap(), before);
+        assert_eq!(artifacts(), before_bytes);
+        existing.exe_name = canonical;
+        config.apps = vec![existing.clone()];
+        assert!(crate::library::enrich_verified_aliases(&mut config, std::slice::from_ref(&resolved)));
+        existing.alternate_exes = vec!["aoe3de.exe".into()];
+        assert_eq!(config.apps, [existing]);
     }
 
     #[test]

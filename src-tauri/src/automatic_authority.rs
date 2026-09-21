@@ -182,7 +182,7 @@ pub struct InstallEvidence {
 impl InstallEvidence {
     pub fn manual_suggestion(&self) -> Option<SelectedExecutable> {
         match self.declarations.as_slice() {
-            [declaration] => self.nominated(declaration).ok(),
+            [declaration] => self.declared(declaration).ok(),
             _ => None,
         }
     }
@@ -214,16 +214,23 @@ impl InstallEvidence {
     }
 
     fn nominated(&self, nomination: &str) -> Result<SelectedExecutable, Authority> {
+        self.select(nomination, true)
+    }
+
+    fn declared(&self, declaration: &str) -> Result<SelectedExecutable, Authority> {
+        self.select(declaration, false)
+    }
+
+    fn select(&self, nomination: &str, recursive_basename: bool) -> Result<SelectedExecutable, Authority> {
         let nomination = normalize_relative_exe(nomination).map_err(|_| Authority::Unresolved)?;
         if permanently_excluded(nomination.rsplit('\\').next().unwrap_or_default()) {
             return Err(Authority::Unresolved);
         }
-        let explicit_path = nomination.contains('\\');
         let mut matches = self.files.iter().filter(|file| {
-            if explicit_path {
-                file.relative == nomination
-            } else {
+            if recursive_basename && !nomination.contains('\\') {
                 file.basename == nomination
+            } else {
+                file.relative == nomination
             }
         });
         let selected = matches.next().ok_or(Authority::Unresolved)?;
@@ -329,7 +336,12 @@ fn binding_matches(binding: &StorefrontBinding, basename: &str) -> bool {
 fn finish(entry: &CatalogEntry, evidence: &InstallEvidence, nominations: &[String]) -> Authority {
     let mut selected = Vec::new();
     for nomination in nominations {
-        match evidence.nominated(nomination) {
+        let selected_nomination = if evidence.provider == Provider::Steam {
+            evidence.nominated(nomination)
+        } else {
+            evidence.declared(nomination)
+        };
+        match selected_nomination {
             Ok(file) => selected.push(file),
             Err(result) => return result,
         }
@@ -418,6 +430,15 @@ fn resolve_declared(catalog: &[CatalogEntry], evidence: &InstallEvidence, xbox: 
     if evidence.declarations.is_empty() {
         return Authority::Unresolved;
     }
+    let mut declarations = BTreeSet::new();
+    for declaration in &evidence.declarations {
+        let Ok(declaration) = normalize_relative_exe(declaration) else {
+            return Authority::Unresolved;
+        };
+        if !declarations.insert(declaration) {
+            return Authority::Ambiguous;
+        }
+    }
     let mut matches = Vec::new();
     let mut conflict = false;
     for entry in catalog {
@@ -430,8 +451,7 @@ fn resolve_declared(catalog: &[CatalogEntry], evidence: &InstallEvidence, xbox: 
         } else {
             None
         };
-        let nominations: BTreeSet<String> = evidence
-            .declarations
+        let nominations: BTreeSet<String> = declarations
             .iter()
             .filter(|declaration| {
                 let basename = declaration.rsplit('\\').next().unwrap_or_default();
@@ -439,13 +459,7 @@ fn resolve_declared(catalog: &[CatalogEntry], evidence: &InstallEvidence, xbox: 
                     return false;
                 }
                 binding.as_ref().map_or_else(
-                    || {
-                        entry.exe_name.eq_ignore_ascii_case(basename)
-                            || entry
-                                .alternate_exes
-                                .iter()
-                                .any(|exe| exe.eq_ignore_ascii_case(basename))
-                    },
+                    || entry.authorizes_declared_executable(basename),
                     |binding| binding_matches(binding, basename),
                 )
             })
@@ -556,7 +570,7 @@ mod tests {
     use serde_json::json;
 
     fn entry() -> CatalogEntry {
-        serde_json::from_value(json!({
+        database::authored_test_catalog(vec![serde_json::from_value(json!({
             "name": "Shared title", "exe_name": "steam.exe", "steam_id": "123",
             "hdr_type": "Native", "support_tier": "native", "alternate_exes": ["global.exe"],
             "storefronts": [{
@@ -564,7 +578,7 @@ mod tests {
                 "game_executables": ["Xbox.EXE"], "excluded_executables": ["GameLaunchHelper.exe"]
             }]
         }))
-        .unwrap()
+        .unwrap()]).remove(0)
     }
 
     fn fixture(files: &[&str]) -> tempfile::TempDir {
@@ -647,6 +661,7 @@ mod tests {
                 "hdr_type": "native", "support_tier": "native", "alternate_exes": [helper],
                 "storefronts": [{"provider": "xbox", "game_executables": [helper]}]
             })).unwrap();
+            let catalog = database::authored_test_catalog(vec![catalog]).remove(0);
             for provider in [Provider::Steam, Provider::Xbox, Provider::Epic, Provider::Gog, Provider::Windows] {
                 let observed = evidence(root.path(), provider, (provider == Provider::Steam).then_some("123"), &[helper]);
                 assert!(matches!(resolve(&[catalog.clone()], Some(&observed)), Authority::Unresolved), "{provider:?}: {helper}");
@@ -666,6 +681,7 @@ mod tests {
                 {"provider": "xbox", "game_executables": ["game.exe", "BsSndRpt.exe"]}
             ]
         })).unwrap();
+        let catalog = database::authored_test_catalog(vec![catalog]).remove(0);
         for provider in [Provider::Steam, Provider::Xbox, Provider::Epic, Provider::Gog, Provider::Windows] {
             let observed = evidence(root.path(), provider, (provider == Provider::Steam).then_some("123"), &["game.exe", "BsSndRpt.exe"]);
             let app = resolved(resolve(&[catalog.clone()], Some(&observed))).as_app(true);
@@ -685,6 +701,7 @@ mod tests {
             game_executables: vec!["steam.exe".into()],
             excluded_executables: vec!["xbox.exe".into()],
         });
+        catalog = database::authored_test_catalog(vec![catalog]).remove(0);
         for (provider, expected) in [
             (Provider::Steam, "steam.exe"), (Provider::Xbox, "xbox.exe"),
             (Provider::Epic, "steam.exe"), (Provider::Gog, "steam.exe"), (Provider::Windows, "steam.exe"),
@@ -695,6 +712,7 @@ mod tests {
             assert!(app.alternate_exes.is_empty());
         }
         catalog.storefronts[0].excluded_executables.push("xbox.exe".into());
+        catalog = database::authored_test_catalog(vec![catalog]).remove(0);
         let xbox = evidence(root.path(), Provider::Xbox, None, &["xbox.exe"]);
         assert!(matches!(resolve(&[catalog.clone()], Some(&xbox)), Authority::Ambiguous));
         let steam = evidence(root.path(), Provider::Steam, Some("123"), &[]);
@@ -762,6 +780,7 @@ mod tests {
             game_executables: vec!["ZGAME.EXE".into(), "Steam.EXE".into()],
             excluded_executables: vec!["editor.exe".into()],
         });
+        cat = database::authored_test_catalog(vec![cat]).remove(0);
         let first = resolved(resolve(
             &[cat.clone()],
             Some(&evidence(root.path(), Provider::Steam, Some("123"), &[])),
@@ -770,6 +789,7 @@ mod tests {
         assert_eq!(first.exe_name, "steam.exe");
         assert_eq!(first.alternate_exes, ["zgame.exe"]);
         cat.storefronts[1].game_executables.reverse();
+        cat = database::authored_test_catalog(vec![cat]).remove(0);
         let second = resolved(resolve(
             &[cat],
             Some(&evidence(root.path(), Provider::Steam, Some("123"), &[])),
@@ -838,6 +858,7 @@ mod tests {
         }
         let mut cat = entry();
         cat.storefronts[0].game_executables.push("XBOX.EXE".into());
+        cat = database::authored_test_catalog(vec![cat]).remove(0);
         assert!(matches!(
             resolve(
                 &[cat],
@@ -862,6 +883,7 @@ mod tests {
         let mut other = entry();
         other.name = "Entirely different title".into();
         other.storefronts[0].game_executables = vec!["other.exe".into()];
+        other = database::authored_test_catalog(vec![other]).remove(0);
         for catalog in [vec![entry(), other.clone()], vec![other, entry()]] {
             assert!(matches!(
                 resolve(&catalog, Some(&observed)),
@@ -880,10 +902,12 @@ mod tests {
             Provider::Windows,
         ] {
             let observed = evidence(root.path(), provider, Some("123"), &["steam.exe"]);
-            assert!(matches!(
-                resolve(&[entry()], Some(&observed)),
-                Authority::Ambiguous
-            ));
+            let result = resolve(&[entry()], Some(&observed));
+            if provider == Provider::Steam {
+                assert!(matches!(result, Authority::Ambiguous));
+            } else {
+                assert!(matches!(result, Authority::Unresolved));
+            }
             if provider != Provider::Steam {
                 let observed = evidence(root.path(), provider, None, &[r"two\steam.exe"]);
                 assert_eq!(
@@ -898,7 +922,7 @@ mod tests {
                 &[entry()],
                 Some(&evidence(root.path(), Provider::Xbox, None, &["xbox.exe"]))
             ),
-            Authority::Ambiguous
+            Authority::Unresolved
         ));
         assert!(matches!(
             resolve(
@@ -1101,6 +1125,139 @@ mod tests {
     #[test]
     fn foreground_without_install_evidence_has_no_automatic_authority() {
         assert!(matches!(resolve(&[entry()], None), Authority::Unresolved));
+    }
+
+    fn correction_declared_catalog() -> Vec<CatalogEntry> {
+        database::authored_test_catalog(vec![serde_json::from_value(json!({
+            "name": "Declared fixture", "exe_name": "game.exe", "steam_id": "123",
+            "hdr_type": "native", "support_tier": "native",
+            "storefronts": [{"provider": "xbox", "game_executables": ["game.exe"]}]
+        })).unwrap()])
+    }
+
+    fn correction_declared_fixture(files: &[&str]) -> tempfile::TempDir {
+        let root = tempfile::tempdir_in(std::env::current_dir().unwrap()).unwrap();
+        for name in files {
+            let path = root.path().join(name);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, b"fixture, never executed").unwrap();
+        }
+        root
+    }
+
+    fn correction_declared_root_scope(provider: Provider) {
+        let catalog = correction_declared_catalog();
+        let exact = correction_declared_fixture(&["game.exe"]);
+        let observed = evidence(exact.path(), provider, None, &["game.exe"]);
+        assert_eq!(resolved(resolve(&catalog, Some(&observed))).executables[0].relative, "game.exe");
+        let explicit = correction_declared_fixture(&[r"Tools\game.exe", r"Other\game.exe"]);
+        let observed = evidence(explicit.path(), provider, None, &[r"Tools\game.exe"]);
+        assert_eq!(resolved(resolve(&catalog, Some(&observed))).executables[0].relative, r"tools\game.exe");
+        let descendant = correction_declared_fixture(&[r"Tools\game.exe"]);
+        let observed = evidence(descendant.path(), provider, None, &["game.exe"]);
+        assert!(
+            matches!(resolve(&catalog, Some(&observed)), Authority::Unresolved),
+            "{provider:?}: a root declaration selected an undeclared descendant"
+        );
+    }
+
+    #[test]
+    fn correction_declared_xbox_root_filename_is_an_exact_relative_path() {
+        correction_declared_root_scope(Provider::Xbox);
+    }
+
+    #[test]
+    fn correction_declared_epic_root_filename_is_an_exact_relative_path() {
+        correction_declared_root_scope(Provider::Epic);
+    }
+
+    #[test]
+    fn correction_declared_gog_root_filename_is_an_exact_relative_path() {
+        correction_declared_root_scope(Provider::Gog);
+    }
+
+    #[test]
+    fn correction_declared_windows_root_filename_is_an_exact_relative_path() {
+        correction_declared_root_scope(Provider::Windows);
+    }
+
+    #[test]
+    fn correction_declared_manual_suggestion_never_recursively_promotes_a_basename() {
+        let root = correction_declared_fixture(&[r"Tools\game.exe"]);
+        for provider in [Provider::Steam, Provider::Xbox, Provider::Epic, Provider::Gog, Provider::Windows] {
+            let observed = evidence(root.path(), provider, None, &[r"Tools\game.exe"]);
+            assert_eq!(observed.manual_suggestion().unwrap().relative, r"tools\game.exe");
+            let observed = evidence(root.path(), provider, None, &["game.exe"]);
+            assert!(observed.manual_suggestion().is_none(), "{provider:?}: suggestion escaped declaration scope");
+        }
+    }
+
+    #[test]
+    fn correction_declared_steam_catalog_nomination_and_provider_declaration_are_distinct() {
+        let root = correction_declared_fixture(&[r"Tools\game.exe"]);
+        let observed = evidence(root.path(), Provider::Steam, Some("123"), &["game.exe"]);
+        let game = resolved(resolve(&correction_declared_catalog(), Some(&observed)));
+        assert_eq!(game.executables[0].relative, r"tools\game.exe");
+        assert!(observed.manual_suggestion().is_none());
+    }
+
+    #[test]
+    fn correction_declared_duplicate_descendants_do_not_turn_root_path_into_basename_search() {
+        let root = correction_declared_fixture(&[r"One\game.exe", r"Two\game.exe"]);
+        let catalog = correction_declared_catalog();
+        for provider in [Provider::Xbox, Provider::Epic, Provider::Gog, Provider::Windows] {
+            let observed = evidence(root.path(), provider, None, &["game.exe"]);
+            assert!(matches!(resolve(&catalog, Some(&observed)), Authority::Unresolved), "{provider:?}");
+            assert!(observed.manual_suggestion().is_none());
+            let observed = evidence(root.path(), provider, None, &[r"Two\game.exe"]);
+            assert_eq!(resolved(resolve(&catalog, Some(&observed))).executables[0].relative, r"two\game.exe");
+        }
+    }
+
+    #[test]
+    fn correction_declared_existing_root_is_not_ambiguous_with_same_named_descendants() {
+        let root = correction_declared_fixture(&["game.exe", r"One\game.exe", r"Two\game.exe"]);
+        let catalog = correction_declared_catalog();
+        for provider in [Provider::Xbox, Provider::Epic, Provider::Gog, Provider::Windows] {
+            let observed = evidence(root.path(), provider, None, &["game.exe"]);
+            let selected = resolved(resolve(&catalog, Some(&observed)));
+            assert_eq!(selected.executables[0].relative, "game.exe", "{provider:?}");
+            assert_eq!(observed.manual_suggestion().unwrap().relative, "game.exe");
+        }
+    }
+
+    #[test]
+    fn correction_declared_duplicate_normalized_declarations_fail_closed() {
+        let catalog = correction_declared_catalog();
+        for provider in [Provider::Xbox, Provider::Epic, Provider::Gog, Provider::Windows] {
+            for (file, declarations) in [
+                ("game.exe", vec!["game.exe".into(), "GAME.EXE".into()]),
+                (r"Tools\game.exe", vec!["Tools/game.exe".into(), r"tools\GAME.EXE".into()]),
+            ] {
+                let root = correction_declared_fixture(&[file]);
+                if let Ok(observed) = InstallEvidence::observe(provider, None, root.path(), &declarations) {
+                    assert!(
+                        !matches!(resolve(&catalog, Some(&observed)), Authority::Resolved(_)),
+                        "{provider:?}: duplicate declarations gained authority after deduplication"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn correction_declared_missing_root_and_subpath_cannot_collapse_into_one_selection() {
+        let root = correction_declared_fixture(&[r"Tools\game.exe"]);
+        let catalog = correction_declared_catalog();
+        for provider in [Provider::Xbox, Provider::Epic, Provider::Gog, Provider::Windows] {
+            let declarations = vec!["game.exe".into(), r"Tools\game.exe".into()];
+            if let Ok(observed) = InstallEvidence::observe(provider, None, root.path(), &declarations) {
+                assert!(
+                    !matches!(resolve(&catalog, Some(&observed)), Authority::Resolved(_)),
+                    "{provider:?}: conflicting relative paths collapsed onto a descendant"
+                );
+            }
+        }
     }
 
     #[test]
