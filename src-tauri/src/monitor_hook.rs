@@ -8,7 +8,7 @@ use crate::display::{
 };
 use crate::hdr_controller::{same_target, HdrController, ProcessIdentity, WriteAuthority};
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread::{self, JoinHandle};
@@ -33,6 +33,12 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 const SHUTDOWN_ATTEMPT_BUDGET: usize = 32;
 const FOREGROUND_WATCHDOG_INTERVAL: Duration = Duration::from_secs(1);
+const FOREGROUND_RETRY_DELAYS: [Duration; 3] = [
+    Duration::from_secs(1),
+    Duration::from_secs(2),
+    Duration::from_secs(4),
+];
+const FOREGROUND_RECOVERY_INTERVAL: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
 #[serde(tag = "status", rename_all = "snake_case")]
@@ -144,6 +150,7 @@ struct EventSink {
     sender: Sender<Command>,
     admitted: Arc<AtomicBool>,
     foreground_pending: Arc<AtomicBool>,
+    foreground_generation: Arc<AtomicU64>,
     config_pending: Arc<AtomicBool>,
     hook_available: Arc<AtomicBool>,
     shutdown_budget: Arc<AtomicUsize>,
@@ -151,11 +158,22 @@ struct EventSink {
 
 impl EventSink {
     fn foreground(&self) {
-        if self.admitted.load(Ordering::Acquire)
-            && !self.foreground_pending.swap(true, Ordering::AcqRel)
+        if !self.admitted.load(Ordering::Acquire) {
+            return;
+        }
+        // Count even coalesced hints so an in-flight observation cannot cross a focus change.
+        self.foreground_generation.fetch_add(1, Ordering::AcqRel);
+        if !self.foreground_pending.swap(true, Ordering::AcqRel)
             && self.sender.send(Command::ForegroundObserved).is_err()
         {
             self.foreground_pending.store(false, Ordering::Release);
+        }
+    }
+
+    fn foreground_key(&self) -> ForegroundKey {
+        ForegroundKey {
+            generation: self.foreground_generation.load(Ordering::Acquire),
+            pid: foreground_pid(),
         }
     }
 }
@@ -202,6 +220,7 @@ impl MonitorService {
             sender,
             admitted: Arc::new(AtomicBool::new(true)),
             foreground_pending: Arc::new(AtomicBool::new(false)),
+            foreground_generation: Arc::new(AtomicU64::new(0)),
             config_pending: Arc::new(AtomicBool::new(false)),
             hook_available: Arc::new(AtomicBool::new(false)),
             shutdown_budget: Arc::new(AtomicUsize::new(SHUTDOWN_ATTEMPT_BUDGET)),
@@ -457,11 +476,11 @@ fn observe_foreground_pid(pid: u32) -> Result<Option<TrackedProcess>, String> {
             &mut length,
         )
     }
-    .map_err(|error| format!("Unable to read foreground executable: {error}"))?;
+    .map_err(|error| format!("Unable to read foreground executable for process {pid}: {error}"))?;
     let path = String::from_utf16_lossy(&path[..length as usize]);
     let exe = Path::new(&path)
         .file_name()
-        .ok_or("Foreground executable has no filename")?
+        .ok_or_else(|| format!("Foreground executable for process {pid} has no filename"))?
         .to_string_lossy()
         .to_lowercase();
     let mut created = FILETIME::default();
@@ -469,7 +488,7 @@ fn observe_foreground_pid(pid: u32) -> Result<Option<TrackedProcess>, String> {
     let mut kernel = FILETIME::default();
     let mut user = FILETIME::default();
     unsafe { GetProcessTimes(handle.0, &mut created, &mut exited, &mut kernel, &mut user) }
-        .map_err(|error| format!("Unable to identify foreground process lifetime: {error}"))?;
+        .map_err(|error| format!("Unable to identify foreground process {pid} lifetime: {error}"))?;
     let process = TrackedProcess {
         identity: ProcessIdentity {
             pid,
@@ -557,15 +576,20 @@ struct Debounce {
     seconds: u64,
 }
 
-fn actor_wait_timeout(debounce: Option<Debounce>, now: Instant) -> Duration {
+fn actor_wait_timeout(
+    debounce: Option<Debounce>,
+    watchdog_deadline: Instant,
+    now: Instant,
+) -> Duration {
+    let watchdog_wait = watchdog_deadline.saturating_duration_since(now);
     debounce
         .map(|timer| {
             timer
                 .deadline
                 .saturating_duration_since(now)
-                .min(FOREGROUND_WATCHDOG_INTERVAL)
+                .min(watchdog_wait)
         })
-        .unwrap_or(FOREGROUND_WATCHDOG_INTERVAL)
+        .unwrap_or(watchdog_wait)
 }
 
 fn take_expired_debounce(debounce: &mut Option<Debounce>, now: Instant) -> Option<Debounce> {
@@ -576,12 +600,103 @@ fn take_expired_debounce(debounce: &mut Option<Debounce>, now: Instant) -> Optio
     }
 }
 
-fn foreground_watchdog_changed(last_pid: &mut u32, current_pid: u32) -> bool {
-    if *last_pid == current_pid {
-        false
-    } else {
-        *last_pid = current_pid;
-        true
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ForegroundKey {
+    pid: u32,
+    generation: u64,
+}
+
+#[derive(Default)]
+struct ForegroundObservation {
+    key: Option<ForegroundKey>,
+    // This cache is independent of the activation retained for exit policy and owned cleanup.
+    process: Option<TrackedProcess>,
+    completed: bool,
+    failures: usize,
+    retry_at: Option<Instant>,
+    warning: Option<String>,
+}
+
+impl ForegroundObservation {
+    fn synchronize(&mut self, key: ForegroundKey) {
+        let changed_pid = self.key.map(|previous| previous.pid) != Some(key.pid);
+        // The retained handle binds the creation identity; a reused PID cannot keep it alive.
+        let exited = self.process.as_ref().is_some_and(|process| !process.is_alive());
+        if changed_pid || exited {
+            self.process = None;
+            self.completed = false;
+            self.failures = 0;
+            self.retry_at = None;
+            self.warning = None;
+        }
+        self.key = Some(key);
+    }
+
+    fn needs_observation(&mut self, key: ForegroundKey, now: Instant) -> bool {
+        self.synchronize(key);
+        !self.completed && self.retry_at.is_none_or(|deadline| deadline <= now)
+    }
+
+    fn retry(&mut self, now: Instant, message: String) {
+        // Exhaustion rearms one slow probe at a time, not another burst of fast retries.
+        let delay = FOREGROUND_RETRY_DELAYS
+            .get(self.failures)
+            .copied()
+            .unwrap_or(FOREGROUND_RECOVERY_INTERVAL);
+        self.failures = (self.failures + 1).min(FOREGROUND_RETRY_DELAYS.len());
+        self.retry_at = Some(now + delay);
+        if self.warning.as_ref() != Some(&message) {
+            eprintln!("{message}");
+            self.warning = Some(message);
+        }
+    }
+
+    fn sample(
+        &mut self,
+        key: ForegroundKey,
+        now: Instant,
+        inspect: impl FnOnce(u32) -> Result<Option<TrackedProcess>, String>,
+        current: impl FnOnce() -> (ForegroundKey, Instant),
+    ) -> Option<TrackedProcess> {
+        if !self.needs_observation(key, now) {
+            return self.process.clone();
+        }
+        let result = inspect(key.pid);
+        let (latest, finished) = current();
+        self.synchronize(latest);
+        if latest != key {
+            if latest.pid == key.pid {
+                self.retry(finished, format!(
+                    "Foreground process {} changed during inspection; retrying", key.pid
+                ));
+            }
+            return None;
+        }
+        let failure = match result {
+            Ok(Some(process)) if process.identity.pid == key.pid && process.is_alive() => {
+                self.process = Some(process);
+                None
+            }
+            Ok(None) if key.pid == 0 => None,
+            Ok(_) => Some(format!(
+                "Foreground process {} was not fully observed; retrying", key.pid
+            )),
+            Err(error) => Some(error),
+        };
+        if let Some(message) = failure {
+            self.process = None;
+            self.retry(finished, message);
+        } else {
+            self.completed = true;
+            self.failures = 0;
+            self.retry_at = None;
+            self.warning = None;
+        }
+        self.process.clone()
+    }
+
+    fn warnings(&self, persistent: Option<String>) -> Vec<String> {
+        persistent.into_iter().chain(self.warning.clone()).collect()
     }
 }
 
@@ -776,7 +891,7 @@ struct Actor {
     tracked: Option<TrackedProcess>,
     watcher: Option<ProcessWatcher>,
     debounce: Option<Debounce>,
-    last_foreground_pid: u32,
+    foreground_observation: ForegroundObservation,
     last_outcomes: Vec<MonitorOutcome>,
 }
 
@@ -790,7 +905,7 @@ impl Actor {
             tracked: None,
             watcher: None,
             debounce: None,
-            last_foreground_pid: u32::MAX,
+            foreground_observation: ForegroundObservation::default(),
             last_outcomes: Vec::new(),
         }
     }
@@ -811,38 +926,34 @@ impl Actor {
     }
 
     fn run(mut self, receiver: Receiver<Command>) {
+        let mut watchdog_deadline = Instant::now() + FOREGROUND_WATCHDOG_INTERVAL;
         loop {
-            if self
-                .debounce
-                .is_some_and(|timer| timer.deadline <= Instant::now())
-            {
-                let expired = self.debounce.take();
+            let now = Instant::now();
+            let expired = take_expired_debounce(&mut self.debounce, now);
+            let watchdog_due = watchdog_deadline <= now;
+            if expired.is_some() || watchdog_due {
                 if self.events.admitted.load(Ordering::Acquire) {
-                    let _ = self.observe(expired, true);
-                    self.publish();
+                    if expired.is_some()
+                        || self.foreground_observation.needs_observation(
+                            self.events.foreground_key(), now,
+                        )
+                    {
+                        let _ = self.observe(expired, true);
+                        self.publish();
+                    }
+                }
+                if watchdog_due {
+                    // Schedule from completion rather than hot-looping to catch up after slow work.
+                    watchdog_deadline = Instant::now() + FOREGROUND_WATCHDOG_INTERVAL;
                 }
                 continue;
             }
-            let received = receiver.recv_timeout(actor_wait_timeout(self.debounce, Instant::now()));
+            let received = receiver.recv_timeout(actor_wait_timeout(
+                self.debounce, watchdog_deadline, Instant::now(),
+            ));
             let command = match received {
                 Ok(command) => command,
-                Err(RecvTimeoutError::Timeout) => {
-                    let now = Instant::now();
-                    let expired = take_expired_debounce(&mut self.debounce, now);
-                    if self.events.admitted.load(Ordering::Acquire) {
-                        let current_pid = foreground_pid();
-                        if expired.is_some()
-                            || foreground_watchdog_changed(
-                                &mut self.last_foreground_pid,
-                                current_pid,
-                            )
-                        {
-                            let _ = self.observe(expired, true);
-                            self.publish();
-                        }
-                    }
-                    continue;
-                }
+                Err(RecvTimeoutError::Timeout) => continue,
                 Err(RecvTimeoutError::Disconnected) => break,
             };
             match command {
@@ -1048,18 +1159,12 @@ impl Actor {
                 return Err(error);
             }
         };
-        let current_pid = foreground_pid();
-        self.last_foreground_pid = current_pid;
-        let foreground = match observe_foreground_pid(current_pid) {
-            Ok(foreground) => foreground,
-            Err(error) => {
-                self.controller.warn(error);
-                self.tracked
-                    .as_ref()
-                    .filter(|process| process.is_foreground())
-                    .cloned()
-            }
-        };
+        let foreground = self.foreground_observation.sample(
+            self.events.foreground_key(),
+            Instant::now(),
+            observe_foreground_pid,
+            || (self.events.foreground_key(), Instant::now()),
+        );
         if let Some(process) = &foreground {
             self.enroll(&origin, process);
         }
@@ -1284,7 +1389,7 @@ impl Actor {
                 .iter()
                 .find(|app| matches_app(app, &active.exe))
         });
-        let mut warnings: Vec<String> = self.controller.warning().into_iter().collect();
+        let mut warnings = self.foreground_observation.warnings(self.controller.warning());
         if let Some(issue) = &snapshot.issue {
             warnings.push(issue.clone());
         }
@@ -1362,12 +1467,9 @@ impl Actor {
         let mut payload = match self.config.snapshot() {
             Ok(snapshot) => self.payload(&snapshot),
             Err(error) => {
-                let warning = self
-                    .controller
-                    .warning()
-                    .map(|warning| format!("{warning}\n{error}"))
-                    .unwrap_or(error);
-                HdrStatePayload::unavailable(warning)
+                let mut warnings = self.foreground_observation.warnings(self.controller.warning());
+                warnings.push(error);
+                HdrStatePayload::unavailable(warnings.join("\n"))
             }
         };
         if let Err(error) = self.app.emit("hdr-status-changed", payload.clone()) {
@@ -1472,6 +1574,7 @@ mod tests {
                 sender,
                 admitted: Arc::new(AtomicBool::new(true)),
                 foreground_pending: Arc::new(AtomicBool::new(false)),
+                foreground_generation: Arc::new(AtomicU64::new(0)),
                 config_pending: Arc::new(AtomicBool::new(false)),
                 hook_available: Arc::new(AtomicBool::new(true)),
                 shutdown_budget: Arc::new(AtomicUsize::new(SHUTDOWN_ATTEMPT_BUDGET)),
@@ -1866,6 +1969,7 @@ mod tests {
         let events = &service.events;
         events.foreground();
         events.foreground();
+        assert_eq!(events.foreground_generation.load(Ordering::Acquire), 2);
         assert!(matches!(
             receiver.try_recv(),
             Ok(Command::ForegroundObserved)
@@ -1881,6 +1985,7 @@ mod tests {
         events.foreground();
         service.config_committed();
         assert!(receiver.try_recv().is_err());
+        assert_eq!(events.foreground_generation.load(Ordering::Acquire), 2);
     }
 
     #[test]
@@ -1951,13 +2056,357 @@ mod tests {
     }
 
     #[test]
-    fn foreground_watchdog_only_runs_full_observation_after_a_pid_change() {
-        let mut last_pid = u32::MAX;
-        assert!(foreground_watchdog_changed(&mut last_pid, 42));
-        assert_eq!(last_pid, 42);
-        assert!(!foreground_watchdog_changed(&mut last_pid, 42));
-        assert!(foreground_watchdog_changed(&mut last_pid, 7));
-        assert_eq!(last_pid, 7);
+    fn foreground_retries_unchanged_pid_after_error_or_incomplete_observation() {
+        for incomplete in [false, true] {
+            let now = Instant::now();
+            let key = observation_key(42);
+            let mut observation = ForegroundObservation::default();
+            let result = if incomplete { Ok(None) } else { Err("Access denied".into()) };
+            assert!(sample_at(&mut observation, key, now, result).is_none());
+            assert!(observation.warning.is_some());
+            let deadline = now + FOREGROUND_RETRY_DELAYS[0];
+            assert_eq!(observation.retry_at, Some(deadline));
+            assert!(!observation.needs_observation(key, deadline - Duration::from_millis(1)));
+            assert!(observation.needs_observation(key, deadline));
+            let process = test_process(42, 100, "game.exe");
+            let recovered = sample_at(
+                &mut observation, key, deadline, Ok(Some(process.clone())),
+            ).unwrap();
+            assert_eq!(recovered.identity, process.identity);
+            assert!(observation.warning.is_none());
+            assert!(observation.retry_at.is_none());
+        }
+    }
+
+    fn observation_key(pid: u32) -> ForegroundKey {
+        ForegroundKey { pid, generation: 1 }
+    }
+
+    fn test_process(pid: u32, created_at: u64, exe: &str) -> TrackedProcess {
+        // An owned, unnamed event gives deterministic live/exited handle waits without a real app.
+        let handle = unsafe { CreateEventW(None, true, false, None) }.unwrap();
+        TrackedProcess {
+            identity: ProcessIdentity { pid, created_at },
+            exe: exe.into(),
+            handle: Arc::new(OwnedHandle(handle)),
+        }
+    }
+
+    fn sample_at(
+        observation: &mut ForegroundObservation,
+        key: ForegroundKey,
+        now: Instant,
+        result: Result<Option<TrackedProcess>, String>,
+    ) -> Option<TrackedProcess> {
+        observation.sample(key, now, |_| result, || (key, now))
+    }
+
+    #[test]
+    fn foreground_backoff_is_bounded_and_exhaustion_rearms_at_a_slow_cadence() {
+        let mut now = Instant::now();
+        let key = observation_key(42);
+        let mut observation = ForegroundObservation::default();
+        for seconds in [1, 2, 4, 30, 30, 30, 30] {
+            let delay = Duration::from_secs(seconds);
+            assert!(sample_at(&mut observation, key, now, Err("Access denied".into())).is_none());
+            let deadline = now + delay;
+            assert_eq!(observation.retry_at, Some(deadline));
+            for offset in [Duration::ZERO, delay / 2, delay - Duration::from_millis(1)] {
+                assert!(observation.sample(
+                    key, now + offset,
+                    |_| panic!("inspection ran before its deadline"),
+                    || panic!("no inspection should be in flight"),
+                ).is_none());
+                assert_eq!(observation.retry_at, Some(deadline));
+            }
+            assert!(observation.needs_observation(key, deadline));
+            now = deadline;
+        }
+        let recovered = sample_at(
+            &mut observation, key, now, Ok(Some(test_process(42, 100, "game.exe"))),
+        ).unwrap();
+        assert_eq!(recovered.exe, "game.exe");
+        assert!(!observation.needs_observation(key, now + Duration::from_secs(300)));
+    }
+
+    #[test]
+    fn foreground_stable_success_only_checks_the_cached_handle_on_watchdog_ticks() {
+        let now = Instant::now();
+        let key = observation_key(42);
+        let mut observation = ForegroundObservation::default();
+        let process = test_process(42, 100, "unlisted.exe");
+        sample_at(&mut observation, key, now, Ok(Some(process.clone()))).unwrap();
+        for tick in 1..=120 {
+            let later = now + FOREGROUND_WATCHDOG_INTERVAL * tick;
+            assert!(!observation.needs_observation(key, later));
+            let cached = observation.sample(
+                key, later,
+                |_| panic!("a stable process must not be reinspected"),
+                || panic!("a cached result has no in-flight observation"),
+            ).unwrap();
+            assert_eq!(cached.identity, process.identity);
+        }
+        let same_process_new_hint = ForegroundKey { generation: 2, ..key };
+        assert!(!observation.needs_observation(same_process_new_hint, now));
+    }
+
+    #[test]
+    fn foreground_status_config_and_coalesced_hints_cannot_postpone_retry() {
+        let now = Instant::now();
+        let watchdog_deadline = now + FOREGROUND_WATCHDOG_INTERVAL;
+        let key = observation_key(42);
+        let mut observation = ForegroundObservation::default();
+        sample_at(&mut observation, key, now, Err("Access denied".into()));
+        let retry_deadline = observation.retry_at.unwrap();
+        for command in 1..=100 {
+            let at = now + Duration::from_millis(command * 10);
+            assert_eq!(
+                actor_wait_timeout(None, watchdog_deadline, at),
+                watchdog_deadline.saturating_duration_since(at),
+            );
+            let key = ForegroundKey { generation: command, ..key };
+            if at < retry_deadline {
+                assert!(observation.sample(
+                    key, at,
+                    |_| panic!("config traffic bypassed retry backoff"),
+                    || panic!("no inspection should be in flight"),
+                ).is_none());
+                assert_eq!(observation.retry_at, Some(retry_deadline));
+            } else {
+                assert!(sample_at(
+                    &mut observation, key, at, Ok(Some(test_process(42, 100, "game.exe"))),
+                ).is_some());
+            }
+        }
+        assert_eq!(actor_wait_timeout(None, watchdog_deadline, retry_deadline), Duration::ZERO);
+    }
+
+    #[test]
+    fn foreground_slow_failures_schedule_from_completion_without_catch_up_attempts() {
+        let now = Instant::now();
+        let finished = now + Duration::from_secs(10);
+        let key = observation_key(42);
+        let mut observation = ForegroundObservation::default();
+        assert!(observation.sample(
+            key, now,
+            |_| Err("Access denied".into()),
+            || (key, finished),
+        ).is_none());
+        assert_eq!(observation.retry_at, Some(finished + FOREGROUND_RETRY_DELAYS[0]));
+        assert!(!observation.needs_observation(key, finished));
+    }
+
+    #[test]
+    fn foreground_late_success_and_errors_are_fenced_by_pid_and_generation() {
+        let now = Instant::now();
+        let key = observation_key(42);
+        for latest in [
+            ForegroundKey { pid: 7, ..key },
+            ForegroundKey { generation: 2, ..key },
+        ] {
+            for success in [false, true] {
+                let mut observation = ForegroundObservation::default();
+                let result = if success {
+                    Ok(Some(test_process(42, 100, "old.exe")))
+                } else {
+                    Err("old inspection error".into())
+                };
+                assert!(observation.sample(key, now, |_| result, || (latest, now)).is_none());
+                assert!(observation.process.is_none());
+                assert!(!observation.completed);
+                assert_ne!(observation.warning.as_deref(), Some("old inspection error"));
+                let deadline = observation.retry_at.unwrap_or(now);
+                let recovered = sample_at(
+                    &mut observation, latest, deadline,
+                    Ok(Some(test_process(latest.pid, 200, "current.exe"))),
+                ).unwrap();
+                assert_eq!(recovered.exe, "current.exe");
+                assert!(observation.warning.is_none());
+            }
+        }
+    }
+
+    #[test]
+    fn foreground_coalesced_round_trip_invalidates_in_flight_success() {
+        let fixture = GateFixture::new();
+        let (service, receiver) = idle_service(fixture.manager.clone());
+        let now = Instant::now();
+        let key = ForegroundKey { pid: 42, generation: 0 };
+        let mut observation = ForegroundObservation::default();
+        assert!(observation.sample(
+            key, now,
+            |_| {
+                service.events.foreground();
+                service.events.foreground();
+                Ok(Some(test_process(42, 100, "game.exe")))
+            },
+            || (ForegroundKey {
+                generation: service.events.foreground_generation.load(Ordering::Acquire),
+                ..key
+            }, now),
+        ).is_none());
+        assert!(matches!(receiver.try_recv(), Ok(Command::ForegroundObserved)));
+        assert!(receiver.try_recv().is_err());
+        assert!(observation.process.is_none());
+        assert_eq!(observation.retry_at, Some(now + FOREGROUND_RETRY_DELAYS[0]));
+    }
+
+    #[test]
+    fn foreground_pid_reuse_rejects_old_creation_identity_and_inspects_the_new_lifetime() {
+        let now = Instant::now();
+        let key = observation_key(42);
+        let mut observation = ForegroundObservation::default();
+        let old = test_process(42, 100, "old.exe");
+        sample_at(&mut observation, key, now, Ok(Some(old.clone()))).unwrap();
+        unsafe { SetEvent(old.handle.0) }.unwrap();
+        assert!(observation.needs_observation(key, now));
+        assert!(observation.process.is_none());
+        assert!(sample_at(&mut observation, key, now, Ok(Some(old.clone()))).is_none());
+        let new = test_process(42, 200, "new.exe");
+        let recovered = sample_at(
+            &mut observation, key, now + FOREGROUND_RETRY_DELAYS[0], Ok(Some(new.clone())),
+        ).unwrap();
+        assert_ne!(recovered.identity, old.identity);
+        assert_eq!(recovered.identity, new.identity);
+        assert_eq!(recovered.exe, "new.exe");
+    }
+
+    #[test]
+    fn foreground_rejects_a_mismatched_process_identity() {
+        let now = Instant::now();
+        let mut observation = ForegroundObservation::default();
+        assert!(sample_at(
+            &mut observation, observation_key(42), now,
+            Ok(Some(test_process(7, 100, "wrong.exe"))),
+        ).is_none());
+        assert!(observation.process.is_none());
+        assert!(observation.retry_at.is_some());
+    }
+
+    #[test]
+    fn foreground_failure_never_reuses_the_previous_app_and_empty_foreground_is_complete() {
+        let now = Instant::now();
+        let mut observation = ForegroundObservation::default();
+        let previous = test_process(42, 100, "game.exe");
+        sample_at(
+            &mut observation, observation_key(42), now, Ok(Some(previous.clone())),
+        ).unwrap();
+        assert!(sample_at(
+            &mut observation, observation_key(7), now, Err("Access denied".into()),
+        ).is_none());
+        assert!(previous.is_alive(), "the old activation may still need exit/cleanup tracking");
+        assert!(observation.process.is_none(), "it must not become the new foreground identity");
+        assert!(sample_at(
+            &mut observation, observation_key(0), now, Ok(None),
+        ).is_none());
+        assert!(observation.warning.is_none());
+        assert!(!observation.needs_observation(observation_key(0), now + Duration::from_secs(60)));
+    }
+
+    #[test]
+    fn foreground_recovery_retires_only_the_scoped_inspection_warning() {
+        use crate::display::tests::MockDisplay;
+
+        let now = Instant::now();
+        let key = observation_key(42);
+        let mut observation = ForegroundObservation::default();
+        let mut controller = HdrController::new(MockDisplay::default());
+        controller.warn("A persistent display issue");
+        sample_at(&mut observation, key, now, Err("Protected process access denied".into()));
+        assert_eq!(observation.warnings(controller.warning()), [
+            "A persistent display issue", "Protected process access denied",
+        ]);
+        assert_eq!(controller.warning().as_deref(), Some("A persistent display issue"));
+        sample_at(
+            &mut observation, key, now + FOREGROUND_RETRY_DELAYS[0],
+            Ok(Some(test_process(42, 100, "game.exe"))),
+        ).unwrap();
+        assert_eq!(observation.warnings(controller.warning()), ["A persistent display issue"]);
+        sample_at(
+            &mut observation, observation_key(7), now, Err("another process denied".into()),
+        );
+        sample_at(
+            &mut observation, observation_key(8), now,
+            Ok(Some(test_process(8, 300, "current.exe"))),
+        ).unwrap();
+        assert_eq!(observation.warnings(controller.warning()), ["A persistent display issue"]);
+    }
+
+    #[test]
+    fn foreground_policy_changes_reresolve_a_cached_identity_without_reinspection() {
+        let now = Instant::now();
+        let key = observation_key(42);
+        let mut observation = ForegroundObservation::default();
+        let process = test_process(42, 100, "game.exe");
+        sample_at(&mut observation, key, now, Ok(Some(process.clone()))).unwrap();
+        let mut snapshot = ready_snapshot();
+        for restriction in 0..6 {
+            let ready = snapshot.clone();
+            match restriction {
+                0 => snapshot.settings.apps[0].enabled = false,
+                1 => snapshot.settings.blacklist.push("GAME.EXE".into()),
+                2 => snapshot.settings.switch_method = SwitchMethod::Shortcut,
+                3 => snapshot.mode = ConfigMode::RecoveryRequired,
+                4 => snapshot.controller_issue = Some(crate::SAFE_TEST_ISSUE.into()),
+                _ => snapshot.settings.apps.clear(),
+            }
+            let cached = observation.sample(
+                key, now,
+                |_| panic!("a policy change must not require process inspection"),
+                || panic!("no inspection should be in flight"),
+            ).unwrap();
+            assert_eq!(cached.identity, process.identity);
+            assert!(automatic_pause(&snapshot, &cached.exe, &snapshot.context_token).is_some());
+            snapshot = ready;
+            assert!(automatic_pause(&snapshot, &cached.exe, &snapshot.context_token).is_none());
+        }
+    }
+
+    #[test]
+    fn foreground_inspection_failure_does_not_discard_owned_cleanup_or_claim_preexisting_hdr() {
+        use crate::display::tests::{monitor, MockDisplay};
+
+        let fixture = GateFixture::new();
+        fixture.ready();
+        let now = Instant::now();
+        let mut observation = ForegroundObservation::default();
+        let process = sample_at(
+            &mut observation, observation_key(42), now,
+            Ok(Some(test_process(42, 100, "game.exe"))),
+        ).unwrap();
+        let mut controller = HdrController::new(MockDisplay::new(vec![
+            monitor("owned", 1, false), monitor("preexisting", 2, true),
+        ]));
+        controller.refresh_inventory().unwrap();
+        controller.begin(
+            process.identity, process.exe, "context".into(), TargetMonitor::All,
+        ).unwrap();
+        struct Enable;
+        impl WriteAuthority for Enable {
+            fn authorize(
+                &mut self, _: &NativeAttempt, issue: &mut dyn FnMut(),
+            ) -> Result<(), DisplayFailure> {
+                issue();
+                Ok(())
+            }
+        }
+        controller.enable_activation(&mut Enable);
+        assert!(controller.has_ownership());
+        let activation = controller.activation().unwrap().clone();
+        assert!(sample_at(
+            &mut observation, observation_key(7), now, Err("Access denied".into()),
+        ).is_none());
+        assert!(controller.matches_activation(activation.generation, activation.process));
+        let outcomes = controller.end(&mut fixture.authority(OperationKind::Cleanup), usize::MAX);
+        assert_eq!(outcomes.len(), 1);
+        assert_eq!(outcomes[0].device_path.as_deref(), Some("owned"));
+        assert_eq!(outcomes[0].outcome, OutcomeKind::Changed);
+        assert!(!outcomes[0].requested_hdr);
+        controller.refresh_inventory().unwrap();
+        assert!(!controller.inventory()[0].is_hdr_enabled);
+        assert!(controller.inventory()[1].is_hdr_enabled);
+        assert!(controller.activation().is_none());
+        assert!(!controller.has_ownership());
     }
 
     #[test]
@@ -1973,7 +2422,7 @@ mod tests {
             seconds: 5,
         });
         assert_eq!(
-            actor_wait_timeout(debounce, now),
+            actor_wait_timeout(debounce, now + FOREGROUND_WATCHDOG_INTERVAL, now),
             FOREGROUND_WATCHDOG_INTERVAL
         );
         assert!(take_expired_debounce(&mut debounce, now + FOREGROUND_WATCHDOG_INTERVAL).is_none());
@@ -1993,7 +2442,7 @@ mod tests {
             seconds: 0,
         });
         assert_eq!(
-            actor_wait_timeout(debounce, now),
+            actor_wait_timeout(debounce, now + FOREGROUND_WATCHDOG_INTERVAL, now),
             Duration::from_millis(200)
         );
     }
