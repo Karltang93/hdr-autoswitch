@@ -124,6 +124,7 @@ export interface RunningProcessInfo {
   exe_name: string;
   title: string;
   path: string;
+  tracked_primary: string | null;
 }
 
 export interface HdrStatePayload {
@@ -137,6 +138,7 @@ export interface HdrStatePayload {
   launcher?: string | null;
   hdr_type?: string | null;
   warning: string | null;
+  quarantined_apps: { name: string; exe_name: string }[];
   target_status: TargetStatus;
   active_target: TargetMonitor | null;
   target_deferred: boolean;

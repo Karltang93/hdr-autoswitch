@@ -150,7 +150,14 @@
     "support_tier": "autohdr",
     "notes": "Podporuje Microsoft Windows Auto HDR",
     "steam_id": null,
-    "alternate_exes": []
+    "alternate_exes": [],
+    "storefronts": [
+      {
+        "provider": "xbox",
+        "game_executables": ["aoe3de.exe"],
+        "excluded_executables": ["gamelaunchhelper.exe"]
+      }
+    ]
   },
   {
     "name": "Age of Empires IV",

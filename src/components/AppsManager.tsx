@@ -3,6 +3,7 @@ import { HdrApp, HdrType, AppConfig, PickedGameInfo, ScanResult } from '../types
 import type { MutationOrigin } from '../configState';
 import { configClient } from '../useConfig';
 import { findLibraryApp } from '../libraryState';
+import { detectionKey, importSelectedDetections, selectDetections, selectedDetections, toggleDetection } from '../scanSelection';
 import { launcherName } from '../catalogNotes';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -31,12 +32,14 @@ import { useI18n } from '../i18n';
 
 interface AppsManagerProps {
   config: AppConfig;
+  quarantinedExes: string[];
   onNavigateToCatalog: () => void;
   isDark: boolean;
 }
 
 export const AppsManager: React.FC<AppsManagerProps> = ({
   config,
+  quarantinedExes,
   onNavigateToCatalog,
 }) => {
   const { t, lang } = useI18n();
@@ -52,6 +55,21 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
   const [scanOrigin, setScanOrigin] = useState<MutationOrigin | null>(null);
   const [selectedToImport, setSelectedToImport] = useState<Record<string, boolean>>({});
   const [pathStatus, setPathStatus] = useState<Record<string, boolean>>({});
+  const isQuarantined = (app: HdrApp) =>
+    quarantinedExes.some((exe) => exe.toLowerCase() === app.exe_name.toLowerCase());
+
+  const handleRepairExecutable = async (app: HdrApp) => {
+    try {
+      const origin = configClient.captureOrigin();
+      const picked = await invoke<PickedGameInfo | null>('pick_game_exe', { language: lang });
+      if (!picked) return;
+      await configClient.mutate('repair_app_executable', {
+        exeName: app.exe_name, path: picked.path,
+      }, origin);
+    } catch (err) {
+      configClient.reportError(err);
+    }
+  };
 
   // Verify paths of apps currently in the user's library
   useEffect(() => {
@@ -70,6 +88,8 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
     findLibraryApp(config.apps, item);
 
   const isPathDifferent = (existing: HdrApp, scanned: HdrApp): boolean => {
+    if (existing.exe_name.toLowerCase() !== scanned.exe_name.toLowerCase()
+        && !isQuarantined(existing)) return false;
     if (!scanned.path) return false;
     if (!existing.path) return true; // Path missing previously, now found on disk!
     const normOld = existing.path.replace(/\//g, '\\').toLowerCase().trim();
@@ -118,20 +138,19 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
       });
       setScannedGames(detected);
 
-      const initialSelected: Record<string, boolean> = {};
-      for (const item of detected) {
+      const initialSelected = selectDetections(detected, (item) => {
         const existing = findExistingApp(item);
         if (existing) {
           const pathChanged = isPathDifferent(existing, item);
           // If game is already tracked:
           // - If path moved or was newly discovered: PRE-SELECT to update path!
           // - If already up to date: uncheck by default
-          initialSelected[item.exe_name] = pathChanged;
+          return pathChanged;
         } else {
           // New game: pre-select HDR games, leave SDR unselected by default
-          initialSelected[item.exe_name] = item.enabled;
+          return item.enabled;
         }
-      }
+      });
       setSelectedToImport(initialSelected);
       setShowScanModal(true);
     } catch (err) {
@@ -144,21 +163,11 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
   };
 
   const selectAllHdr = () => {
-    const next: Record<string, boolean> = {};
-    for (const item of scannedGames) {
-      if (item.enabled) {
-        next[item.exe_name] = true;
-      }
-    }
-    setSelectedToImport(next);
+    setSelectedToImport(selectDetections(scannedGames, (item) => item.enabled));
   };
 
   const selectAll = () => {
-    const next: Record<string, boolean> = {};
-    for (const item of scannedGames) {
-      next[item.exe_name] = true;
-    }
-    setSelectedToImport(next);
+    setSelectedToImport(selectDetections(scannedGames, () => true));
   };
 
   const deselectAll = () => {
@@ -178,6 +187,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
       }
     } catch (err) {
       console.error('Failed to pick game exe:', err);
+      configClient.reportError(err);
     }
   };
 
@@ -197,6 +207,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
             setShowAddModal(true);
           } catch (err) {
             console.error('Failed to inspect dropped exe:', err);
+            configClient.reportError(err);
           }
         }
       }
@@ -208,12 +219,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
   }, []);
 
   const handleConfirmImport = async () => {
-    const toImport = scannedGames
-      .filter((g) => selectedToImport[g.exe_name])
-      .map((g) => ({
-        ...g,
-        enabled: true, // Imported games that the user selected are enabled
-      }));
+    const toImport = selectedDetections(scannedGames, selectedToImport);
 
     if (toImport.length === 0) {
       setShowScanModal(false);
@@ -222,9 +228,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
 
     try {
       if (!scanOrigin) throw new Error(t.scanModalError);
-      await configClient.mutate('import_detected_games', {
-        detected: toImport,
-      }, scanOrigin);
+      await importSelectedDetections(configClient, scannedGames, selectedToImport, scanOrigin);
       setShowScanModal(false);
       setScanMessage(t.scanModalSuccess(toImport.length));
       setTimeout(() => setScanMessage(null), 4500);
@@ -526,16 +530,24 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                     {/* Toggle button */}
                     <button
                       onClick={() => handleToggleApp(app.exe_name, !app.enabled)}
+                      disabled={isQuarantined(app)}
                       className={`px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider cursor-pointer border transition-all ${
                         app.enabled
                           ? 'bg-[#f55a6b] text-[#0f0b0b] border-[#f55a6b]'
                           : 'bg-[#120d0e] text-[#8a7f81] border-[#8a7f81]/30 hover:border-white'
                       }`}
                     >
-                      {app.enabled ? t.appsStatusTracked : t.appsStatusPaused}
+                      {isQuarantined(app) ? t.appsQuarantined : app.enabled ? t.appsStatusTracked : t.appsStatusPaused}
                     </button>
 
                     {/* Delete button */}
+                    {isQuarantined(app) && (
+                      <button onClick={() => handleRepairExecutable(app)}
+                        className="p-1 text-amber-200 cursor-pointer"
+                        title={t.appsRepairExecutable} aria-label={t.appsRepairExecutable}>
+                        <FolderOpen className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                     <button
                       onClick={() => handleDeleteApp(app.exe_name)}
                       className="p-1 text-[#8a7f81] hover:text-[#f55a6b] cursor-pointer transition-colors"
@@ -605,15 +617,23 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                 <div className="flex items-center gap-3 shrink-0">
                   <button
                     onClick={() => handleToggleApp(app.exe_name, !app.enabled)}
+                    disabled={isQuarantined(app)}
                     className={`px-2.5 py-1 text-xs font-bold uppercase tracking-wider cursor-pointer border transition-all ${
                       app.enabled
                         ? 'bg-[#f55a6b] text-[#0f0b0b] border-[#f55a6b]'
                         : 'bg-[#120d0e] text-[#8a7f81] border-[#8a7f81]/30'
                     }`}
                   >
-                    {app.enabled ? t.appsStatusTracked : t.appsStatusPaused}
+                    {isQuarantined(app) ? t.appsQuarantined : app.enabled ? t.appsStatusTracked : t.appsStatusPaused}
                   </button>
 
+                  {isQuarantined(app) && (
+                    <button onClick={() => handleRepairExecutable(app)}
+                      className="p-1.5 text-amber-200 cursor-pointer"
+                      title={t.appsRepairExecutable} aria-label={t.appsRepairExecutable}>
+                      <FolderOpen className="w-4 h-4" />
+                    </button>
+                  )}
                   <button
                     onClick={() => handleDeleteApp(app.exe_name)}
                     className="p-1.5 text-[#8a7f81] hover:text-[#f55a6b] cursor-pointer transition-colors"
@@ -632,7 +652,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
       {showScanModal && (() => {
         const hdrGames = scannedGames.filter((g) => g.enabled);
         const sdrGames = scannedGames.filter((g) => !g.enabled);
-        const selectedCount = Object.values(selectedToImport).filter(Boolean).length;
+        const selectedCount = selectedDetections(scannedGames, selectedToImport).length;
 
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
@@ -695,19 +715,16 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
 
                     <div className="space-y-1.5">
                       {hdrGames.map((game) => {
-                        const isSelected = !!selectedToImport[game.exe_name];
+                        const isSelected = !!selectedToImport[detectionKey(game)];
                         const existing = findExistingApp(game);
                         const pathChanged = existing ? isPathDifferent(existing, game) : false;
                         const isAlreadyInLib = !!existing && !pathChanged;
 
                         return (
                           <div
-                            key={game.exe_name}
+                            key={detectionKey(game)}
                             onClick={() =>
-                              setSelectedToImport((prev) => ({
-                                ...prev,
-                                [game.exe_name]: !prev[game.exe_name],
-                              }))
+                              setSelectedToImport((prev) => toggleDetection(prev, game))
                             }
                             className={`p-2.5 border cursor-pointer flex items-center justify-between text-xs transition-all ${
                               isSelected
@@ -746,6 +763,9 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                                 )}
                               </div>
                               <div className="text-[10px] text-[#5accf5] font-mono truncate">[{game.exe_name}]</div>
+                              {game.path && !pathChanged && (
+                                <div className="text-[9px] font-mono truncate" title={game.path}>{game.path}</div>
+                              )}
                               {pathChanged && game.path && (
                                 <div className="text-[9px] text-amber-300/80 font-mono truncate" title={game.path}>
                                   ➔ {t.scanModalNewLocation}: {game.path}
@@ -782,19 +802,16 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
 
                     <div className="space-y-1.5">
                       {sdrGames.map((game) => {
-                        const isSelected = !!selectedToImport[game.exe_name];
+                        const isSelected = !!selectedToImport[detectionKey(game)];
                         const existing = findExistingApp(game);
                         const pathChanged = existing ? isPathDifferent(existing, game) : false;
                         const isAlreadyInLib = !!existing && !pathChanged;
 
                         return (
                           <div
-                            key={game.exe_name}
+                            key={detectionKey(game)}
                             onClick={() =>
-                              setSelectedToImport((prev) => ({
-                                ...prev,
-                                [game.exe_name]: !prev[game.exe_name],
-                              }))
+                              setSelectedToImport((prev) => toggleDetection(prev, game))
                             }
                             className={`p-2.5 border cursor-pointer flex items-center justify-between text-xs transition-all ${
                               isSelected
@@ -828,6 +845,9 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                                 )}
                               </div>
                               <div className="text-[10px] text-[#8a7f81] font-mono truncate">[{game.exe_name}]</div>
+                              {game.path && !pathChanged && (
+                                <div className="text-[9px] font-mono truncate" title={game.path}>{game.path}</div>
+                              )}
                               {pathChanged && game.path && (
                                 <div className="text-[9px] text-amber-300/80 font-mono truncate" title={game.path}>
                                   ➔ {t.scanModalNewLocation}: {game.path}

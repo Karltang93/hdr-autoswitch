@@ -70,6 +70,9 @@ export interface Translations {
 
   // Apps Manager
   appsTitle: string;
+  appsRepairExecutable: string;
+  appsQuarantined: string;
+  quarantineWarning: (game: string, executable: string) => string;
   appsCountSummary: (total: number, active: number) => string;
   appsSubtitle: string;
   appsScanBtn: string;
@@ -242,6 +245,9 @@ export interface Translations {
 }
 
 const cs: Translations = {
+  appsRepairExecutable: 'Vybrat skutečný herní soubor',
+  appsQuarantined: 'Blokovaný soubor',
+  quarantineWarning: (game, executable) => `${game}: soubor ${executable} je blokován. Automatické rozpoznávání této hry je blokováno; uložená nastavení zůstávají beze změny. V Moje hry vyberte skutečný herní soubor. Oprava odstraní staré alternativní soubory.`,
   appTitle: 'HDR AUTO-SWITCH',
   hdrActive: 'HDR AKTIVNÍ',
   hdrMixed: 'SMÍŠENÝ STAV HDR / SDR',
@@ -469,6 +475,9 @@ const cs: Translations = {
 };
 
 const en: Translations = {
+  appsRepairExecutable: 'Select actual game executable',
+  appsQuarantined: 'Blocked executable',
+  quarantineWarning: (game, executable) => `${game}: ${executable} is blocked. Automatic matching for this game is blocked; saved settings remain unchanged. Select the actual game executable in My Games. Repair removes historical executable aliases.`,
   appTitle: 'HDR AUTO-SWITCH',
   hdrActive: 'HDR ACTIVE',
   hdrMixed: 'MIXED HDR / SDR',

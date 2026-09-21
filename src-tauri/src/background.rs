@@ -123,15 +123,16 @@ impl BackgroundWork {
             if stop.load(Ordering::Acquire) || scan_origin.context_token != origin.context_token {
                 return;
             }
+            let auto_detect = scan_origin.settings.auto_detect_new_games;
             let detected =
-                match tauri::async_runtime::spawn_blocking(scanner::scan_installed_games).await {
+                match tauri::async_runtime::spawn_blocking(move || scanner::scan_installed_games_with_authority(auto_detect)).await {
                     Ok(detected) => detected,
                     Err(error) => {
                         eprintln!("Background game scan failed: {error}");
                         return;
                     }
                 };
-            if detected.is_empty() || stop.load(Ordering::Acquire) {
+            if detected.verified.is_empty() || stop.load(Ordering::Acquire) {
                 return;
             }
             let Some(manager) = config.upgrade() else {
@@ -145,7 +146,8 @@ impl BackgroundWork {
                     if stop.load(Ordering::Acquire) {
                         return Err("Background enrichment was cancelled.".into());
                     }
-                    library::enrich_existing(settings, &detected);
+                    library::enrich_verified_aliases(settings, &detected.verified);
+                    library::enrich_verified_metadata(settings, &detected.verified);
                     Ok(())
                 },
             );

@@ -1,14 +1,17 @@
 use crate::config::{
-    AppConfig, ConfigManager, ConfigMode, ConfigSnapshot, HdrApp, SwitchMethod, TargetMonitor,
+    ConfigManager, ConfigMode, ConfigSnapshot, SwitchMethod, TargetMonitor,
 };
+#[cfg(test)]
+use crate::config::{AppConfig, HdrApp};
 pub use crate::display::ScopeHdrState;
 use crate::display::{
     DisplayFailure, FailureKind, MonitorInfo, MonitorOutcome, NativeAttempt, NativePurpose,
     OutcomeKind, TargetStatus, WindowsDisplay,
 };
 use crate::hdr_controller::{same_target, HdrController, ProcessIdentity, WriteAuthority};
+use crate::runtime_policy::{quarantined_apps, QuarantinedApp, Resolution};
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread::{self, JoinHandle};
@@ -33,6 +36,12 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 const SHUTDOWN_ATTEMPT_BUDGET: usize = 32;
 const FOREGROUND_WATCHDOG_INTERVAL: Duration = Duration::from_secs(1);
+const FOREGROUND_RETRY_DELAYS: [Duration; 3] = [
+    Duration::from_secs(1),
+    Duration::from_secs(2),
+    Duration::from_secs(4),
+];
+const FOREGROUND_RECOVERY_INTERVAL: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
 #[serde(tag = "status", rename_all = "snake_case")]
@@ -66,7 +75,7 @@ fn manual_admission(snapshot: &ConfigSnapshot, admitted: bool) -> ManualControl 
     }
 }
 
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
 pub struct HdrStatePayload {
     /// Observed frozen activation scope, or the saved scope when no activation exists.
     pub is_hdr_active: bool,
@@ -79,6 +88,7 @@ pub struct HdrStatePayload {
     pub launcher: Option<String>,
     pub hdr_type: Option<String>,
     pub warning: Option<String>,
+    pub quarantined_apps: Vec<QuarantinedApp>,
     /// Availability of the saved target for the next activation.
     pub target_status: TargetStatus,
     pub active_target: Option<TargetMonitor>,
@@ -102,6 +112,7 @@ impl HdrStatePayload {
             launcher: None,
             hdr_type: None,
             warning: Some(message),
+            quarantined_apps: Vec::new(),
             target_status: TargetStatus::AutomationPaused,
             active_target: None,
             target_deferred: false,
@@ -144,6 +155,7 @@ struct EventSink {
     sender: Sender<Command>,
     admitted: Arc<AtomicBool>,
     foreground_pending: Arc<AtomicBool>,
+    foreground_generation: Arc<AtomicU64>,
     config_pending: Arc<AtomicBool>,
     hook_available: Arc<AtomicBool>,
     shutdown_budget: Arc<AtomicUsize>,
@@ -151,11 +163,22 @@ struct EventSink {
 
 impl EventSink {
     fn foreground(&self) {
-        if self.admitted.load(Ordering::Acquire)
-            && !self.foreground_pending.swap(true, Ordering::AcqRel)
+        if !self.admitted.load(Ordering::Acquire) {
+            return;
+        }
+        // Count even coalesced hints so an in-flight observation cannot cross a focus change.
+        self.foreground_generation.fetch_add(1, Ordering::AcqRel);
+        if !self.foreground_pending.swap(true, Ordering::AcqRel)
             && self.sender.send(Command::ForegroundObserved).is_err()
         {
             self.foreground_pending.store(false, Ordering::Release);
+        }
+    }
+
+    fn foreground_key(&self) -> ForegroundKey {
+        ForegroundKey {
+            generation: self.foreground_generation.load(Ordering::Acquire),
+            pid: foreground_pid(),
         }
     }
 }
@@ -202,6 +225,7 @@ impl MonitorService {
             sender,
             admitted: Arc::new(AtomicBool::new(true)),
             foreground_pending: Arc::new(AtomicBool::new(false)),
+            foreground_generation: Arc::new(AtomicU64::new(0)),
             config_pending: Arc::new(AtomicBool::new(false)),
             hook_available: Arc::new(AtomicBool::new(false)),
             shutdown_budget: Arc::new(AtomicUsize::new(SHUTDOWN_ATTEMPT_BUDGET)),
@@ -404,6 +428,7 @@ impl Drop for OwnedHandle {
 struct TrackedProcess {
     identity: ProcessIdentity,
     exe: String,
+    path: String,
     handle: Arc<OwnedHandle>,
 }
 
@@ -457,11 +482,11 @@ fn observe_foreground_pid(pid: u32) -> Result<Option<TrackedProcess>, String> {
             &mut length,
         )
     }
-    .map_err(|error| format!("Unable to read foreground executable: {error}"))?;
+    .map_err(|error| format!("Unable to read foreground executable for process {pid}: {error}"))?;
     let path = String::from_utf16_lossy(&path[..length as usize]);
     let exe = Path::new(&path)
         .file_name()
-        .ok_or("Foreground executable has no filename")?
+        .ok_or_else(|| format!("Foreground executable for process {pid} has no filename"))?
         .to_string_lossy()
         .to_lowercase();
     let mut created = FILETIME::default();
@@ -469,7 +494,7 @@ fn observe_foreground_pid(pid: u32) -> Result<Option<TrackedProcess>, String> {
     let mut kernel = FILETIME::default();
     let mut user = FILETIME::default();
     unsafe { GetProcessTimes(handle.0, &mut created, &mut exited, &mut kernel, &mut user) }
-        .map_err(|error| format!("Unable to identify foreground process lifetime: {error}"))?;
+        .map_err(|error| format!("Unable to identify foreground process {pid} lifetime: {error}"))?;
     let process = TrackedProcess {
         identity: ProcessIdentity {
             pid,
@@ -477,6 +502,7 @@ fn observe_foreground_pid(pid: u32) -> Result<Option<TrackedProcess>, String> {
                 | u64::from(created.dwLowDateTime),
         },
         exe,
+        path,
         handle,
     };
     if process.is_foreground() {
@@ -557,15 +583,20 @@ struct Debounce {
     seconds: u64,
 }
 
-fn actor_wait_timeout(debounce: Option<Debounce>, now: Instant) -> Duration {
+fn actor_wait_timeout(
+    debounce: Option<Debounce>,
+    watchdog_deadline: Instant,
+    now: Instant,
+) -> Duration {
+    let watchdog_wait = watchdog_deadline.saturating_duration_since(now);
     debounce
         .map(|timer| {
             timer
                 .deadline
                 .saturating_duration_since(now)
-                .min(FOREGROUND_WATCHDOG_INTERVAL)
+                .min(watchdog_wait)
         })
-        .unwrap_or(FOREGROUND_WATCHDOG_INTERVAL)
+        .unwrap_or(watchdog_wait)
 }
 
 fn take_expired_debounce(debounce: &mut Option<Debounce>, now: Instant) -> Option<Debounce> {
@@ -576,12 +607,103 @@ fn take_expired_debounce(debounce: &mut Option<Debounce>, now: Instant) -> Optio
     }
 }
 
-fn foreground_watchdog_changed(last_pid: &mut u32, current_pid: u32) -> bool {
-    if *last_pid == current_pid {
-        false
-    } else {
-        *last_pid = current_pid;
-        true
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ForegroundKey {
+    pid: u32,
+    generation: u64,
+}
+
+#[derive(Default)]
+struct ForegroundObservation {
+    key: Option<ForegroundKey>,
+    // This cache is independent of the activation retained for exit policy and owned cleanup.
+    process: Option<TrackedProcess>,
+    completed: bool,
+    failures: usize,
+    retry_at: Option<Instant>,
+    warning: Option<String>,
+}
+
+impl ForegroundObservation {
+    fn synchronize(&mut self, key: ForegroundKey) {
+        let changed_pid = self.key.map(|previous| previous.pid) != Some(key.pid);
+        // The retained handle binds the creation identity; a reused PID cannot keep it alive.
+        let exited = self.process.as_ref().is_some_and(|process| !process.is_alive());
+        if changed_pid || exited {
+            self.process = None;
+            self.completed = false;
+            self.failures = 0;
+            self.retry_at = None;
+            self.warning = None;
+        }
+        self.key = Some(key);
+    }
+
+    fn needs_observation(&mut self, key: ForegroundKey, now: Instant) -> bool {
+        self.synchronize(key);
+        !self.completed && self.retry_at.is_none_or(|deadline| deadline <= now)
+    }
+
+    fn retry(&mut self, now: Instant, message: String) {
+        // Exhaustion rearms one slow probe at a time, not another burst of fast retries.
+        let delay = FOREGROUND_RETRY_DELAYS
+            .get(self.failures)
+            .copied()
+            .unwrap_or(FOREGROUND_RECOVERY_INTERVAL);
+        self.failures = (self.failures + 1).min(FOREGROUND_RETRY_DELAYS.len());
+        self.retry_at = Some(now + delay);
+        if self.warning.as_ref() != Some(&message) {
+            eprintln!("{message}");
+            self.warning = Some(message);
+        }
+    }
+
+    fn sample(
+        &mut self,
+        key: ForegroundKey,
+        now: Instant,
+        inspect: impl FnOnce(u32) -> Result<Option<TrackedProcess>, String>,
+        current: impl FnOnce() -> (ForegroundKey, Instant),
+    ) -> Option<TrackedProcess> {
+        if !self.needs_observation(key, now) {
+            return self.process.clone();
+        }
+        let result = inspect(key.pid);
+        let (latest, finished) = current();
+        self.synchronize(latest);
+        if latest != key {
+            if latest.pid == key.pid {
+                self.retry(finished, format!(
+                    "Foreground process {} changed during inspection; retrying", key.pid
+                ));
+            }
+            return None;
+        }
+        let failure = match result {
+            Ok(Some(process)) if process.identity.pid == key.pid && process.is_alive() => {
+                self.process = Some(process);
+                None
+            }
+            Ok(None) if key.pid == 0 => None,
+            Ok(_) => Some(format!(
+                "Foreground process {} was not fully observed; retrying", key.pid
+            )),
+            Err(error) => Some(error),
+        };
+        if let Some(message) = failure {
+            self.process = None;
+            self.retry(finished, message);
+        } else {
+            self.completed = true;
+            self.failures = 0;
+            self.retry_at = None;
+            self.warning = None;
+        }
+        self.process.clone()
+    }
+
+    fn warnings(&self, persistent: Option<String>) -> Vec<String> {
+        persistent.into_iter().chain(self.warning.clone()).collect()
     }
 }
 
@@ -592,29 +714,19 @@ enum OperationKind {
     Cleanup,
 }
 
-fn matches_app(app: &HdrApp, exe: &str) -> bool {
-    app.exe_name.eq_ignore_ascii_case(exe)
-        || app
-            .alternate_exes
-            .iter()
-            .any(|alternate| alternate.eq_ignore_ascii_case(exe))
-}
-
+#[cfg(test)]
 fn eligible_app<'a>(config: &'a AppConfig, exe: &str) -> Option<&'a HdrApp> {
-    if config
-        .blacklist
-        .iter()
-        .any(|blocked| blocked.eq_ignore_ascii_case(exe))
-    {
-        return None;
-    }
-    config
-        .apps
-        .iter()
-        .find(|app| app.enabled && matches_app(app, exe))
+    config.resolve_app(None, exe).matched()
 }
 
+#[cfg(test)]
 fn automatic_pause(snapshot: &ConfigSnapshot, exe: &str, origin_context: &str) -> Option<String> {
+    automatic_pause_for_path(snapshot, None, exe, origin_context)
+}
+
+fn automatic_pause_for_path(
+    snapshot: &ConfigSnapshot, path: Option<&str>, exe: &str, origin_context: &str,
+) -> Option<String> {
     if let Some(issue) = &snapshot.controller_issue {
         return Some(issue.clone());
     }
@@ -634,10 +746,44 @@ fn automatic_pause(snapshot: &ConfigSnapshot, exe: &str, origin_context: &str) -
             "Native HDR consent is required; keyboard-shortcut automation is disabled".into(),
         );
     }
-    if eligible_app(&snapshot.settings, exe).is_none() {
+    if snapshot.settings.resolve_app(path, exe).matched().is_none() {
         return Some("The tracked application is no longer eligible for automatic HDR".into());
     }
     None
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum UnmatchedAction {
+    Finish,
+    KeepUntilExit,
+    Debounce,
+}
+
+fn unmatched_action(eligible: bool, alive: bool, exit_only: bool, expired: bool) -> UnmatchedAction {
+    if !eligible || !alive {
+        UnmatchedAction::Finish
+    } else if exit_only {
+        UnmatchedAction::KeepUntilExit
+    } else if expired {
+        UnmatchedAction::Finish
+    } else {
+        UnmatchedAction::Debounce
+    }
+}
+
+#[derive(Default)]
+struct StatusPublication {
+    last: Option<HdrStatePayload>,
+}
+
+impl StatusPublication {
+    fn changed(&self, payload: &HdrStatePayload) -> bool {
+        self.last.as_ref() != Some(payload)
+    }
+
+    fn published(&mut self, payload: HdrStatePayload) {
+        self.last = Some(payload);
+    }
 }
 
 fn publish_enrollment_result(
@@ -738,8 +884,9 @@ impl WriteAuthority for Authority {
                                 .into(),
                         );
                     }
-                    if let Some(reason) = automatic_pause(
+                    if let Some(reason) = automatic_pause_for_path(
                         snapshot,
+                        Some(&process.path),
                         &process.exe,
                         self.context_token.as_deref().unwrap_or(""),
                     ) {
@@ -776,8 +923,9 @@ struct Actor {
     tracked: Option<TrackedProcess>,
     watcher: Option<ProcessWatcher>,
     debounce: Option<Debounce>,
-    last_foreground_pid: u32,
+    foreground_observation: ForegroundObservation,
     last_outcomes: Vec<MonitorOutcome>,
+    publication: StatusPublication,
 }
 
 impl Actor {
@@ -790,8 +938,9 @@ impl Actor {
             tracked: None,
             watcher: None,
             debounce: None,
-            last_foreground_pid: u32::MAX,
+            foreground_observation: ForegroundObservation::default(),
             last_outcomes: Vec::new(),
+            publication: StatusPublication::default(),
         }
     }
 
@@ -811,38 +960,34 @@ impl Actor {
     }
 
     fn run(mut self, receiver: Receiver<Command>) {
+        let mut watchdog_deadline = Instant::now() + FOREGROUND_WATCHDOG_INTERVAL;
         loop {
-            if self
-                .debounce
-                .is_some_and(|timer| timer.deadline <= Instant::now())
-            {
-                let expired = self.debounce.take();
+            let now = Instant::now();
+            let expired = take_expired_debounce(&mut self.debounce, now);
+            let watchdog_due = watchdog_deadline <= now;
+            if expired.is_some() || watchdog_due {
                 if self.events.admitted.load(Ordering::Acquire) {
-                    let _ = self.observe(expired, true);
-                    self.publish();
+                    if expired.is_some()
+                        || self.foreground_observation.needs_observation(
+                            self.events.foreground_key(), now,
+                        )
+                    {
+                        let _ = self.observe(expired, true);
+                        self.publish();
+                    }
+                }
+                if watchdog_due {
+                    // Schedule from completion rather than hot-looping to catch up after slow work.
+                    watchdog_deadline = Instant::now() + FOREGROUND_WATCHDOG_INTERVAL;
                 }
                 continue;
             }
-            let received = receiver.recv_timeout(actor_wait_timeout(self.debounce, Instant::now()));
+            let received = receiver.recv_timeout(actor_wait_timeout(
+                self.debounce, watchdog_deadline, Instant::now(),
+            ));
             let command = match received {
                 Ok(command) => command,
-                Err(RecvTimeoutError::Timeout) => {
-                    let now = Instant::now();
-                    let expired = take_expired_debounce(&mut self.debounce, now);
-                    if self.events.admitted.load(Ordering::Acquire) {
-                        let current_pid = foreground_pid();
-                        if expired.is_some()
-                            || foreground_watchdog_changed(
-                                &mut self.last_foreground_pid,
-                                current_pid,
-                            )
-                        {
-                            let _ = self.observe(expired, true);
-                            self.publish();
-                        }
-                    }
-                    continue;
-                }
+                Err(RecvTimeoutError::Timeout) => continue,
                 Err(RecvTimeoutError::Disconnected) => break,
             };
             match command {
@@ -946,35 +1091,20 @@ impl Actor {
             || origin.controller_issue.is_some()
             || !matches!(origin.settings.switch_method, SwitchMethod::Native)
             || !origin.settings.auto_detect_new_games
-            || origin
-                .settings
-                .blacklist
-                .iter()
-                .any(|exe| exe.eq_ignore_ascii_case(&process.exe))
-            || origin
-                .settings
-                .apps
-                .iter()
-                .any(|app| matches_app(app, &process.exe))
+            || origin.settings.resolve_app(Some(&process.path), &process.exe) != Resolution::NoMatch
         {
             return;
         }
-        let Some(entry) = crate::database::find_in_catalog(&process.exe) else {
+        // A foreground basename is not verified provider/install evidence.
+        let crate::automatic_authority::Authority::Resolved(resolved) =
+            crate::automatic_authority::resolve(&crate::database::get_full_catalog(), None)
+        else {
             return;
         };
         if !process.is_foreground() {
             return;
         }
-        let app = HdrApp {
-            name: entry.name,
-            exe_name: process.exe.clone(),
-            enabled: true,
-            hdr_type: entry.hdr_type,
-            path: None,
-            alternate_exes: Vec::new(),
-            steam_id: entry.steam_id,
-            launcher: None,
-        };
+        let app = resolved.as_app(origin.settings.auto_detect_new_games);
         let admitted = self.events.admitted.clone();
         let hook_available = self.events.hook_available.clone();
         let result = self.config.mutate(
@@ -987,15 +1117,8 @@ impl Actor {
                     || !process.is_foreground()
                     || !current.auto_detect_new_games
                     || !matches!(current.switch_method, SwitchMethod::Native)
-                    || current
-                        .blacklist
-                        .iter()
-                        .any(|exe| exe.eq_ignore_ascii_case(&process.exe))
-                    || current.apps.iter().any(|existing| {
-                        matches_app(existing, &process.exe)
-                            || existing.name.eq_ignore_ascii_case(&app.name)
-                            || (app.steam_id.is_some() && existing.steam_id == app.steam_id)
-                    })
+                    || current.resolve_app(Some(&process.path), &process.exe) != Resolution::NoMatch
+                    || crate::library::automatic_enrollment_veto(&current.apps, &app)
                 {
                     return Err("Automatic enrollment is no longer eligible".into());
                 }
@@ -1048,24 +1171,18 @@ impl Actor {
                 return Err(error);
             }
         };
-        let current_pid = foreground_pid();
-        self.last_foreground_pid = current_pid;
-        let foreground = match observe_foreground_pid(current_pid) {
-            Ok(foreground) => foreground,
-            Err(error) => {
-                self.controller.warn(error);
-                self.tracked
-                    .as_ref()
-                    .filter(|process| process.is_foreground())
-                    .cloned()
-            }
-        };
+        let foreground = self.foreground_observation.sample(
+            self.events.foreground_key(),
+            Instant::now(),
+            observe_foreground_pid,
+            || (self.events.foreground_key(), Instant::now()),
+        );
         if let Some(process) = &foreground {
             self.enroll(&origin, process);
         }
         let snapshot = self.config.snapshot()?;
         let game = foreground.filter(|process| {
-            automatic_pause(&snapshot, &process.exe, &snapshot.context_token).is_none()
+            automatic_pause_for_path(&snapshot, Some(&process.path), &process.exe, &snapshot.context_token).is_none()
                 && process.is_foreground()
                 && self.events.hook_available.load(Ordering::Acquire)
         });
@@ -1078,32 +1195,36 @@ impl Actor {
                     .transfer(process.identity, process.exe.clone());
                 self.tracked = Some(process.clone());
                 self.debounce = None;
-            } else if automatic_pause(&snapshot, &active.exe, &active.context_token).is_some()
-                || !self.tracked.as_ref().is_some_and(TrackedProcess::is_alive)
-            {
-                self.finish_activation(usize::MAX);
-            } else if snapshot.settings.exit_only_hdr {
-                self.debounce = None;
-            } else if expired.is_some_and(|timer| {
-                self.controller
-                    .matches_activation(timer.generation, timer.process)
-            }) {
-                self.finish_activation(usize::MAX);
             } else {
-                let seconds = snapshot.settings.alt_tab_delay_seconds;
-                if !self.debounce.is_some_and(|timer| {
-                    timer.generation == active.generation && timer.seconds == seconds
-                }) {
-                    let delay = Duration::from_secs(seconds);
-                    let deadline = Instant::now()
-                        .checked_add(delay)
-                        .unwrap_or_else(|| Instant::now() + Duration::from_secs(86400));
-                    self.debounce = Some(Debounce {
-                        deadline,
-                        generation: active.generation,
-                        process: active.process,
-                        seconds,
-                    });
+                let action = unmatched_action(
+                    automatic_pause_for_path(
+                        &snapshot, self.tracked.as_ref().map(|process| process.path.as_str()),
+                        &active.exe, &active.context_token,
+                    ).is_none(),
+                    self.tracked.as_ref().is_some_and(TrackedProcess::is_alive),
+                    snapshot.settings.exit_only_hdr,
+                    expired.is_some_and(|timer| self.controller.matches_activation(timer.generation, timer.process)),
+                );
+                match action {
+                    UnmatchedAction::Finish => self.finish_activation(usize::MAX),
+                    UnmatchedAction::KeepUntilExit => self.debounce = None,
+                    UnmatchedAction::Debounce => {
+                        let seconds = snapshot.settings.alt_tab_delay_seconds;
+                        if !self.debounce.is_some_and(|timer| {
+                            timer.generation == active.generation && timer.seconds == seconds
+                        }) {
+                            let delay = Duration::from_secs(seconds);
+                            let deadline = Instant::now()
+                                .checked_add(delay)
+                                .unwrap_or_else(|| Instant::now() + Duration::from_secs(86400));
+                            self.debounce = Some(Debounce {
+                                deadline,
+                                generation: active.generation,
+                                process: active.process,
+                                seconds,
+                            });
+                        }
+                    }
                 }
             }
         }
@@ -1153,7 +1274,10 @@ impl Actor {
             return;
         };
         let reason = match self.config.snapshot() {
-            Ok(snapshot) => automatic_pause(&snapshot, &active.exe, &active.context_token),
+            Ok(snapshot) => automatic_pause_for_path(
+                &snapshot, self.tracked.as_ref().map(|process| process.path.as_str()),
+                &active.exe, &active.context_token,
+            ),
             Err(error) => Some(error),
         };
         let reason = reason.or_else(|| {
@@ -1195,7 +1319,7 @@ impl Actor {
         // foreground must not produce an automatic On followed by a second hidden setter.
         let _ = self.controller.refresh_inventory();
         if let Ok(Some(process)) = observe_foreground() {
-            if automatic_pause(&snapshot, &process.exe, &snapshot.context_token).is_none() {
+            if automatic_pause_for_path(&snapshot, Some(&process.path), &process.exe, &snapshot.context_token).is_none() {
                 if self.controller.activation().is_none() {
                     match self.controller.begin(
                         process.identity,
@@ -1278,13 +1402,11 @@ impl Actor {
     fn payload(&self, snapshot: &ConfigSnapshot) -> HdrStatePayload {
         let active = self.controller.activation();
         let app = active.and_then(|active| {
-            snapshot
-                .settings
-                .apps
-                .iter()
-                .find(|app| matches_app(app, &active.exe))
+            snapshot.settings.resolve_app(
+                self.tracked.as_ref().map(|process| process.path.as_str()), &active.exe,
+            ).matched()
         });
-        let mut warnings: Vec<String> = self.controller.warning().into_iter().collect();
+        let mut warnings = self.foreground_observation.warnings(self.controller.warning());
         if let Some(issue) = &snapshot.issue {
             warnings.push(issue.clone());
         }
@@ -1343,6 +1465,7 @@ impl Actor {
             } else {
                 Some(warnings.join("\n"))
             },
+            quarantined_apps: quarantined_apps(&snapshot.settings),
             target_status,
             active_target: active.map(|active| active.target.clone()),
             target_deferred,
@@ -1362,14 +1485,14 @@ impl Actor {
         let mut payload = match self.config.snapshot() {
             Ok(snapshot) => self.payload(&snapshot),
             Err(error) => {
-                let warning = self
-                    .controller
-                    .warning()
-                    .map(|warning| format!("{warning}\n{error}"))
-                    .unwrap_or(error);
-                HdrStatePayload::unavailable(warning)
+                let mut warnings = self.foreground_observation.warnings(self.controller.warning());
+                warnings.push(error);
+                HdrStatePayload::unavailable(warnings.join("\n"))
             }
         };
+        if !self.publication.changed(&payload) {
+            return;
+        }
         if let Err(error) = self.app.emit("hdr-status-changed", payload.clone()) {
             let warning = format!("Unable to publish HDR status: {error}");
             eprintln!("{warning}");
@@ -1378,6 +1501,8 @@ impl Actor {
                 Some(existing) => format!("{existing}\n{warning}"),
                 None => warning,
             });
+        } else {
+            self.publication.published(payload.clone());
         }
         crate::tray::update_status(&self.app, &payload);
     }
@@ -1472,6 +1597,7 @@ mod tests {
                 sender,
                 admitted: Arc::new(AtomicBool::new(true)),
                 foreground_pending: Arc::new(AtomicBool::new(false)),
+                foreground_generation: Arc::new(AtomicU64::new(0)),
                 config_pending: Arc::new(AtomicBool::new(false)),
                 hook_available: Arc::new(AtomicBool::new(true)),
                 shutdown_budget: Arc::new(AtomicUsize::new(SHUTDOWN_ATTEMPT_BUDGET)),
@@ -1702,6 +1828,268 @@ mod tests {
     }
 
     #[test]
+    fn verified_metadata_noop_does_not_write_publish_or_wake() {
+        let fixture = GateFixture::new();
+        let before = fixture.ready();
+        let bytes = std::fs::read(&before.config_path).unwrap();
+        let (service, receiver) = idle_service(fixture.manager.clone());
+        let unchanged = fixture.manager.mutate_if_changed(
+            &before.context_token, Some(&before.library_generation), true, |settings| {
+                assert!(!crate::library::enrich_verified_metadata(settings, &[]));
+                Ok(())
+            },
+        );
+        assert!(matches!(&unchanged, Ok(None)));
+        crate::background::publish_enrichment_result(
+            &fixture.manager, &service, unchanged, |_| panic!("no-op emitted"),
+        );
+        assert!(receiver.try_recv().is_err());
+        assert_eq!(fixture.manager.snapshot().unwrap(), before);
+        assert_eq!(std::fs::read(&before.config_path).unwrap(), bytes);
+    }
+
+    #[test]
+    fn correction_cache_untrusted_catalog_cannot_write_publish_or_wake_enrichment() {
+        use crate::automatic_authority::{self, Authority as GameAuthority, InstallEvidence, Provider};
+        let root = tempfile::tempdir().unwrap();
+        for exe in ["untrusted.exe", "extra.exe"] {
+            std::fs::write(root.path().join(exe), b"fixture, never executed").unwrap();
+        }
+        let catalog: Vec<crate::database::CatalogEntry> = serde_json::from_value(serde_json::json!([{
+            "name": "Downloaded title", "exe_name": "untrusted.exe", "steam_id": "123",
+            "hdr_type": "native", "support_tier": "native", "alternate_exes": ["extra.exe"],
+        }])).unwrap();
+        for provider in [Provider::Epic, Provider::Gog, Provider::Windows] {
+            let fixture = GateFixture::new();
+            let ready = fixture.ready();
+            let before = fixture.manager.mutate(&ready.context_token, None, true, |settings| {
+                settings.apps[0].exe_name = "untrusted.exe".into();
+                settings.apps[0].enabled = false;
+                Ok(())
+            }).unwrap();
+            let bytes = std::fs::read(&before.config_path).unwrap();
+            let evidence = InstallEvidence::observe(
+                provider, None, root.path(), &["untrusted.exe".into(), "extra.exe".into()],
+            ).unwrap();
+            let verified = match automatic_authority::resolve(&catalog, Some(&evidence)) {
+                GameAuthority::Resolved(resolved) => vec![resolved],
+                _ => Vec::new(),
+            };
+            let (service, receiver) = idle_service(fixture.manager.clone());
+            let unchanged = fixture.manager.mutate_if_changed(
+                &before.context_token, Some(&before.library_generation), true, |settings| {
+                    crate::library::enrich_verified_aliases(settings, &verified);
+                    crate::library::enrich_verified_metadata(settings, &verified);
+                    Ok(())
+                },
+            );
+            assert!(matches!(&unchanged, Ok(None)), "{provider:?}: untrusted catalog changed settings");
+            assert!(verified.is_empty(), "{provider:?}: an automatic row acquired authority");
+            crate::background::publish_enrichment_result(
+                &fixture.manager, &service, unchanged, |_| panic!("untrusted catalog emitted"),
+            );
+            assert!(receiver.try_recv().is_err());
+            assert_eq!(fixture.manager.snapshot().unwrap(), before);
+            assert_eq!(std::fs::read(&before.config_path).unwrap(), bytes);
+        }
+    }
+
+    #[test]
+    fn verified_aoe3_alias_enrichment_publishes_once_then_is_byte_and_actor_noop() {
+        use crate::automatic_authority::{self, Authority as GameAuthority, InstallEvidence, Provider};
+        let fixture = GateFixture::new();
+        let ready = fixture.ready();
+        let install = fixture._directory.path().join(r"XboxGames\AOE3");
+        std::fs::create_dir_all(install.join("Content")).unwrap();
+        std::fs::write(install.join(r"Content\AoE3DE.exe"), b"fixture, never executed").unwrap();
+        std::fs::write(install.join(r"Content\GameLaunchHelper.exe"), b"fixture, never executed").unwrap();
+        std::fs::write(install.join(r"Content\MicrosoftGame.config"), br#"<Game><ExecutableList>
+            <Executable Name="AoE3DE.exe"/><Executable Name="GameLaunchHelper.exe"/>
+            </ExecutableList></Game>"#).unwrap();
+        let declarations = crate::xbox_config::declarations(&install).unwrap();
+        let evidence = InstallEvidence::observe(Provider::Xbox, None, &install, &declarations).unwrap();
+        let catalog: Vec<crate::database::CatalogEntry> =
+            serde_json::from_str(include_str!("../catalog.json")).unwrap();
+        let catalog = crate::database::authored_test_catalog(catalog);
+        let GameAuthority::Resolved(resolved) = automatic_authority::resolve(&catalog, Some(&evidence))
+        else { panic!("AOE3 Xbox fixture must resolve"); };
+        assert_eq!(resolved.as_app(true).exe_name, "aoe3de.exe");
+        assert!(resolved.as_app(true).alternate_exes.is_empty());
+        let before = fixture.manager.mutate(&ready.context_token, None, true, |settings| {
+            let row = &mut settings.apps[0];
+            row.exe_name = resolved.catalog.exe_name.clone();
+            row.name = "My custom AOE3 title".into();
+            row.enabled = false;
+            row.hdr_type = HdrType::Custom;
+            row.launcher = Some("Xbox".into());
+            Ok(())
+        }).unwrap();
+        let (service, receiver) = idle_service(fixture.manager.clone());
+        let mut publications = 0;
+        for attempt in 0..5 {
+            let origin = fixture.manager.snapshot().unwrap();
+            let bytes = std::fs::read(&origin.config_path).unwrap();
+            let changed = fixture.manager.mutate_if_changed(
+                &origin.context_token, Some(&origin.library_generation), true,
+                |settings| {
+                    assert_eq!(crate::library::enrich_verified_aliases(
+                        settings, std::slice::from_ref(&resolved),
+                    ), attempt == 0);
+                    Ok(())
+                },
+            );
+            assert_eq!(matches!(&changed, Ok(Some(_))), attempt == 0);
+            crate::background::publish_enrichment_result(
+                &fixture.manager, &service, changed, |_| publications += 1,
+            );
+            if attempt == 0 {
+                assert!(matches!(receiver.try_recv(), Ok(Command::ConfigCommitted)));
+                service.events.config_pending.store(false, Ordering::Release);
+            } else {
+                assert!(receiver.try_recv().is_err());
+                assert_eq!(fixture.manager.snapshot().unwrap(), origin);
+                assert_eq!(std::fs::read(&origin.config_path).unwrap(), bytes);
+            }
+        }
+        assert_eq!(publications, 1);
+        let after = fixture.manager.snapshot().unwrap();
+        let mut expected = before.settings.apps[0].clone();
+        expected.alternate_exes = vec!["aoe3de.exe".into()];
+        assert_eq!(after.settings.apps, [expected]);
+        assert_eq!(after.settings.resolve_app(None, "AoE3DE.exe"), Resolution::Disabled);
+        assert_eq!(after.settings.resolve_app(None, "GameLaunchHelper.exe"), Resolution::Excluded);
+        assert_eq!(after.revision.parse::<u64>().unwrap(), before.revision.parse::<u64>().unwrap() + 1);
+    }
+
+    #[test]
+    fn known_id_creation_veto_is_not_merge_authority_and_is_persistently_quiet() {
+        use crate::automatic_authority::{self, Authority as GameAuthority, InstallEvidence, Provider};
+        let root = tempfile::tempdir().unwrap();
+        for exe in ["game.exe", "renderer.exe"] {
+            std::fs::write(root.path().join(exe), b"fixture, never executed").unwrap();
+        }
+        let catalog = vec![serde_json::from_value::<crate::database::CatalogEntry>(serde_json::json!({
+            "name": "Catalog game", "exe_name": "game.exe", "steam_id": "123",
+            "hdr_type": "native", "support_tier": "native", "alternate_exes": ["renderer.exe"],
+        })).unwrap()];
+        let catalog = crate::database::authored_test_catalog(catalog);
+        let evidence = InstallEvidence::observe(Provider::Steam, Some("123"), root.path(), &[]).unwrap();
+        let GameAuthority::Resolved(resolved) = automatic_authority::resolve(&catalog, Some(&evidence))
+        else { panic!("fixture must resolve"); };
+        for enabled in [false, true] {
+            for equal_id in [false, true] {
+                let fixture = GateFixture::new();
+                let ready = fixture.ready();
+                let before = fixture.manager.mutate(&ready.context_token, None, true, |settings| {
+                    let row = &mut settings.apps[0];
+                    row.name = "My independent binding".into();
+                    row.exe_name = if equal_id { "my-choice.exe" } else { "game.exe" }.into();
+                    row.steam_id = Some(if equal_id { "123" } else { "999" }.into());
+                    row.launcher = Some("Steam".into());
+                    row.enabled = enabled;
+                    Ok(())
+                }).unwrap();
+                let bytes = std::fs::read(&before.config_path).unwrap();
+                let (service, receiver) = idle_service(fixture.manager.clone());
+                assert!(crate::library::automatic_enrollment_veto(&before.settings.apps, &resolved.as_app(true)));
+                let unchanged = fixture.manager.mutate_if_changed(
+                    &before.context_token, Some(&before.library_generation), true, |settings| {
+                        assert!(!crate::library::enrich_verified_aliases(settings, std::slice::from_ref(&resolved)));
+                        assert!(!crate::library::enrich_verified_metadata(settings, std::slice::from_ref(&resolved)));
+                        Ok(())
+                    },
+                );
+                assert!(matches!(&unchanged, Ok(None)));
+                crate::background::publish_enrichment_result(
+                    &fixture.manager, &service, unchanged, |_| panic!("ID-only/ID-conflict emitted"),
+                );
+                assert!(receiver.try_recv().is_err());
+                assert_eq!(fixture.manager.snapshot().unwrap(), before);
+                assert_eq!(std::fs::read(&before.config_path).unwrap(), bytes);
+            }
+        }
+    }
+
+    #[test]
+    fn legacy_aoe4_quarantine_is_derived_quiet_and_repair_retires_status() {
+        let fixture = GateFixture::new();
+        let ready = fixture.ready();
+        let before = fixture.manager.mutate(&ready.context_token, None, true, |settings| {
+            let row = &mut settings.apps[0];
+            row.name = "My Age of Empires IV".into();
+            row.exe_name = "BsSndRpt64.exe".into();
+            row.path = Some(r"D:\AOE4\BsSndRpt64.exe".into());
+            row.alternate_exes = vec!["historical.exe".into(), "BugSplatHD64.exe".into()];
+            row.enabled = false;
+            row.hdr_type = HdrType::Custom;
+            row.steam_id = Some("1466860".into());
+            row.launcher = Some("My launcher".into());
+            Ok(())
+        }).unwrap();
+        let bytes = std::fs::read(&before.config_path).unwrap();
+        let (service, receiver) = idle_service(fixture.manager.clone());
+        let mut publication = StatusPublication::default();
+        let mut publications = 0;
+        for _ in 0..100 {
+            let latest = fixture.manager.snapshot().unwrap();
+            assert_eq!(latest.settings.resolve_app(None, "historical.exe"), Resolution::Quarantined);
+            assert_eq!(latest.settings.resolve_app(None, "BsSndRpt64.exe"), Resolution::Excluded);
+            let mut payload = HdrStatePayload::unavailable("test display unavailable".into());
+            payload.quarantined_apps = quarantined_apps(&latest.settings);
+            assert_eq!(payload.quarantined_apps, [QuarantinedApp {
+                name: "My Age of Empires IV".into(), exe_name: "BsSndRpt64.exe".into(),
+            }]);
+            if publication.changed(&payload) {
+                publications += 1;
+                publication.published(payload);
+            }
+        }
+        assert_eq!(publications, 1);
+        assert_eq!(fixture.manager.snapshot().unwrap(), before);
+        assert_eq!(std::fs::read(&before.config_path).unwrap(), bytes);
+        assert!(receiver.try_recv().is_err(), "derivation must not wake the actor");
+
+        let invalid = fixture.manager.mutate(
+            &before.context_token, Some(&before.library_generation), true,
+            |settings| crate::library::repair_executable(
+                settings, "BsSndRpt64.exe", "GameLaunchHelper.exe", r"D:\AOE4\GameLaunchHelper.exe",
+            ),
+        );
+        assert!(invalid.is_err());
+        assert_eq!(fixture.manager.snapshot().unwrap(), before);
+        assert_eq!(std::fs::read(&before.config_path).unwrap(), bytes);
+
+        // A fixture-selected executable, not a claim about AOE4's real binary.
+        let repaired = fixture.manager.mutate(
+            &before.context_token, Some(&before.library_generation), true,
+            |settings| crate::library::repair_executable(
+                settings, "BsSndRpt64.exe", "user-selected.exe", r"D:\AOE4\user-selected.exe",
+            ),
+        ).unwrap();
+        let mut expected = before.settings.apps[0].clone();
+        expected.exe_name = "user-selected.exe".into();
+        expected.path = Some(r"D:\AOE4\user-selected.exe".into());
+        expected.alternate_exes.clear();
+        assert_eq!(repaired.settings.apps, [expected]);
+        assert!(quarantined_apps(&repaired.settings).is_empty());
+        assert_eq!(repaired.settings.resolve_app(None, "historical.exe"), Resolution::NoMatch);
+        assert_eq!(repaired.settings.resolve_app(
+            Some(r"D:\AOE4\user-selected.exe"), "user-selected.exe",
+        ), Resolution::Disabled);
+        let mut payload = publication.last.clone().unwrap();
+        payload.quarantined_apps = quarantined_apps(&repaired.settings);
+        assert!(publication.changed(&payload));
+        publication.published(payload.clone());
+        assert!(!publication.changed(&payload));
+        assert_eq!(repaired.revision.parse::<u64>().unwrap(), before.revision.parse::<u64>().unwrap() + 1);
+        assert!(fixture.manager.mutate(
+            &before.context_token, Some(&before.library_generation), true,
+            |_| panic!("stale repair must not reach a mutation"),
+        ).is_err());
+        drop(service);
+    }
+
+    #[test]
     fn unchanged_enrichment_is_quiet_but_real_changes_and_conflicts_wake_the_actor() {
         let fixture = GateFixture::new();
         let before = fixture.ready();
@@ -1866,6 +2254,7 @@ mod tests {
         let events = &service.events;
         events.foreground();
         events.foreground();
+        assert_eq!(events.foreground_generation.load(Ordering::Acquire), 2);
         assert!(matches!(
             receiver.try_recv(),
             Ok(Command::ForegroundObserved)
@@ -1881,6 +2270,7 @@ mod tests {
         events.foreground();
         service.config_committed();
         assert!(receiver.try_recv().is_err());
+        assert_eq!(events.foreground_generation.load(Ordering::Acquire), 2);
     }
 
     #[test]
@@ -1951,13 +2341,470 @@ mod tests {
     }
 
     #[test]
-    fn foreground_watchdog_only_runs_full_observation_after_a_pid_change() {
-        let mut last_pid = u32::MAX;
-        assert!(foreground_watchdog_changed(&mut last_pid, 42));
-        assert_eq!(last_pid, 42);
-        assert!(!foreground_watchdog_changed(&mut last_pid, 42));
-        assert!(foreground_watchdog_changed(&mut last_pid, 7));
-        assert_eq!(last_pid, 7);
+    fn foreground_retries_unchanged_pid_after_error_or_incomplete_observation() {
+        for incomplete in [false, true] {
+            let now = Instant::now();
+            let key = observation_key(42);
+            let mut observation = ForegroundObservation::default();
+            let result = if incomplete { Ok(None) } else { Err("Access denied".into()) };
+            assert!(sample_at(&mut observation, key, now, result).is_none());
+            assert!(observation.warning.is_some());
+            let deadline = now + FOREGROUND_RETRY_DELAYS[0];
+            assert_eq!(observation.retry_at, Some(deadline));
+            assert!(!observation.needs_observation(key, deadline - Duration::from_millis(1)));
+            assert!(observation.needs_observation(key, deadline));
+            let process = test_process(42, 100, "game.exe");
+            let recovered = sample_at(
+                &mut observation, key, deadline, Ok(Some(process.clone())),
+            ).unwrap();
+            assert_eq!(recovered.identity, process.identity);
+            assert!(observation.warning.is_none());
+            assert!(observation.retry_at.is_none());
+        }
+    }
+
+    fn observation_key(pid: u32) -> ForegroundKey {
+        ForegroundKey { pid, generation: 1 }
+    }
+
+    fn test_process(pid: u32, created_at: u64, exe: &str) -> TrackedProcess {
+        // An owned, unnamed event gives deterministic live/exited handle waits without a real app.
+        let handle = unsafe { CreateEventW(None, true, false, None) }.unwrap();
+        TrackedProcess {
+            identity: ProcessIdentity { pid, created_at },
+            exe: exe.into(),
+            path: format!(r"C:\Fixture\{exe}"),
+            handle: Arc::new(OwnedHandle(handle)),
+        }
+    }
+
+    fn sample_at(
+        observation: &mut ForegroundObservation,
+        key: ForegroundKey,
+        now: Instant,
+        result: Result<Option<TrackedProcess>, String>,
+    ) -> Option<TrackedProcess> {
+        observation.sample(key, now, |_| result, || (key, now))
+    }
+
+    #[test]
+    fn foreground_backoff_is_bounded_and_exhaustion_rearms_at_a_slow_cadence() {
+        let mut now = Instant::now();
+        let key = observation_key(42);
+        let mut observation = ForegroundObservation::default();
+        for seconds in [1, 2, 4, 30, 30, 30, 30] {
+            let delay = Duration::from_secs(seconds);
+            assert!(sample_at(&mut observation, key, now, Err("Access denied".into())).is_none());
+            let deadline = now + delay;
+            assert_eq!(observation.retry_at, Some(deadline));
+            for offset in [Duration::ZERO, delay / 2, delay - Duration::from_millis(1)] {
+                assert!(observation.sample(
+                    key, now + offset,
+                    |_| panic!("inspection ran before its deadline"),
+                    || panic!("no inspection should be in flight"),
+                ).is_none());
+                assert_eq!(observation.retry_at, Some(deadline));
+            }
+            assert!(observation.needs_observation(key, deadline));
+            now = deadline;
+        }
+        let recovered = sample_at(
+            &mut observation, key, now, Ok(Some(test_process(42, 100, "game.exe"))),
+        ).unwrap();
+        assert_eq!(recovered.exe, "game.exe");
+        assert!(!observation.needs_observation(key, now + Duration::from_secs(300)));
+    }
+
+    #[test]
+    fn foreground_stable_success_only_checks_the_cached_handle_on_watchdog_ticks() {
+        let now = Instant::now();
+        let key = observation_key(42);
+        let mut observation = ForegroundObservation::default();
+        let process = test_process(42, 100, "unlisted.exe");
+        sample_at(&mut observation, key, now, Ok(Some(process.clone()))).unwrap();
+        for tick in 1..=120 {
+            let later = now + FOREGROUND_WATCHDOG_INTERVAL * tick;
+            assert!(!observation.needs_observation(key, later));
+            let cached = observation.sample(
+                key, later,
+                |_| panic!("a stable process must not be reinspected"),
+                || panic!("a cached result has no in-flight observation"),
+            ).unwrap();
+            assert_eq!(cached.identity, process.identity);
+        }
+        let same_process_new_hint = ForegroundKey { generation: 2, ..key };
+        assert!(!observation.needs_observation(same_process_new_hint, now));
+    }
+
+    #[test]
+    fn foreground_status_config_and_coalesced_hints_cannot_postpone_retry() {
+        let now = Instant::now();
+        let watchdog_deadline = now + FOREGROUND_WATCHDOG_INTERVAL;
+        let key = observation_key(42);
+        let mut observation = ForegroundObservation::default();
+        sample_at(&mut observation, key, now, Err("Access denied".into()));
+        let retry_deadline = observation.retry_at.unwrap();
+        for command in 1..=100 {
+            let at = now + Duration::from_millis(command * 10);
+            assert_eq!(
+                actor_wait_timeout(None, watchdog_deadline, at),
+                watchdog_deadline.saturating_duration_since(at),
+            );
+            let key = ForegroundKey { generation: command, ..key };
+            if at < retry_deadline {
+                assert!(observation.sample(
+                    key, at,
+                    |_| panic!("config traffic bypassed retry backoff"),
+                    || panic!("no inspection should be in flight"),
+                ).is_none());
+                assert_eq!(observation.retry_at, Some(retry_deadline));
+            } else {
+                assert!(sample_at(
+                    &mut observation, key, at, Ok(Some(test_process(42, 100, "game.exe"))),
+                ).is_some());
+            }
+        }
+        assert_eq!(actor_wait_timeout(None, watchdog_deadline, retry_deadline), Duration::ZERO);
+    }
+
+    #[test]
+    fn foreground_slow_failures_schedule_from_completion_without_catch_up_attempts() {
+        let now = Instant::now();
+        let finished = now + Duration::from_secs(10);
+        let key = observation_key(42);
+        let mut observation = ForegroundObservation::default();
+        assert!(observation.sample(
+            key, now,
+            |_| Err("Access denied".into()),
+            || (key, finished),
+        ).is_none());
+        assert_eq!(observation.retry_at, Some(finished + FOREGROUND_RETRY_DELAYS[0]));
+        assert!(!observation.needs_observation(key, finished));
+    }
+
+    #[test]
+    fn foreground_late_success_and_errors_are_fenced_by_pid_and_generation() {
+        let now = Instant::now();
+        let key = observation_key(42);
+        for latest in [
+            ForegroundKey { pid: 7, ..key },
+            ForegroundKey { generation: 2, ..key },
+        ] {
+            for success in [false, true] {
+                let mut observation = ForegroundObservation::default();
+                let result = if success {
+                    Ok(Some(test_process(42, 100, "old.exe")))
+                } else {
+                    Err("old inspection error".into())
+                };
+                assert!(observation.sample(key, now, |_| result, || (latest, now)).is_none());
+                assert!(observation.process.is_none());
+                assert!(!observation.completed);
+                assert_ne!(observation.warning.as_deref(), Some("old inspection error"));
+                let deadline = observation.retry_at.unwrap_or(now);
+                let recovered = sample_at(
+                    &mut observation, latest, deadline,
+                    Ok(Some(test_process(latest.pid, 200, "current.exe"))),
+                ).unwrap();
+                assert_eq!(recovered.exe, "current.exe");
+                assert!(observation.warning.is_none());
+            }
+        }
+    }
+
+    #[test]
+    fn foreground_coalesced_round_trip_invalidates_in_flight_success() {
+        let fixture = GateFixture::new();
+        let (service, receiver) = idle_service(fixture.manager.clone());
+        let now = Instant::now();
+        let key = ForegroundKey { pid: 42, generation: 0 };
+        let mut observation = ForegroundObservation::default();
+        assert!(observation.sample(
+            key, now,
+            |_| {
+                service.events.foreground();
+                service.events.foreground();
+                Ok(Some(test_process(42, 100, "game.exe")))
+            },
+            || (ForegroundKey {
+                generation: service.events.foreground_generation.load(Ordering::Acquire),
+                ..key
+            }, now),
+        ).is_none());
+        assert!(matches!(receiver.try_recv(), Ok(Command::ForegroundObserved)));
+        assert!(receiver.try_recv().is_err());
+        assert!(observation.process.is_none());
+        assert_eq!(observation.retry_at, Some(now + FOREGROUND_RETRY_DELAYS[0]));
+    }
+
+    #[test]
+    fn foreground_pid_reuse_rejects_old_creation_identity_and_inspects_the_new_lifetime() {
+        let now = Instant::now();
+        let key = observation_key(42);
+        let mut observation = ForegroundObservation::default();
+        let old = test_process(42, 100, "old.exe");
+        sample_at(&mut observation, key, now, Ok(Some(old.clone()))).unwrap();
+        unsafe { SetEvent(old.handle.0) }.unwrap();
+        assert!(observation.needs_observation(key, now));
+        assert!(observation.process.is_none());
+        assert!(sample_at(&mut observation, key, now, Ok(Some(old.clone()))).is_none());
+        let new = test_process(42, 200, "new.exe");
+        let recovered = sample_at(
+            &mut observation, key, now + FOREGROUND_RETRY_DELAYS[0], Ok(Some(new.clone())),
+        ).unwrap();
+        assert_ne!(recovered.identity, old.identity);
+        assert_eq!(recovered.identity, new.identity);
+        assert_eq!(recovered.exe, "new.exe");
+    }
+
+    #[test]
+    fn foreground_rejects_a_mismatched_process_identity() {
+        let now = Instant::now();
+        let mut observation = ForegroundObservation::default();
+        assert!(sample_at(
+            &mut observation, observation_key(42), now,
+            Ok(Some(test_process(7, 100, "wrong.exe"))),
+        ).is_none());
+        assert!(observation.process.is_none());
+        assert!(observation.retry_at.is_some());
+    }
+
+    #[test]
+    fn foreground_failure_never_reuses_the_previous_app_and_empty_foreground_is_complete() {
+        let now = Instant::now();
+        let mut observation = ForegroundObservation::default();
+        let previous = test_process(42, 100, "game.exe");
+        sample_at(
+            &mut observation, observation_key(42), now, Ok(Some(previous.clone())),
+        ).unwrap();
+        assert!(sample_at(
+            &mut observation, observation_key(7), now, Err("Access denied".into()),
+        ).is_none());
+        assert!(previous.is_alive(), "the old activation may still need exit/cleanup tracking");
+        assert!(observation.process.is_none(), "it must not become the new foreground identity");
+        assert!(sample_at(
+            &mut observation, observation_key(0), now, Ok(None),
+        ).is_none());
+        assert!(observation.warning.is_none());
+        assert!(!observation.needs_observation(observation_key(0), now + Duration::from_secs(60)));
+    }
+
+    #[test]
+    fn foreground_recovery_retires_only_the_scoped_inspection_warning() {
+        use crate::display::tests::MockDisplay;
+
+        let now = Instant::now();
+        let key = observation_key(42);
+        let mut observation = ForegroundObservation::default();
+        let mut controller = HdrController::new(MockDisplay::default());
+        controller.warn("A persistent display issue");
+        sample_at(&mut observation, key, now, Err("Protected process access denied".into()));
+        assert_eq!(observation.warnings(controller.warning()), [
+            "A persistent display issue", "Protected process access denied",
+        ]);
+        assert_eq!(controller.warning().as_deref(), Some("A persistent display issue"));
+        sample_at(
+            &mut observation, key, now + FOREGROUND_RETRY_DELAYS[0],
+            Ok(Some(test_process(42, 100, "game.exe"))),
+        ).unwrap();
+        assert_eq!(observation.warnings(controller.warning()), ["A persistent display issue"]);
+        sample_at(
+            &mut observation, observation_key(7), now, Err("another process denied".into()),
+        );
+        sample_at(
+            &mut observation, observation_key(8), now,
+            Ok(Some(test_process(8, 300, "current.exe"))),
+        ).unwrap();
+        assert_eq!(observation.warnings(controller.warning()), ["A persistent display issue"]);
+    }
+
+    #[test]
+    fn foreground_policy_changes_reresolve_a_cached_identity_without_reinspection() {
+        let now = Instant::now();
+        let key = observation_key(42);
+        let mut observation = ForegroundObservation::default();
+        let process = test_process(42, 100, "game.exe");
+        sample_at(&mut observation, key, now, Ok(Some(process.clone()))).unwrap();
+        let mut snapshot = ready_snapshot();
+        for restriction in 0..6 {
+            let ready = snapshot.clone();
+            match restriction {
+                0 => snapshot.settings.apps[0].enabled = false,
+                1 => snapshot.settings.blacklist.push("GAME.EXE".into()),
+                2 => snapshot.settings.switch_method = SwitchMethod::Shortcut,
+                3 => snapshot.mode = ConfigMode::RecoveryRequired,
+                4 => snapshot.controller_issue = Some(crate::SAFE_TEST_ISSUE.into()),
+                _ => snapshot.settings.apps.clear(),
+            }
+            let cached = observation.sample(
+                key, now,
+                |_| panic!("a policy change must not require process inspection"),
+                || panic!("no inspection should be in flight"),
+            ).unwrap();
+            assert_eq!(cached.identity, process.identity);
+            assert!(automatic_pause(&snapshot, &cached.exe, &snapshot.context_token).is_some());
+            snapshot = ready;
+            assert!(automatic_pause(&snapshot, &cached.exe, &snapshot.context_token).is_none());
+        }
+    }
+
+    #[test]
+    fn delayed_and_cached_observations_use_latest_path_disable_and_repair_policy() {
+        let fixture = GateFixture::new();
+        let initial = fixture.ready();
+        let now = Instant::now();
+        for repair in [false, true] {
+            let ready = fixture.manager.mutate(&initial.context_token, None, true, |settings| {
+                settings.apps = initial.settings.apps.clone();
+                settings.apps[0].path = Some(r"C:\Fixture\game.exe".into());
+                Ok(())
+            }).unwrap();
+            let mut observation = ForegroundObservation::default();
+            let key = observation_key(42);
+            let process = observation.sample(
+                key, now,
+                |_| {
+                    fixture.manager.mutate(&ready.context_token, None, true, |settings| {
+                        if repair {
+                            settings.apps[0].exe_name = "user-selected.exe".into();
+                            settings.apps[0].path = Some(r"C:\Fixture\user-selected.exe".into());
+                            settings.apps[0].alternate_exes.clear();
+                        } else {
+                            settings.apps[0].enabled = false;
+                        }
+                        Ok(())
+                    }).unwrap();
+                    Ok(Some(test_process(42, 100, "game.exe")))
+                },
+                || (key, now),
+            ).unwrap();
+            assert!(automatic_pause_for_path(
+                &ready, Some(&process.path), &process.exe, &ready.context_token,
+            ).is_none());
+            let latest = fixture.manager.snapshot().unwrap();
+            assert!(automatic_pause_for_path(
+                &latest, Some(&process.path), &process.exe, &ready.context_token,
+            ).is_some());
+            let cached = observation.sample(
+                key, now, |_| panic!("policy does not need reinspection"),
+                || panic!("cached observation has no in-flight operation"),
+            ).unwrap();
+            assert!(automatic_pause_for_path(
+                &latest, Some(&cached.path), &cached.exe, &ready.context_token,
+            ).is_some());
+        }
+    }
+
+    #[test]
+    fn every_nonmatch_reconciles_owned_hdr_without_claiming_user_hdr() {
+        use crate::display::tests::{monitor, MockDisplay};
+        struct Enable;
+        impl WriteAuthority for Enable {
+            fn authorize(&mut self, _: &NativeAttempt, issue: &mut dyn FnMut()) -> Result<(), DisplayFailure> {
+                issue();
+                Ok(())
+            }
+        }
+        let fixture = GateFixture::new();
+        fixture.ready();
+        for rejection in 0..6 {
+            let mut snapshot = ready_snapshot();
+            let mut rejected = snapshot.settings.apps[0].clone();
+            rejected.exe_name = "other.exe".into();
+            snapshot.settings.apps.push(rejected.clone());
+            let exe = match rejection {
+                0 => "GameLaunchHelper.exe",
+                1 => { snapshot.settings.apps[1].enabled = false; "other.exe" }
+                2 => { snapshot.settings.apps.push(rejected); "other.exe" }
+                3 => "unlisted.exe",
+                4 => {
+                    snapshot.settings.apps[1].exe_name = "BsSndRpt.exe".into();
+                    snapshot.settings.apps[1].alternate_exes.push("other.exe".into());
+                    "other.exe"
+                }
+                _ => {
+                    snapshot.settings.apps[1].path = Some(r"D:\Other\other.exe".into());
+                    "other.exe"
+                }
+            };
+            assert!(automatic_pause_for_path(
+                &snapshot, Some(r"C:\Fixture\other.exe"), exe, "context",
+            ).is_some());
+            let mut controller = HdrController::new(MockDisplay::new(vec![
+                monitor("owned", 1, false), monitor("user", 2, true),
+            ]));
+            controller.refresh_inventory().unwrap();
+            controller.begin(
+                ProcessIdentity { pid: 42, created_at: 100 }, "game.exe".into(),
+                "context".into(), TargetMonitor::All,
+            ).unwrap();
+            controller.enable_activation(&mut Enable);
+            assert_eq!(unmatched_action(true, true, false, false), UnmatchedAction::Debounce);
+            assert_eq!(unmatched_action(true, true, true, true), UnmatchedAction::KeepUntilExit);
+            for (eligible, alive, exit_only, expired) in [
+                (true, true, false, true), (true, false, true, false), (false, true, true, false),
+            ] {
+                assert_eq!(unmatched_action(eligible, alive, exit_only, expired), UnmatchedAction::Finish);
+            }
+            let action = unmatched_action(true, true, false, true);
+            let outcomes = match action {
+                UnmatchedAction::Finish => controller.end(&mut fixture.authority(OperationKind::Cleanup), usize::MAX),
+                _ => panic!("expired nonmatch must follow cleanup"),
+            };
+            assert_eq!(outcomes.len(), 1);
+            assert_eq!(outcomes[0].device_path.as_deref(), Some("owned"));
+            assert!(!outcomes[0].requested_hdr);
+            controller.refresh_inventory().unwrap();
+            assert!(!controller.inventory()[0].is_hdr_enabled);
+            assert!(controller.inventory()[1].is_hdr_enabled);
+        }
+    }
+
+    #[test]
+    fn foreground_inspection_failure_does_not_discard_owned_cleanup_or_claim_preexisting_hdr() {
+        use crate::display::tests::{monitor, MockDisplay};
+
+        let fixture = GateFixture::new();
+        fixture.ready();
+        let now = Instant::now();
+        let mut observation = ForegroundObservation::default();
+        let process = sample_at(
+            &mut observation, observation_key(42), now,
+            Ok(Some(test_process(42, 100, "game.exe"))),
+        ).unwrap();
+        let mut controller = HdrController::new(MockDisplay::new(vec![
+            monitor("owned", 1, false), monitor("preexisting", 2, true),
+        ]));
+        controller.refresh_inventory().unwrap();
+        controller.begin(
+            process.identity, process.exe, "context".into(), TargetMonitor::All,
+        ).unwrap();
+        struct Enable;
+        impl WriteAuthority for Enable {
+            fn authorize(
+                &mut self, _: &NativeAttempt, issue: &mut dyn FnMut(),
+            ) -> Result<(), DisplayFailure> {
+                issue();
+                Ok(())
+            }
+        }
+        controller.enable_activation(&mut Enable);
+        assert!(controller.has_ownership());
+        let activation = controller.activation().unwrap().clone();
+        assert!(sample_at(
+            &mut observation, observation_key(7), now, Err("Access denied".into()),
+        ).is_none());
+        assert!(controller.matches_activation(activation.generation, activation.process));
+        let outcomes = controller.end(&mut fixture.authority(OperationKind::Cleanup), usize::MAX);
+        assert_eq!(outcomes.len(), 1);
+        assert_eq!(outcomes[0].device_path.as_deref(), Some("owned"));
+        assert_eq!(outcomes[0].outcome, OutcomeKind::Changed);
+        assert!(!outcomes[0].requested_hdr);
+        controller.refresh_inventory().unwrap();
+        assert!(!controller.inventory()[0].is_hdr_enabled);
+        assert!(controller.inventory()[1].is_hdr_enabled);
+        assert!(controller.activation().is_none());
+        assert!(!controller.has_ownership());
     }
 
     #[test]
@@ -1973,7 +2820,7 @@ mod tests {
             seconds: 5,
         });
         assert_eq!(
-            actor_wait_timeout(debounce, now),
+            actor_wait_timeout(debounce, now + FOREGROUND_WATCHDOG_INTERVAL, now),
             FOREGROUND_WATCHDOG_INTERVAL
         );
         assert!(take_expired_debounce(&mut debounce, now + FOREGROUND_WATCHDOG_INTERVAL).is_none());
@@ -1993,7 +2840,7 @@ mod tests {
             seconds: 0,
         });
         assert_eq!(
-            actor_wait_timeout(debounce, now),
+            actor_wait_timeout(debounce, now + FOREGROUND_WATCHDOG_INTERVAL, now),
             Duration::from_millis(200)
         );
     }

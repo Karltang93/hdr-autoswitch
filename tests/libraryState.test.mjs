@@ -76,11 +76,19 @@ test('catalog add then remove uses the canonical primary returned by the committ
   assert.deepEqual(requests.map((item) => item.command), ['add_custom_app', 'remove_app']);
 });
 
-test('running-process lookup resolves an enabled alias to its canonical library row', () => {
+test('nonauthoritative catalog lookup resolves an enabled alias to its canonical library row', () => {
   const existing = app({ alternate_exes: ['game.exe'] });
   const process = { exe_name: 'GAME.EXE', name: 'Different window title' };
   assert.equal(findTrackedApp([existing], process), existing);
   assert.equal(findTrackedApp([{ ...existing, enabled: false }], process), undefined);
+});
+
+test('title association is a manual library suggestion, not executable tracking authority', () => {
+  const existing = app({ name: 'User title', exe_name: 'chosen.exe' });
+  const suggestion = app({ name: 'User title', exe_name: 'different.exe' });
+  assert.equal(findLibraryApp([existing], suggestion), existing);
+  assert.equal(findTrackedApp([existing], suggestion), undefined);
+  assert.equal(findTrackedApp([existing], { exe_name: 'chosen_dx12.exe' }), undefined);
 });
 
 test('exact-primary matching preserves the established canonical executable key', () => {

@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { RunningProcessInfo, AppConfig, HdrApp } from '../types';
 import { invoke } from '@tauri-apps/api/core';
 import { configClient } from '../useConfig';
-import { findTrackedApp } from '../libraryState';
 import { RefreshCw, Search, Plus, Check, AppWindow } from 'lucide-react';
 import { GlitchButton } from './GlitchButton';
 import { GlitchText } from './GlitchText';
@@ -36,7 +35,7 @@ export const RunningProcesses: React.FC<RunningProcessesProps> = ({
 
   useEffect(() => {
     fetchProcesses();
-  }, []);
+  }, [config.apps]);
 
   const handleAddProcess = async (proc: RunningProcessInfo) => {
     setAddingExe(proc.exe_name);
@@ -116,7 +115,7 @@ export const RunningProcesses: React.FC<RunningProcessesProps> = ({
       ) : (
         <div className="space-y-2">
           {filtered.map((proc) => {
-            const tracked = findTrackedApp(config.apps, proc);
+            const tracked = proc.tracked_primary != null;
             const isAdding = addingExe === proc.exe_name;
 
             return (

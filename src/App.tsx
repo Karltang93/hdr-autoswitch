@@ -16,7 +16,7 @@ import { RunningProcesses } from './components/RunningProcesses';
 import { Settings } from './components/Settings';
 import { ConfigNotice } from './components/ConfigNotice';
 import { configClient, useConfig } from './useConfig';
-import { describeHdrScope } from './telemetryText';
+import { describeHdrScope, statusWarnings } from './telemetryText';
 import { manualControlAvailable, scopeVisuals } from './displayState';
 import { HdrLogo } from './components/HdrLogo';
 import { GlitchNavItem } from './components/GlitchNavItem';
@@ -150,6 +150,7 @@ export default function App() {
     launcher: null,
     hdr_type: null,
     warning: null,
+    quarantined_apps: [],
     target_status: 'automation_paused',
     active_target: null,
     target_deferred: false,
@@ -512,7 +513,9 @@ export default function App() {
         {[controlError, monitorError, statusError].filter(Boolean).map((error, index) =>
           <p key={index} role="alert" className="mb-4 p-3 border border-amber-400/50 text-amber-200 text-xs">{t.configError} {error}</p>
         )}
-        {status.warning && <p role="alert" className="mb-4 p-3 border border-amber-400/50 text-amber-200 text-xs">{status.warning}</p>}
+        {statusWarnings(status, t).map((warning) => (
+          <p key={warning} role="alert" className="mb-4 p-3 border border-amber-400/50 text-amber-200 text-xs">{warning}</p>
+        ))}
         {status.target_deferred && status.active_target && <p className="mb-4 text-xs text-[#5accf5]">
           {t.configActiveTarget}: {status.active_target.kind === 'all'
             ? t.settingsAllMonitors
@@ -544,6 +547,7 @@ export default function App() {
         <fieldset disabled={pending} className={`min-w-0 ${pending ? 'pointer-events-none opacity-70' : ''}`}>
         {config && activeTab === 'apps' && (
           <AppsManager
+            quarantinedExes={(status.quarantined_apps ?? []).map((row) => row.exe_name)}
             config={config}
             isDark={isDark}
             onNavigateToCatalog={() => setActiveTab('catalog')}

@@ -135,6 +135,13 @@ fn status_label(czech: bool, status: Option<&HdrStatePayload>) -> &'static str {
             ScopeHdrState::Unknown => unreachable!(),
         };
     }
+    if !status.quarantined_apps.is_empty() {
+        return if czech {
+            "Herní soubor je blokován - otevřete Moje hry"
+        } else {
+            "Game executable blocked - open My Games"
+        };
+    }
     if status.warning.is_some() && !status.target_deferred {
         return if czech {
             "Upozornění HDR - otevřete nastavení"
@@ -214,6 +221,7 @@ fn render_status(app: &AppHandle, labels: &TrayLabels) -> Result<(), String> {
         state.inventory_stale
             || state.target_status != TargetStatus::Ready
             || state.warning.is_some()
+            || !state.quarantined_apps.is_empty()
             || state.scope_hdr_state == ScopeHdrState::Unknown
     });
     if attention != labels.attention_badge.load(Ordering::Acquire) {
@@ -580,6 +588,7 @@ mod tests {
             launcher: None,
             hdr_type: None,
             warning: None,
+            quarantined_apps: Vec::new(),
             target_status: TargetStatus::Ready,
             active_target: None,
             target_deferred: false,
@@ -599,6 +608,18 @@ mod tests {
         assert!(status_label(true, Some(&state)).contains("pozastaveno"));
         state.target_status = TargetStatus::OutcomeUnknown;
         assert!(status_label(false, Some(&state)).contains("unknown"));
+    }
+
+    #[test]
+    fn quarantine_uses_existing_tray_attention_and_retires_after_repair() {
+        let mut state = status(ScopeHdrState::Sdr);
+        state.quarantined_apps.push(crate::runtime_policy::QuarantinedApp {
+            name: "Age of Empires IV".into(), exe_name: "BsSndRpt64.exe".into(),
+        });
+        assert_eq!(status_label(false, Some(&state)), "Game executable blocked - open My Games");
+        assert!(status_label(true, Some(&state)).contains("Moje hry"));
+        state.quarantined_apps.clear();
+        assert_eq!(status_label(false, Some(&state)), "Selected displays: SDR");
     }
 
     #[test]

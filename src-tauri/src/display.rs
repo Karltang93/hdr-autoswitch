@@ -169,7 +169,7 @@ pub enum FailureKind {
     AttemptBudgetExhausted,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct MonitorOutcome {
     pub device_path: Option<String>,
     pub display_name: Option<String>,
