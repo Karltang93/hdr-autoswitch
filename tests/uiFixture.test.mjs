@@ -87,3 +87,35 @@ test('UI fixture surfaces controller conflict and blocks manual writes without r
   await assert.rejects(invoke('set_hdr', { scope: { kind: 'all' }, enable: true }), /controller conflict/);
   assert.deepEqual(state.snapshot, before);
 });
+
+test('UI fixture explicit update removes only retained excluded aliases while preserving disabled custom metadata', async () => {
+  const { invoke, state } = fixture('?legacyHelperAlias=1');
+  const before = state.snapshot;
+  await assert.rejects(invoke('add_custom_app', { app: app({
+    enabled: false, hdr_type: 'custom', alternate_exes: ['BsSndRpt64.exe'],
+  }) }), /helpers/);
+  assert.deepEqual(state.snapshot, before);
+  await invoke('add_custom_app', { app: app({ enabled: false, hdr_type: 'custom' }) });
+  const saved = state.snapshot.settings.apps[0];
+  assert.equal(saved.path, 'D:\\Game\\game.exe');
+  assert.equal(saved.enabled, false);
+  assert.equal(saved.hdr_type, 'custom');
+  assert.equal(saved.steam_id, '100');
+  assert.deepEqual(saved.alternate_exes, ['user.exe']);
+});
+
+test('UI fixture manual results and status snapshots share one scoped revision sequence', async () => {
+  const { invoke, state } = fixture('?mixed=1');
+  state.failNextManual('Native On failed');
+  const failed = await invoke('set_hdr', { scope: { kind: 'all' }, enable: true });
+  assert.equal(failed.partial, true);
+  assert.equal(failed.status.manual_revision, '1');
+  const recovered = await invoke('set_hdr', { scope: { kind: 'all' }, enable: false });
+  assert.equal(recovered.partial, false);
+  assert.equal(recovered.scope.kind, 'all');
+  assert.equal(recovered.status.manual_revision, '2');
+  assert.equal(recovered.status.manual_results[0].verified, true);
+  assert.equal(recovered.status.warning, null);
+  assert.equal(failed.status.manual_results[0].verified, false);
+  assert.equal(failed.status.warning, 'Native On failed');
+});

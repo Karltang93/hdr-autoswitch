@@ -119,6 +119,7 @@ fn merge_aliases(existing: &mut HdrApp, item: &HdrApp) {
 }
 
 fn apply_explicit_executables(existing: &mut HdrApp, item: &HdrApp) {
+    existing.alternate_exes.retain(|exe| !permanently_excluded(exe));
     if is_quarantined(existing) {
         existing.exe_name = item.exe_name.trim().to_lowercase();
         existing.path.clone_from(&item.path);
@@ -1002,6 +1003,97 @@ mod tests {
         assert!(!enrich_verified_aliases(&mut config, &[xbox.clone()]));
         assert!(!enrich_verified_metadata(&mut config, &[xbox]));
         assert_eq!(config.apps, [existing]);
+    }
+
+    #[test]
+    fn review_legacy_helper_aliases_are_removed_only_by_confirmed_safe_updates() {
+        let mut original = game("Customized title", "game.exe");
+        original.enabled = false;
+        original.hdr_type = HdrType::Custom;
+        original.path = Some(r"C:\Old\game.exe".into());
+        original.launcher = Some("Steam".into());
+        original.steam_id = Some("123".into());
+        original.alternate_exes = vec!["BsSndRpt64.exe".into(), "user.exe".into()];
+        let mut config = AppConfig::default();
+        config.apps = vec![original.clone()];
+        assert!(!is_quarantined(&original));
+        assert_eq!(config.resolve_app(None, "BsSndRpt64.exe"), crate::runtime_policy::Resolution::Excluded);
+        let verified = verified_game("game.exe", &["game.exe", "renderer.exe"], Provider::Steam);
+        // The selected installation differs: even discovery may not repair or rewrite it.
+        assert!(!enrich_verified_aliases(&mut config, &[verified.clone()]));
+        assert!(!enrich_verified_metadata(&mut config, &[verified]));
+        assert_eq!(config.apps, [original.clone()]);
+        for import in [false, true] {
+            config.apps = vec![original.clone()];
+            let mut update = original.clone();
+            update.alternate_exes = vec!["new-safe.exe".into()];
+            update.path = Some(r"D:\Moved\game.exe".into());
+            if import { import_games(&mut config, vec![update.clone()]).unwrap(); }
+            else { add_app(&mut config, update.clone()).unwrap(); }
+            let mut expected = original.clone();
+            expected.path = update.path;
+            expected.enabled = import;
+            expected.alternate_exes = vec!["user.exe".into(), "new-safe.exe".into()];
+            assert_eq!(config.apps, [expected]);
+            assert_eq!(config.resolve_app(None, "BsSndRpt64.exe"), crate::runtime_policy::Resolution::Excluded);
+        }
+    }
+
+    #[test]
+    fn review_excluded_alias_cleanup_never_accepts_incoming_helpers_or_partially_commits() {
+        use crate::config::ConfigManager;
+        let root = tempfile::tempdir().unwrap();
+        let manager = ConfigManager::load(root.path().join("local"), root.path().join("legacy.json")).unwrap();
+        let first = manager.snapshot().unwrap();
+        let initialized = manager.initialize(&first.context_token).unwrap();
+        let original = manager.mutate(&initialized.context_token, None, true, |settings| {
+            let mut legacy = game("Customized", "game.exe");
+            legacy.enabled = false;
+            legacy.hdr_type = HdrType::Custom;
+            legacy.alternate_exes = vec!["BsSndRpt64.exe".into(), "user.exe".into()];
+            settings.apps = vec![legacy, game("Other", "other.exe")];
+            Ok(())
+        }).unwrap();
+        let bytes = std::fs::read(&original.config_path).unwrap();
+        let safe = game("Customized", "game.exe");
+        for import in [false, true] {
+            let mut unsafe_item = safe.clone();
+            unsafe_item.alternate_exes = vec!["BUGSPLAT.EXE".into()];
+            let result = manager.mutate(&original.context_token, Some(&original.library_generation), true, |settings| {
+                if import { import_games(settings, vec![safe.clone(), unsafe_item]) }
+                else { add_app(settings, unsafe_item) }
+            });
+            assert!(result.unwrap_err().contains("helper"));
+            assert_eq!(manager.snapshot().unwrap(), original);
+            assert_eq!(std::fs::read(&original.config_path).unwrap(), bytes);
+        }
+        let mut ambiguous = game("Other", "different.exe");
+        ambiguous.alternate_exes = vec!["user.exe".into()];
+        assert!(manager.mutate(&original.context_token, Some(&original.library_generation), true,
+            |settings| import_games(settings, vec![safe.clone(), ambiguous])).is_err());
+        assert_eq!(manager.snapshot().unwrap(), original, "a later row conflict cannot commit earlier helper cleanup");
+        assert_eq!(std::fs::read(&original.config_path).unwrap(), bytes);
+        let committed = manager.mutate(&original.context_token, Some(&original.library_generation), true,
+            |settings| import_games(settings, vec![safe])).unwrap();
+        assert_eq!(committed.settings.apps[0].alternate_exes, ["user.exe"]);
+        assert_eq!(committed.settings.apps[0].hdr_type, HdrType::Custom);
+        assert_eq!(committed.settings.apps[1], original.settings.apps[1]);
+        assert_eq!(committed.revision.parse::<u64>().unwrap(), original.revision.parse::<u64>().unwrap() + 1);
+    }
+
+    #[test]
+    fn review_background_alias_enrichment_keeps_legacy_helpers_inert_and_disabled() {
+        let resolved = verified_game("game.exe", &["game.exe", "renderer.exe"], Provider::Steam);
+        let mut original = game("Customized", "game.exe");
+        original.enabled = false;
+        original.hdr_type = HdrType::Custom;
+        original.alternate_exes = vec!["BsSndRpt64.exe".into(), "user.exe".into()];
+        let mut config = AppConfig::default();
+        config.apps = vec![original.clone()];
+        assert!(enrich_verified_aliases(&mut config, &[resolved]));
+        original.alternate_exes.push("renderer.exe".into());
+        assert_eq!(config.apps, [original]);
+        assert_eq!(config.resolve_app(None, "BsSndRpt64.exe"), crate::runtime_policy::Resolution::Excluded);
     }
 
     #[test]

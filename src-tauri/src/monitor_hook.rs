@@ -77,10 +77,50 @@ fn manual_admission(snapshot: &ConfigSnapshot, admitted: bool) -> ManualControl 
 }
 
 #[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+pub struct ManualScopeResult {
+    pub revision: String,
+    pub scope: TargetMonitor,
+    pub verified: bool,
+    pub error: Option<String>,
+}
+
+#[derive(Default)]
+struct ManualObservations {
+    revision: u64,
+    scopes: Vec<ManualScopeResult>,
+}
+
+impl ManualObservations {
+    fn begin(&mut self) -> Result<(), String> {
+        self.revision = self.revision.checked_add(1).ok_or("Manual HDR sequence exhausted")?;
+        Ok(())
+    }
+
+    fn finish(&mut self, scope: TargetMonitor, verified: bool, error: Option<String>) {
+        let observed = ManualScopeResult { revision: self.revision.to_string(), scope, verified, error };
+        if let Some(previous) = self.scopes.iter_mut().find(|entry| same_target(&entry.scope, &observed.scope)) {
+            *previous = observed;
+        } else {
+            self.scopes.push(observed);
+        }
+    }
+
+    fn append_errors(&self, warnings: &mut Vec<String>) {
+        for error in self.scopes.iter().filter_map(|entry| entry.error.as_ref()) {
+            if !warnings.contains(error) {
+                warnings.push(error.clone());
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
 pub struct HdrStatePayload {
     /// Decimal strings preserve ordering beyond JavaScript's integer precision.
     pub status_revision: String,
     pub inventory_revision: String,
+    pub manual_revision: String,
+    pub manual_results: Vec<ManualScopeResult>,
     /// Observed frozen activation scope, or the saved scope when no activation exists.
     pub is_hdr_active: bool,
     pub scope_hdr_state: ScopeHdrState,
@@ -108,6 +148,8 @@ impl HdrStatePayload {
         Self {
             status_revision: "0".into(),
             inventory_revision: "0".into(),
+            manual_revision: "0".into(),
+            manual_results: Vec::new(),
             is_hdr_active: false,
             scope_hdr_state: ScopeHdrState::Unknown,
             manual_control: ManualControl::Blocked { reason: message.clone() },
@@ -132,6 +174,7 @@ impl HdrStatePayload {
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ManualSetResult {
+    pub scope: TargetMonitor,
     pub outcomes: Vec<MonitorOutcome>,
     pub partial: bool,
     pub status: HdrStatePayload,
@@ -979,6 +1022,7 @@ struct Actor {
     foreground_observation: ForegroundObservation,
     inventory_observation: InventoryObservation,
     activation_preparation: ActivationPreparation,
+    manual_observations: ManualObservations,
     last_outcomes: Vec<MonitorOutcome>,
     publication: StatusPublication,
 }
@@ -996,6 +1040,7 @@ impl Actor {
             foreground_observation: ForegroundObservation::default(),
             inventory_observation: InventoryObservation::new(Instant::now()),
             activation_preparation: ActivationPreparation::default(),
+            manual_observations: ManualObservations::default(),
             last_outcomes: Vec::new(),
             publication: StatusPublication::default(),
         }
@@ -1093,11 +1138,7 @@ impl Actor {
                     let _ = reply.send(result);
                 }
                 Command::ManualSet(scope, enable, reply) => {
-                    let result = if self.events.admitted.load(Ordering::Acquire) {
-                        self.manual_set(scope, enable)
-                    } else {
-                        Err("The HDR controller is shutting down".into())
-                    };
+                    let result = self.manual_set(scope, enable);
                     self.publish();
                     let _ = reply.send(result);
                 }
@@ -1386,6 +1427,27 @@ impl Actor {
         scope: TargetMonitor,
         enable: bool,
     ) -> Result<ManualSetResult, String> {
+        self.manual_observations.begin()?;
+        let result = self.execute_manual_set(&scope, enable);
+        let verified = result.as_ref().is_ok_and(|(outcomes, _)| {
+            !outcomes.is_empty() && outcomes.iter().all(MonitorOutcome::is_verified)
+        });
+        let error = match &result {
+            Err(error) => Some(error.clone()),
+            Ok((outcomes, _)) if outcomes.is_empty() => Some("No display result was returned.".into()),
+            Ok(_) => None,
+        };
+        self.manual_observations.finish(scope.clone(), verified, error);
+        result.map(|(outcomes, snapshot)| ManualSetResult {
+            scope, outcomes, partial: !verified, status: self.payload(&snapshot),
+        })
+    }
+
+    fn execute_manual_set(
+        &mut self,
+        scope: &TargetMonitor,
+        enable: bool,
+    ) -> Result<(Vec<MonitorOutcome>, ConfigSnapshot), String> {
         let snapshot = self.config.snapshot()?;
         manual_admission(&snapshot, self.events.admitted.load(Ordering::Acquire)).require()?;
         // Establish the logical interval without enabling HDR first. A manual Off while a game is
@@ -1396,7 +1458,7 @@ impl Actor {
             self.activation_preparation.observed(preparation);
         }
         let mut authority = self.authority(OperationKind::Manual);
-        let outcomes = self.controller.manual_set(&scope, enable, &mut authority);
+        let outcomes = self.controller.manual_set(scope, enable, &mut authority);
         self.last_outcomes = outcomes.clone();
         let _ = self.refresh_inventory();
         self.reconcile_gate();
@@ -1405,11 +1467,7 @@ impl Actor {
         if !partial {
             self.notify_verified(&outcomes, enable);
         }
-        Ok(ManualSetResult {
-            outcomes,
-            partial,
-            status: self.payload(&snapshot),
-        })
+        Ok((outcomes, snapshot))
     }
 
     fn prepare_manual_activation(
@@ -1518,9 +1576,12 @@ impl Actor {
         let scope_hdr_state = observed_scope
             .map(|scope| self.controller.scope_hdr_state(scope))
             .unwrap_or(ScopeHdrState::Unknown);
+        self.manual_observations.append_errors(&mut warnings);
         let payload = HdrStatePayload {
             status_revision: "0".into(),
             inventory_revision: self.controller.inventory_revision(),
+            manual_revision: self.manual_observations.revision.to_string(),
+            manual_results: self.manual_observations.scopes.clone(),
             is_hdr_active: scope_hdr_state == ScopeHdrState::Hdr,
             scope_hdr_state,
             manual_control: manual_admission(snapshot, self.events.admitted.load(Ordering::Acquire)),
@@ -1562,8 +1623,11 @@ impl Actor {
                 let mut warnings = self.foreground_observation.warnings(self.controller.warning());
                 warnings.extend(self.activation_preparation.warning.clone());
                 warnings.push(error);
+                self.manual_observations.append_errors(&mut warnings);
                 let mut payload = HdrStatePayload::unavailable(warnings.join("\n"));
                 payload.inventory_revision = self.controller.inventory_revision();
+                payload.manual_revision = self.manual_observations.revision.to_string();
+                payload.manual_results = self.manual_observations.scopes.clone();
                 self.publication.observe(payload)
             }
         };
@@ -2301,6 +2365,61 @@ mod tests {
         let serialized = serde_json::to_value(payload).unwrap();
         assert_eq!(serialized["scope_hdr_state"], "unknown");
         assert_eq!(serialized["is_hdr_active"], false);
+    }
+
+    #[test]
+    fn review_manual_observations_order_both_origins_and_keep_scope_recovery_proofs() {
+        let mut observations = ManualObservations::default();
+        let other = TargetMonitor::Monitor { device_path: "other".into(), display_name: "Other".into() };
+        observations.begin().unwrap();
+        observations.finish(TargetMonitor::All, false, Some("All request refused".into()));
+        let failed_all = observations.scopes.clone();
+        observations.begin().unwrap();
+        observations.finish(other.clone(), true, None);
+        let mut warnings = vec!["Unresolved controller conflict".into()];
+        observations.append_errors(&mut warnings);
+        assert_eq!(warnings, ["Unresolved controller conflict", "All request refused"]);
+        assert_eq!(observations.scopes[0], failed_all[0]);
+        observations.begin().unwrap();
+        observations.finish(TargetMonitor::All, true, None);
+        assert_eq!(observations.scopes.len(), 2);
+        assert_eq!(observations.scopes[0].revision, "3");
+        assert!(observations.scopes[0].verified);
+        assert_eq!(observations.scopes[1].revision, "2");
+        let mut current = vec!["Unresolved controller conflict".into()];
+        observations.append_errors(&mut current);
+        assert_eq!(current, ["Unresolved controller conflict"]);
+        observations.begin().unwrap();
+        observations.finish(other, false, Some("Newer Other failure".into()));
+        assert_eq!(observations.scopes[0].revision, "3", "full snapshots retain missed recovery proofs");
+        assert_eq!(observations.scopes[1].revision, "4");
+        assert!(!observations.scopes[1].verified);
+        assert_eq!(failed_all[0].error.as_deref(), Some("All request refused"), "old replies are immutable");
+    }
+
+    #[test]
+    fn review_manual_scope_revisions_use_identity_and_do_not_duplicate_warning_messages() {
+        let mut observations = ManualObservations::default();
+        for (path, name) in [("Chosen", "Display"), ("CHOSEN", "Renamed")] {
+            observations.begin().unwrap();
+            observations.finish(TargetMonitor::Monitor {
+                device_path: path.into(), display_name: name.into(),
+            }, false, Some("Request refused".into()));
+        }
+        assert_eq!(observations.scopes.len(), 1);
+        assert_eq!(observations.scopes[0].revision, "2");
+        let mut warnings = vec!["Request refused".into()];
+        observations.append_errors(&mut warnings);
+        assert_eq!(warnings, ["Request refused"]);
+        let mut payload = HdrStatePayload::unavailable("Read failed".into());
+        payload.manual_revision = observations.revision.to_string();
+        payload.manual_results = observations.scopes.clone();
+        let serialized = serde_json::to_value(payload).unwrap();
+        assert_eq!(serialized["manual_revision"], "2");
+        assert_eq!(serialized["manual_results"][0]["revision"], "2");
+        assert_eq!(serialized["manual_results"][0]["scope"]["device_path"], "CHOSEN");
+        observations.revision = u64::MAX;
+        assert!(observations.begin().is_err(), "exhausted ordering must not admit another native operation");
     }
 
     #[test]

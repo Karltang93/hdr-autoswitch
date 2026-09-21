@@ -191,6 +191,9 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
           <p className={`text-xs mt-1 ${isDark ? 'text-[#8a7f81]' : 'text-slate-600'}`}>
             {t.catalogSubtitle}
           </p>
+          <p className={`text-[10px] mt-1 ${isDark ? 'text-[#8a7f81]' : 'text-slate-600'}`}>
+            {t.appsHelperAliasCleanup}
+          </p>
         </div>
 
         <GlitchButton

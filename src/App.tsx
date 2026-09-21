@@ -7,6 +7,8 @@ import {
   MonitorInventorySnapshot,
   ConfigSnapshot,
   HdrStatePayload,
+  ManualControlError,
+  ManualSetResult,
   ActivityLogEntry,
   RecentGameSession,
 } from './types';
@@ -18,7 +20,7 @@ import { Settings } from './components/Settings';
 import { ConfigNotice } from './components/ConfigNotice';
 import { configClient, useConfig } from './useConfig';
 import { describeHdrScope, statusWarnings } from './telemetryText';
-import { DisplayObservationOrder, manualControlAvailable, scopeVisuals } from './displayState';
+import { DisplayObservationOrder, ManualFeedbackOrder, manualControlAvailable, scopeVisuals } from './displayState';
 import { HdrLogo } from './components/HdrLogo';
 import { GlitchNavItem } from './components/GlitchNavItem';
 import { Sun, Moon, Globe } from 'lucide-react';
@@ -138,7 +140,8 @@ export default function App() {
   const displayOrder = useRef(new DisplayObservationOrder());
   const monitorRefreshRevision = useRef<string | null>(null);
   const [statusLoaded, setStatusLoaded] = useState(false);
-  const [controlError, setControlError] = useState<string | null>(null);
+  const manualFeedback = useRef(new ManualFeedbackOrder());
+  const [controlErrors, setControlErrors] = useState<string[]>([]);
   const [monitorError, setMonitorError] = useState<string | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const loggedObservation = useRef<string | null>(null);
@@ -146,6 +149,8 @@ export default function App() {
   const [status, setStatus] = useState<HdrStatePayload>({
     status_revision: '0',
     inventory_revision: '0',
+    manual_revision: '0',
+    manual_results: [],
     is_hdr_active: false,
     scope_hdr_state: 'unknown',
     manual_control: { status: 'blocked', reason: 'HDR controller starting' },
@@ -236,6 +241,9 @@ export default function App() {
 
   const acceptStatus = (next: HdrStatePayload): boolean => {
     if (!displayOrder.current.acceptStatus(next)) return false;
+    if (manualFeedback.current.acceptStatus(next)) {
+      setControlErrors(manualFeedback.current.errors());
+    }
     setStatus(next);
     setStatusLoaded(true);
     setStatusError(null);
@@ -252,6 +260,16 @@ export default function App() {
       }
     }
     return true;
+  };
+
+  const acceptManualResult = (result: ManualSetResult) => {
+    if (acceptStatus(result.status)) ++statusRequest.current;
+  };
+
+  const reportControlError = (error: ManualControlError) => {
+    if (manualFeedback.current.acceptError(error)) {
+      setControlErrors(manualFeedback.current.errors());
+    }
   };
 
   const refreshStatus = async () => {
@@ -380,11 +398,15 @@ export default function App() {
       configClient.acceptEvent(event.payload);
       void refreshMonitors();
     });
-    const unlistenControlPromise = listen<string | null>('controller-error', (event) => {
-      setControlError(event.payload);
+    const unlistenControlPromise = listen<ManualControlError>('controller-error', (event) => {
+      if (active) reportControlError(event.payload);
+    });
+    const unlistenManualPromise = listen<ManualSetResult>('manual-control-result', (event) => {
+      if (active) acceptManualResult(event.payload);
     });
     const unlistenNavigationPromise = listen('navigate-settings', () => setActiveTab('settings'));
     unlistenControlPromise.catch(configClient.reportError);
+    unlistenManualPromise.catch(configClient.reportError);
     unlistenNavigationPromise.catch(configClient.reportError);
     unlistenConfigPromise.then(() => {
       if (active) void configClient.refresh();
@@ -400,6 +422,7 @@ export default function App() {
       unlistenPromise.then((unlisten) => unlisten()).catch(configClient.reportError);
       unlistenConfigPromise.then((unlisten) => unlisten()).catch(configClient.reportError);
       unlistenControlPromise.then((unlisten) => unlisten()).catch(configClient.reportError);
+      unlistenManualPromise.then((unlisten) => unlisten()).catch(configClient.reportError);
       unlistenNavigationPromise.then((unlisten) => unlisten()).catch(configClient.reportError);
     };
   }, []);
@@ -570,7 +593,7 @@ export default function App() {
         {/* Main Content Body */}
         <main className="flex-1 max-w-7xl w-full mx-auto p-6">
           <ConfigNotice onSettings={() => setActiveTab('settings')} />
-          {[controlError, monitorError, statusError].filter(Boolean).map((error, index) =>
+          {[...controlErrors, monitorError, statusError].filter(Boolean).map((error, index) =>
             <p key={index} role="alert" className={`mb-4 p-3 border text-xs ${
               isDark ? 'border-amber-400/50 text-amber-200 bg-amber-950/20' : 'border-amber-500/40 text-amber-900 bg-amber-50 shadow-xs'
             }`}>{t.configError} {error}</p>
@@ -602,7 +625,9 @@ export default function App() {
                 void refreshMonitors();
               }}
               onNavigateToApps={() => setActiveTab('apps')}
-              onControlError={setControlError}
+              onControlError={reportControlError}
+              onManualResult={acceptManualResult}
+              captureManualOrigin={(scope) => manualFeedback.current.capture(scope)}
               controlAvailable={manualControlAvailable(status, statusLoaded)}
               isDark={isDark}
             />

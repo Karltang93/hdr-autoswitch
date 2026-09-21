@@ -160,6 +160,8 @@ export interface RunningProcessInfo {
 export interface HdrStatePayload {
   status_revision: string;
   inventory_revision: string;
+  manual_revision: string;
+  manual_results: ManualScopeResult[];
   is_hdr_active: boolean;
   scope_hdr_state: 'hdr' | 'sdr' | 'mixed' | 'unknown';
   manual_control: { status: 'available' } | { status: 'blocked'; reason: string };
@@ -203,9 +205,26 @@ export interface MonitorOutcome {
 }
 
 export interface ManualSetResult {
+  scope: TargetMonitor;
   outcomes: MonitorOutcome[];
   partial: boolean;
   status: HdrStatePayload;
+}
+
+export interface ManualScopeResult {
+  revision: string;
+  scope: TargetMonitor;
+  verified: boolean;
+  error: string | null;
+}
+
+export interface ManualRequestOrigin {
+  scope: TargetMonitor;
+  after_revision: string;
+}
+
+export interface ManualControlError extends ManualRequestOrigin {
+  message: string;
 }
 
 export interface RecentGameSession {

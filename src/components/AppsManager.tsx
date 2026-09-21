@@ -737,6 +737,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
                 <p className={isDark ? 'text-[#8a7f81]' : 'text-slate-500'}>
                   {t.scanModalSubtitle}
+                  <span className="block mt-1">{t.appsHelperAliasCleanup}</span>
                 </p>
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <button
@@ -1029,6 +1030,10 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            <p className={`text-[10px] ${isDark ? 'text-[#8a7f81]' : 'text-slate-500'}`}>
+              {t.appsHelperAliasCleanup}
+            </p>
 
             {/* Interactive File Dropzone & Browse Button */}
             <div

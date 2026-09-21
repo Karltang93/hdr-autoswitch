@@ -25,6 +25,13 @@ struct TrayLabels {
 
 type PresentationAction = Box<dyn FnOnce() + Send>;
 
+#[derive(Clone, serde::Serialize)]
+struct ManualControlError {
+    scope: TargetMonitor,
+    after_revision: String,
+    message: String,
+}
+
 #[derive(Default)]
 struct ManualPresentation {
     latest_request: AtomicU64,
@@ -273,7 +280,7 @@ fn manual_enabled(status: Option<&HdrStatePayload>) -> bool {
     })
 }
 
-fn manual_result_error(result: Result<ManualSetResult, String>) -> Option<String> {
+fn manual_result_error(result: &Result<ManualSetResult, String>) -> Option<String> {
     match result {
         Ok(result) => {
             let errors: Vec<String> = result.outcomes.iter()
@@ -289,7 +296,7 @@ fn manual_result_error(result: Result<ManualSetResult, String>) -> Option<String
                 None
             }
         }
-        Err(error) => Some(error),
+        Err(error) => Some(error.clone()),
     }
 }
 
@@ -297,10 +304,10 @@ fn dispatch_manual_result(
     presentation: Arc<ManualPresentation>,
     request: u64,
     result: Result<ManualSetResult, String>,
-    present: impl FnOnce(Option<String>) + Send + 'static,
+    present: impl FnOnce(Result<ManualSetResult, String>) + Send + 'static,
     schedule: impl FnOnce(PresentationAction) -> Result<(), String>,
 ) -> Result<(), String> {
-    let error = manual_result_error(result);
+    let error = manual_result_error(&result);
     if let Some(error) = &error {
         eprintln!("Tray HDR request failed: {error}");
     }
@@ -310,7 +317,7 @@ fn dispatch_manual_result(
     schedule(Box::new(move || {
         // A newer click may arrive after this UI callback was queued.
         if presentation.is_current(request) {
-            present(error);
+            present(result);
         }
     }))
 }
@@ -319,6 +326,7 @@ fn report_manual_result(
     app: &AppHandle,
     presentation: Arc<ManualPresentation>,
     request: u64,
+    after_revision: String,
     result: Result<ManualSetResult, String>,
 ) {
     let handle = app.clone();
@@ -326,14 +334,20 @@ fn report_manual_result(
         presentation,
         request,
         result,
-        move |error| {
+        move |result| {
             if handle.try_state::<AppState>().is_some_and(|state| state.ensure_admission().is_err()) {
                 return;
             }
-            if error.is_some() {
+            if manual_result_error(&result).is_some() {
                 show_main_window(&handle);
             }
-            if let Err(error) = handle.emit("controller-error", error) {
+            let published = match result {
+                Ok(result) => handle.emit("manual-control-result", result),
+                Err(message) => handle.emit("controller-error", ManualControlError {
+                    scope: TargetMonitor::All, after_revision, message,
+                }),
+            };
+            if let Err(error) = published {
                 eprintln!("Cannot display tray HDR result: {error}");
             }
         },
@@ -344,6 +358,16 @@ fn report_manual_result(
 }
 
 fn manual_all(app: &AppHandle, enable: bool, presentation: &Arc<ManualPresentation>) {
+    let after_revision = match app.try_state::<TrayLabels>() {
+        Some(labels) => match labels.latest_status.lock() {
+            Ok(status) => status.as_ref().map(|status| status.manual_revision.clone()).unwrap_or_else(|| "0".into()),
+            Err(_) => {
+                eprintln!("Cannot read the manual HDR origin: tray status lock is poisoned");
+                return;
+            }
+        },
+        None => "0".into(),
+    };
     let sequence = match presentation.begin() {
         Ok(sequence) => sequence,
         Err(error) => {
@@ -353,7 +377,7 @@ fn manual_all(app: &AppHandle, enable: bool, presentation: &Arc<ManualPresentati
     };
     let Some(state) = app.try_state::<AppState>() else {
         report_manual_result(
-            app, presentation.clone(), sequence, Err("HDR control has not initialized.".into()),
+            app, presentation.clone(), sequence, after_revision, Err("HDR control has not initialized.".into()),
         );
         return;
     };
@@ -362,7 +386,7 @@ fn manual_all(app: &AppHandle, enable: bool, presentation: &Arc<ManualPresentati
     let request = match request {
         Ok(request) => request,
         Err(error) => {
-            report_manual_result(app, presentation.clone(), sequence, Err(error));
+            report_manual_result(app, presentation.clone(), sequence, after_revision, Err(error));
             return;
         }
     };
@@ -370,7 +394,7 @@ fn manual_all(app: &AppHandle, enable: bool, presentation: &Arc<ManualPresentati
     let handle = app.clone();
     let presentation = presentation.clone();
     tauri::async_runtime::spawn(async move {
-        report_manual_result(&handle, presentation, sequence, request.resolve().await);
+        report_manual_result(&handle, presentation, sequence, after_revision, request.resolve().await);
     });
 }
 
@@ -468,6 +492,7 @@ mod tests {
 
     fn manual_reply(enable: bool, uncertain: bool) -> Result<ManualSetResult, String> {
         Ok(ManualSetResult {
+            scope: TargetMonitor::All,
             outcomes: vec![MonitorOutcome {
                 device_path: Some("fixture-display".into()),
                 display_name: Some("Fixture display".into()),
@@ -504,7 +529,8 @@ mod tests {
             presentation.clone(),
             request,
             result,
-            move |error| {
+            move |result| {
+                let error = manual_result_error(&result);
                 let mut state = presented.lock().unwrap();
                 state.opened_windows += usize::from(error.is_some());
                 state.error = error;
@@ -579,6 +605,8 @@ mod tests {
     fn status(scope: ScopeHdrState) -> HdrStatePayload {
         HdrStatePayload {
             status_revision: "1".into(),
+            manual_revision: "0".into(),
+            manual_results: Vec::new(),
             inventory_revision: "1".into(),
             is_hdr_active: scope == ScopeHdrState::Hdr,
             scope_hdr_state: scope,

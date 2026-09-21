@@ -1,4 +1,4 @@
-import type { HdrStatePayload, MonitorInfo, MonitorInventorySnapshot, TargetMonitor } from './types.ts';
+import type { HdrStatePayload, ManualControlError, ManualRequestOrigin, MonitorInfo, MonitorInventorySnapshot, TargetMonitor } from './types.ts';
 
 function revision(value: string): bigint | null {
   return /^(0|[1-9]\d*)$/.test(value) ? BigInt(value) : null;
@@ -39,6 +39,61 @@ export class DisplayObservationOrder {
 
   get statusCurrent(): boolean {
     return this.statusInventoryRevision === this.inventoryRevision;
+  }
+}
+
+function scopeKey(scope: TargetMonitor): string {
+  switch (scope.kind) {
+    case 'all': return 'all';
+    case 'monitor': return `monitor:${scope.device_path.toLowerCase()}`;
+    case 'needs_confirmation': return `legacy:${scope.legacy_runtime_id}`;
+  }
+}
+
+// Native result errors live in ordered actor status. Only local/admission/transport
+// errors need this channel; any newer same-scope actor result supersedes them.
+export class ManualFeedbackOrder {
+  private manualRevision = 0n;
+  private scopeRevisions = new Map<string, bigint>();
+  private pendingErrors = new Map<string, ManualControlError>();
+
+  capture(scope: TargetMonitor): ManualRequestOrigin {
+    return { scope, after_revision: this.manualRevision.toString() };
+  }
+
+  acceptStatus(status: Pick<HdrStatePayload, 'manual_revision' | 'manual_results'>): boolean {
+    const next = revision(status.manual_revision);
+    if (next === null || next < this.manualRevision) return false;
+    this.manualRevision = next;
+    let changed = false;
+    for (const result of status.manual_results) {
+      const observed = revision(result.revision);
+      if (observed === null || observed > next) continue;
+      const key = scopeKey(result.scope);
+      if (observed < (this.scopeRevisions.get(key) ?? -1n)) continue;
+      this.scopeRevisions.set(key, observed);
+      const error = this.pendingErrors.get(key);
+      if (error && observed > BigInt(error.after_revision)) {
+        this.pendingErrors.delete(key);
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  acceptError(error: ManualControlError): boolean {
+    const after = revision(error.after_revision);
+    const key = scopeKey(error.scope);
+    if (after === null || after < (this.scopeRevisions.get(key) ?? -1n)) return false;
+    const previous = this.pendingErrors.get(key);
+    if (previous && (BigInt(previous.after_revision) > after
+      || (previous.after_revision === error.after_revision && previous.message === error.message))) return false;
+    this.pendingErrors.set(key, error);
+    return true;
+  }
+
+  errors(): string[] {
+    return [...new Set([...this.pendingErrors.values()].map((error) => error.message))];
   }
 }
 

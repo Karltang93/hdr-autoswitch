@@ -9,6 +9,7 @@ localStorage.removeItem('hdr_recent_games');
 mockWindows('main');
 const mode = options.get('mode') ?? 'ready';
 const aliasMerge = options.get('aliasMerge') === '1';
+const legacyHelperAlias = options.get('legacyHelperAlias') === '1';
 const settings = {
   target_monitor: options.get('mixed') === '1' ? { kind: 'all' } : mode === 'import_available'
     ? { kind: 'needs_confirmation', legacy_runtime_id: 'old-runtime-id' }
@@ -22,7 +23,11 @@ const settings = {
   auto_sync_database: false,
   switch_method: mode === 'import_available' || options.get('consent') === 'pending' ? 'shortcut' : 'native',
   blacklist: [],
-  apps: aliasMerge ? [{
+  apps: legacyHelperAlias ? [{
+    name: 'Fixture game', exe_name: 'game.exe', enabled: false, hdr_type: 'custom',
+    steam_id: '100', launcher: 'Steam', path: 'C:\\Old\\game.exe',
+    alternate_exes: ['BsSndRpt64.exe', 'user.exe'],
+  }] : aliasMerge ? [{
     name: 'Fixture game', exe_name: 'renderer.exe', enabled: false, hdr_type: 'native',
     steam_id: '100', alternate_exes: [], path: 'D:\\Fixture\\renderer.exe',
   }] : [],
@@ -47,6 +52,22 @@ let inventoryFingerprint = null;
 let inventoryFailure = null;
 let statusRevision = 0n;
 let statusFingerprint = null;
+let manualRevision = 0n;
+const manualResults = new Map();
+const manualWarnings = new Map();
+let nextManualFailure = null;
+
+function manualScopeKey(scope) {
+  return scope.kind === 'monitor' ? `monitor:${scope.device_path.toLowerCase()}`
+    : scope.kind === 'all' ? 'all' : `legacy:${scope.legacy_runtime_id}`;
+}
+
+function recordManual(scope, verified, error) {
+  ++manualRevision;
+  manualResults.set(manualScopeKey(scope), {
+    revision: String(manualRevision), scope: structuredClone(scope), verified, error,
+  });
+}
 
 function observeInventory() {
   const fingerprint = JSON.stringify([
@@ -120,6 +141,7 @@ function upsert(rows, incoming, importing = false) {
   }
   const candidate = existing ? structuredClone(existing) : { ...incoming, alternate_exes: incoming.alternate_exes ?? [] };
   if (existing) {
+    candidate.alternate_exes = (candidate.alternate_exes ?? []).filter((exe) => !helper(exe));
     if (repairReason(existing)) {
       candidate.exe_name = incoming.exe_name;
       candidate.path = incoming.path;
@@ -195,12 +217,17 @@ function status() {
     : selected.some((monitor) => monitor.is_hdr_enabled) ? 'mixed' : 'sdr';
   const payload = {
     inventory_revision: observeInventory(),
+    manual_revision: String(manualRevision), manual_results: [...manualResults.values()],
     is_hdr_active: scope_hdr_state === 'hdr', scope_hdr_state,
     manual_control: manualControl(),
     current_app_name: null, current_exe: null, switched_by_app: false,
     steam_id: null, launcher: null, hdr_type: null, target_status,
-    warning: snapshot.controller_issue ?? inventoryFailure
-      ?? (target_status === 'disconnected' ? 'The saved display is disconnected. No other display is substituted.' : null),
+    warning: [...new Set([
+      snapshot.controller_issue, inventoryFailure,
+      target_status === 'disconnected' ? 'The saved display is disconnected. No other display is substituted.' : null,
+      ...[...manualResults.values()].map((result) => result.error),
+      ...manualWarnings.values(),
+    ].filter(Boolean))].join('\n') || null,
     active_target: null, target_deferred: false, inventory_stale: inventoryFailure !== null,
     uncertain_targets: [], operation_outcomes: [],
     quarantined_apps: snapshot.settings.apps.flatMap((app, row_index) => {
@@ -325,21 +352,33 @@ mockIPC(async (command, args = {}) => {
     case 'sync_database': return games.length;
     case 'set_hdr': {
       const admission = manualControl();
-      if (admission.status === 'blocked') throw new Error(admission.reason);
-      if (!manualScopeAvailable(args.scope, monitors)) throw new Error('Fixture scope unavailable');
+      const rejection = admission.status === 'blocked' ? admission.reason
+        : !manualScopeAvailable(args.scope, monitors) ? 'Fixture scope unavailable' : null;
+      if (rejection) {
+        recordManual(args.scope, false, rejection);
+        await emit('hdr-status-changed', status());
+        throw new Error(rejection);
+      }
+      const failure = nextManualFailure;
+      nextManualFailure = null;
       const selected = monitors.filter((monitor) => args.scope.kind === 'all' || args.scope.device_path === monitor.device_path);
       const outcomes = selected.map((monitor) => {
         const previous = monitor.is_hdr_enabled;
-        monitor.is_hdr_enabled = args.enable;
+        if (!failure) monitor.is_hdr_enabled = args.enable;
+        if (failure) manualWarnings.set(monitor.device_path, failure);
+        else manualWarnings.delete(monitor.device_path);
         return {
           device_path: monitor.device_path, display_name: monitor.name,
-          requested_hdr: args.enable, outcome: previous === args.enable ? 'already_in_desired_state' : 'changed',
-          failure: null, message: null, previous_hdr: previous, observed_hdr: args.enable, attempts: 1,
-          previous_hdr_user_enabled: previous, observed_hdr_user_enabled: args.enable,
+          requested_hdr: args.enable, outcome: failure ? 'failed'
+            : previous === args.enable ? 'already_in_desired_state' : 'changed',
+          failure: failure ? 'native_rejected' : null, message: failure,
+          previous_hdr: previous, observed_hdr: monitor.is_hdr_enabled, attempts: 1,
+          previous_hdr_user_enabled: previous, observed_hdr_user_enabled: monitor.is_hdr_enabled,
         };
       });
+      recordManual(args.scope, !failure, null);
       await emit('hdr-status-changed', status());
-      return { outcomes, partial: false, status: status() };
+      return { scope: structuredClone(args.scope), outcomes, partial: !!failure, status: status() };
     }
     default: throw new Error(`Unexpected fixture command: ${command}`);
   }
@@ -357,6 +396,7 @@ window.__hdrFixture = {
   commands,
   get snapshot() { return structuredClone(snapshot); },
   permitSaves() { failSave = false; },
+  failNextManual(message) { nextManualFailure = message; },
   emitStatus: (payload = status()) => emit('hdr-status-changed', payload),
   get status() { return status(); },
   get monitors() { return structuredClone(monitors); },

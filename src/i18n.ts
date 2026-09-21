@@ -71,6 +71,7 @@ export interface Translations {
   // Apps Manager
   appsTitle: string;
   appsRepairExecutable: string;
+  appsHelperAliasCleanup: string;
   appsQuarantined: string;
   quarantineWarning: (game: string, executable: string) => string;
   primaryPathWarning: (game: string, executable: string) => string;
@@ -248,6 +249,7 @@ export interface Translations {
 
 const cs: Translations = {
   appsRepairExecutable: 'Vybrat skutečný herní soubor',
+  appsHelperAliasCleanup: 'Potvrzená aktualizace odstraní dříve uložené blokované pomocné soubory z alternativních spustitelných souborů. Ostatní alternativní soubory zůstanou zachovány.',
   appsQuarantined: 'Blokovaný soubor',
   quarantineWarning: (game, executable) => `${game}: soubor ${executable} je blokován. Automatické rozpoznávání této hry je blokováno; uložená nastavení zůstávají beze změny. V Moje hry vyberte skutečný herní soubor. Oprava odstraní staré alternativní soubory.`,
   primaryPathWarning: (game, executable) => `${game}: uložená cesta neodpovídá hlavnímu souboru ${executable}. Automatické rozpoznávání je blokováno; nastavení zůstávají beze změny. V Moje hry znovu vyberte skutečný herní soubor. Oprava odstraní staré alternativní soubory.`,
@@ -480,6 +482,7 @@ const cs: Translations = {
 
 const en: Translations = {
   appsRepairExecutable: 'Select actual game executable',
+  appsHelperAliasCleanup: 'Confirming an update removes previously saved blocked helper aliases. Other executable aliases are preserved.',
   appsQuarantined: 'Blocked executable',
   quarantineWarning: (game, executable) => `${game}: ${executable} is blocked. Automatic matching for this game is blocked; saved settings remain unchanged. Select the actual game executable in My Games. Repair removes historical executable aliases.`,
   primaryPathWarning: (game, executable) => `${game}: the saved path does not match primary executable ${executable}. Automatic matching is blocked; saved settings remain unchanged. Select the actual game executable again in My Games. Repair removes historical executable aliases.`,
