@@ -158,48 +158,16 @@ impl AppConfig {
     }
 
     pub fn is_hdr_app(&self, exe: &str) -> bool {
-        let exe = exe.to_lowercase();
-        !self.blacklist.iter().any(|b| b.to_lowercase() == exe)
-            && self.apps.iter().any(|a| {
-                a.enabled
-                    && (a.exe_name.to_lowercase() == exe
-                        || a.alternate_exes.iter().any(|alt| alt.to_lowercase() == exe))
-            })
+        self.find_app(exe).is_some()
     }
 
     pub fn find_app(&self, exe: &str) -> Option<&HdrApp> {
-        let exe = exe.to_lowercase();
-        if let Some(app) = self.apps.iter().find(|a| {
-            a.exe_name.to_lowercase() == exe
-                || a.alternate_exes.iter().any(|alt| alt.to_lowercase() == exe)
-        }) {
-            return Some(app);
-        }
-        let target = executable_stem(&exe)
-            .replace("_dx12", "")
-            .replace("_dx11", "")
-            .replace("_vk", "");
-        let target = alphanumeric(&target);
-        if target.len() < 3 {
-            return None;
-        }
-        self.apps.iter().find(|a| {
-            alphanumeric(&executable_stem(&a.exe_name.to_lowercase())) == target
-                || alphanumeric(&a.name.to_lowercase()) == target
-        })
+        self.resolve_app(None, exe).matched()
     }
-}
 
-fn executable_stem(exe: &str) -> String {
-    exe.trim_end_matches(".exe")
-        .replace("-win64-shipping", "")
-        .replace("_win64_shipping", "")
-        .replace("-shipping", "")
-        .replace("_shipping", "")
-}
-
-fn alphanumeric(value: &str) -> String {
-    value.chars().filter(|c| c.is_alphanumeric()).collect()
+    pub fn resolve_app(&self, path: Option<&str>, exe: &str) -> crate::runtime_policy::Resolution<'_> {
+        crate::runtime_policy::resolve(self, path, exe)
+    }
 }
 
 pub(crate) fn decode_legacy(bytes: &[u8]) -> Result<AppConfig, String> {
@@ -1736,18 +1704,19 @@ mod tests {
     }
 
     #[test]
-    fn matching_keeps_exact_alternate_stem_and_blacklist_behavior() {
+    fn matching_is_exact_enabled_unscoped_and_never_fuzzy() {
         let mut settings = AppConfig::default();
         let mut game = app("ExampleGame.exe");
         game.enabled = true;
+        game.path = None;
         settings.apps.push(game);
         assert!(settings.is_hdr_app("EXAMPLEGAME.EXE"));
         assert!(settings.is_hdr_app("GAME-WIN64-SHIPPING.EXE"));
-        assert!(settings.find_app("ExampleGame_dx12.exe").is_some());
+        assert!(settings.find_app("ExampleGame_dx12.exe").is_none());
         assert!(!settings.is_hdr_app("ExampleGame_dx12.exe"));
         settings.blacklist.push("EXAMPLEGAME.EXE".into());
         assert!(!settings.is_hdr_app("ExampleGame.exe"));
-        assert!(settings.find_app("ExampleGame.exe").is_some());
+        assert!(settings.find_app("ExampleGame.exe").is_none());
         assert!(settings.find_app("ex.exe").is_none());
     }
 }

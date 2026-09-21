@@ -1,12 +1,15 @@
 use crate::config::{
-    AppConfig, ConfigManager, ConfigMode, ConfigSnapshot, HdrApp, SwitchMethod, TargetMonitor,
+    ConfigManager, ConfigMode, ConfigSnapshot, SwitchMethod, TargetMonitor,
 };
+#[cfg(test)]
+use crate::config::{AppConfig, HdrApp};
 pub use crate::display::ScopeHdrState;
 use crate::display::{
     DisplayFailure, FailureKind, MonitorInfo, MonitorOutcome, NativeAttempt, NativePurpose,
     OutcomeKind, TargetStatus, WindowsDisplay,
 };
 use crate::hdr_controller::{same_target, HdrController, ProcessIdentity, WriteAuthority};
+use crate::runtime_policy::{quarantined_apps, QuarantinedApp, Resolution};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
@@ -72,7 +75,7 @@ fn manual_admission(snapshot: &ConfigSnapshot, admitted: bool) -> ManualControl 
     }
 }
 
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
 pub struct HdrStatePayload {
     /// Observed frozen activation scope, or the saved scope when no activation exists.
     pub is_hdr_active: bool,
@@ -85,6 +88,7 @@ pub struct HdrStatePayload {
     pub launcher: Option<String>,
     pub hdr_type: Option<String>,
     pub warning: Option<String>,
+    pub quarantined_apps: Vec<QuarantinedApp>,
     /// Availability of the saved target for the next activation.
     pub target_status: TargetStatus,
     pub active_target: Option<TargetMonitor>,
@@ -108,6 +112,7 @@ impl HdrStatePayload {
             launcher: None,
             hdr_type: None,
             warning: Some(message),
+            quarantined_apps: Vec::new(),
             target_status: TargetStatus::AutomationPaused,
             active_target: None,
             target_deferred: false,
@@ -423,6 +428,7 @@ impl Drop for OwnedHandle {
 struct TrackedProcess {
     identity: ProcessIdentity,
     exe: String,
+    path: String,
     handle: Arc<OwnedHandle>,
 }
 
@@ -496,6 +502,7 @@ fn observe_foreground_pid(pid: u32) -> Result<Option<TrackedProcess>, String> {
                 | u64::from(created.dwLowDateTime),
         },
         exe,
+        path,
         handle,
     };
     if process.is_foreground() {
@@ -707,29 +714,19 @@ enum OperationKind {
     Cleanup,
 }
 
-fn matches_app(app: &HdrApp, exe: &str) -> bool {
-    app.exe_name.eq_ignore_ascii_case(exe)
-        || app
-            .alternate_exes
-            .iter()
-            .any(|alternate| alternate.eq_ignore_ascii_case(exe))
-}
-
+#[cfg(test)]
 fn eligible_app<'a>(config: &'a AppConfig, exe: &str) -> Option<&'a HdrApp> {
-    if config
-        .blacklist
-        .iter()
-        .any(|blocked| blocked.eq_ignore_ascii_case(exe))
-    {
-        return None;
-    }
-    config
-        .apps
-        .iter()
-        .find(|app| app.enabled && matches_app(app, exe))
+    config.resolve_app(None, exe).matched()
 }
 
+#[cfg(test)]
 fn automatic_pause(snapshot: &ConfigSnapshot, exe: &str, origin_context: &str) -> Option<String> {
+    automatic_pause_for_path(snapshot, None, exe, origin_context)
+}
+
+fn automatic_pause_for_path(
+    snapshot: &ConfigSnapshot, path: Option<&str>, exe: &str, origin_context: &str,
+) -> Option<String> {
     if let Some(issue) = &snapshot.controller_issue {
         return Some(issue.clone());
     }
@@ -749,10 +746,44 @@ fn automatic_pause(snapshot: &ConfigSnapshot, exe: &str, origin_context: &str) -
             "Native HDR consent is required; keyboard-shortcut automation is disabled".into(),
         );
     }
-    if eligible_app(&snapshot.settings, exe).is_none() {
+    if snapshot.settings.resolve_app(path, exe).matched().is_none() {
         return Some("The tracked application is no longer eligible for automatic HDR".into());
     }
     None
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum UnmatchedAction {
+    Finish,
+    KeepUntilExit,
+    Debounce,
+}
+
+fn unmatched_action(eligible: bool, alive: bool, exit_only: bool, expired: bool) -> UnmatchedAction {
+    if !eligible || !alive {
+        UnmatchedAction::Finish
+    } else if exit_only {
+        UnmatchedAction::KeepUntilExit
+    } else if expired {
+        UnmatchedAction::Finish
+    } else {
+        UnmatchedAction::Debounce
+    }
+}
+
+#[derive(Default)]
+struct StatusPublication {
+    last: Option<HdrStatePayload>,
+}
+
+impl StatusPublication {
+    fn changed(&self, payload: &HdrStatePayload) -> bool {
+        self.last.as_ref() != Some(payload)
+    }
+
+    fn published(&mut self, payload: HdrStatePayload) {
+        self.last = Some(payload);
+    }
 }
 
 fn publish_enrollment_result(
@@ -853,8 +884,9 @@ impl WriteAuthority for Authority {
                                 .into(),
                         );
                     }
-                    if let Some(reason) = automatic_pause(
+                    if let Some(reason) = automatic_pause_for_path(
                         snapshot,
+                        Some(&process.path),
                         &process.exe,
                         self.context_token.as_deref().unwrap_or(""),
                     ) {
@@ -893,6 +925,7 @@ struct Actor {
     debounce: Option<Debounce>,
     foreground_observation: ForegroundObservation,
     last_outcomes: Vec<MonitorOutcome>,
+    publication: StatusPublication,
 }
 
 impl Actor {
@@ -907,6 +940,7 @@ impl Actor {
             debounce: None,
             foreground_observation: ForegroundObservation::default(),
             last_outcomes: Vec::new(),
+            publication: StatusPublication::default(),
         }
     }
 
@@ -1057,16 +1091,7 @@ impl Actor {
             || origin.controller_issue.is_some()
             || !matches!(origin.settings.switch_method, SwitchMethod::Native)
             || !origin.settings.auto_detect_new_games
-            || origin
-                .settings
-                .blacklist
-                .iter()
-                .any(|exe| exe.eq_ignore_ascii_case(&process.exe))
-            || origin
-                .settings
-                .apps
-                .iter()
-                .any(|app| matches_app(app, &process.exe))
+            || origin.settings.resolve_app(Some(&process.path), &process.exe) != Resolution::NoMatch
         {
             return;
         }
@@ -1092,15 +1117,8 @@ impl Actor {
                     || !process.is_foreground()
                     || !current.auto_detect_new_games
                     || !matches!(current.switch_method, SwitchMethod::Native)
-                    || current
-                        .blacklist
-                        .iter()
-                        .any(|exe| exe.eq_ignore_ascii_case(&process.exe))
-                    || current.apps.iter().any(|existing| {
-                        matches_app(existing, &process.exe)
-                            || existing.name.eq_ignore_ascii_case(&app.name)
-                            || (app.steam_id.is_some() && existing.steam_id == app.steam_id)
-                    })
+                    || current.resolve_app(Some(&process.path), &process.exe) != Resolution::NoMatch
+                    || crate::library::automatic_enrollment_veto(&current.apps, &app)
                 {
                     return Err("Automatic enrollment is no longer eligible".into());
                 }
@@ -1164,7 +1182,7 @@ impl Actor {
         }
         let snapshot = self.config.snapshot()?;
         let game = foreground.filter(|process| {
-            automatic_pause(&snapshot, &process.exe, &snapshot.context_token).is_none()
+            automatic_pause_for_path(&snapshot, Some(&process.path), &process.exe, &snapshot.context_token).is_none()
                 && process.is_foreground()
                 && self.events.hook_available.load(Ordering::Acquire)
         });
@@ -1177,32 +1195,36 @@ impl Actor {
                     .transfer(process.identity, process.exe.clone());
                 self.tracked = Some(process.clone());
                 self.debounce = None;
-            } else if automatic_pause(&snapshot, &active.exe, &active.context_token).is_some()
-                || !self.tracked.as_ref().is_some_and(TrackedProcess::is_alive)
-            {
-                self.finish_activation(usize::MAX);
-            } else if snapshot.settings.exit_only_hdr {
-                self.debounce = None;
-            } else if expired.is_some_and(|timer| {
-                self.controller
-                    .matches_activation(timer.generation, timer.process)
-            }) {
-                self.finish_activation(usize::MAX);
             } else {
-                let seconds = snapshot.settings.alt_tab_delay_seconds;
-                if !self.debounce.is_some_and(|timer| {
-                    timer.generation == active.generation && timer.seconds == seconds
-                }) {
-                    let delay = Duration::from_secs(seconds);
-                    let deadline = Instant::now()
-                        .checked_add(delay)
-                        .unwrap_or_else(|| Instant::now() + Duration::from_secs(86400));
-                    self.debounce = Some(Debounce {
-                        deadline,
-                        generation: active.generation,
-                        process: active.process,
-                        seconds,
-                    });
+                let action = unmatched_action(
+                    automatic_pause_for_path(
+                        &snapshot, self.tracked.as_ref().map(|process| process.path.as_str()),
+                        &active.exe, &active.context_token,
+                    ).is_none(),
+                    self.tracked.as_ref().is_some_and(TrackedProcess::is_alive),
+                    snapshot.settings.exit_only_hdr,
+                    expired.is_some_and(|timer| self.controller.matches_activation(timer.generation, timer.process)),
+                );
+                match action {
+                    UnmatchedAction::Finish => self.finish_activation(usize::MAX),
+                    UnmatchedAction::KeepUntilExit => self.debounce = None,
+                    UnmatchedAction::Debounce => {
+                        let seconds = snapshot.settings.alt_tab_delay_seconds;
+                        if !self.debounce.is_some_and(|timer| {
+                            timer.generation == active.generation && timer.seconds == seconds
+                        }) {
+                            let delay = Duration::from_secs(seconds);
+                            let deadline = Instant::now()
+                                .checked_add(delay)
+                                .unwrap_or_else(|| Instant::now() + Duration::from_secs(86400));
+                            self.debounce = Some(Debounce {
+                                deadline,
+                                generation: active.generation,
+                                process: active.process,
+                                seconds,
+                            });
+                        }
+                    }
                 }
             }
         }
@@ -1252,7 +1274,10 @@ impl Actor {
             return;
         };
         let reason = match self.config.snapshot() {
-            Ok(snapshot) => automatic_pause(&snapshot, &active.exe, &active.context_token),
+            Ok(snapshot) => automatic_pause_for_path(
+                &snapshot, self.tracked.as_ref().map(|process| process.path.as_str()),
+                &active.exe, &active.context_token,
+            ),
             Err(error) => Some(error),
         };
         let reason = reason.or_else(|| {
@@ -1294,7 +1319,7 @@ impl Actor {
         // foreground must not produce an automatic On followed by a second hidden setter.
         let _ = self.controller.refresh_inventory();
         if let Ok(Some(process)) = observe_foreground() {
-            if automatic_pause(&snapshot, &process.exe, &snapshot.context_token).is_none() {
+            if automatic_pause_for_path(&snapshot, Some(&process.path), &process.exe, &snapshot.context_token).is_none() {
                 if self.controller.activation().is_none() {
                     match self.controller.begin(
                         process.identity,
@@ -1377,11 +1402,9 @@ impl Actor {
     fn payload(&self, snapshot: &ConfigSnapshot) -> HdrStatePayload {
         let active = self.controller.activation();
         let app = active.and_then(|active| {
-            snapshot
-                .settings
-                .apps
-                .iter()
-                .find(|app| matches_app(app, &active.exe))
+            snapshot.settings.resolve_app(
+                self.tracked.as_ref().map(|process| process.path.as_str()), &active.exe,
+            ).matched()
         });
         let mut warnings = self.foreground_observation.warnings(self.controller.warning());
         if let Some(issue) = &snapshot.issue {
@@ -1442,6 +1465,7 @@ impl Actor {
             } else {
                 Some(warnings.join("\n"))
             },
+            quarantined_apps: quarantined_apps(&snapshot.settings),
             target_status,
             active_target: active.map(|active| active.target.clone()),
             target_deferred,
@@ -1466,6 +1490,9 @@ impl Actor {
                 HdrStatePayload::unavailable(warnings.join("\n"))
             }
         };
+        if !self.publication.changed(&payload) {
+            return;
+        }
         if let Err(error) = self.app.emit("hdr-status-changed", payload.clone()) {
             let warning = format!("Unable to publish HDR status: {error}");
             eprintln!("{warning}");
@@ -1474,6 +1501,8 @@ impl Actor {
                 Some(existing) => format!("{existing}\n{warning}"),
                 None => warning,
             });
+        } else {
+            self.publication.published(payload.clone());
         }
         crate::tray::update_status(&self.app, &payload);
     }
@@ -1806,7 +1835,7 @@ mod tests {
         let (service, receiver) = idle_service(fixture.manager.clone());
         let unchanged = fixture.manager.mutate_if_changed(
             &before.context_token, Some(&before.library_generation), true, |settings| {
-                assert!(!crate::library::enrich_verified_metadata(settings, &before.settings.apps));
+                assert!(!crate::library::enrich_verified_metadata(settings, &[]));
                 Ok(())
             },
         );
@@ -1817,6 +1846,199 @@ mod tests {
         assert!(receiver.try_recv().is_err());
         assert_eq!(fixture.manager.snapshot().unwrap(), before);
         assert_eq!(std::fs::read(&before.config_path).unwrap(), bytes);
+    }
+
+    #[test]
+    fn verified_aoe3_alias_enrichment_publishes_once_then_is_byte_and_actor_noop() {
+        use crate::automatic_authority::{self, Authority as GameAuthority, InstallEvidence, Provider};
+        let fixture = GateFixture::new();
+        let ready = fixture.ready();
+        let install = fixture._directory.path().join(r"XboxGames\AOE3");
+        std::fs::create_dir_all(install.join("Content")).unwrap();
+        std::fs::write(install.join(r"Content\AoE3DE.exe"), b"fixture, never executed").unwrap();
+        std::fs::write(install.join(r"Content\GameLaunchHelper.exe"), b"fixture, never executed").unwrap();
+        std::fs::write(install.join(r"Content\MicrosoftGame.config"), br#"<Game><ExecutableList>
+            <Executable Name="AoE3DE.exe"/><Executable Name="GameLaunchHelper.exe"/>
+            </ExecutableList></Game>"#).unwrap();
+        let declarations = crate::xbox_config::declarations(&install).unwrap();
+        let evidence = InstallEvidence::observe(Provider::Xbox, None, &install, &declarations).unwrap();
+        let catalog: Vec<crate::database::CatalogEntry> =
+            serde_json::from_str(include_str!("../catalog.json")).unwrap();
+        let GameAuthority::Resolved(resolved) = automatic_authority::resolve(&catalog, Some(&evidence))
+        else { panic!("AOE3 Xbox fixture must resolve"); };
+        assert_eq!(resolved.as_app(true).exe_name, "aoe3de.exe");
+        assert!(resolved.as_app(true).alternate_exes.is_empty());
+        let before = fixture.manager.mutate(&ready.context_token, None, true, |settings| {
+            let row = &mut settings.apps[0];
+            row.exe_name = resolved.catalog.exe_name.clone();
+            row.name = "My custom AOE3 title".into();
+            row.enabled = false;
+            row.hdr_type = HdrType::Custom;
+            row.launcher = Some("Xbox".into());
+            Ok(())
+        }).unwrap();
+        let (service, receiver) = idle_service(fixture.manager.clone());
+        let mut publications = 0;
+        for attempt in 0..5 {
+            let origin = fixture.manager.snapshot().unwrap();
+            let bytes = std::fs::read(&origin.config_path).unwrap();
+            let changed = fixture.manager.mutate_if_changed(
+                &origin.context_token, Some(&origin.library_generation), true,
+                |settings| {
+                    assert_eq!(crate::library::enrich_verified_aliases(
+                        settings, std::slice::from_ref(&resolved),
+                    ), attempt == 0);
+                    Ok(())
+                },
+            );
+            assert_eq!(matches!(&changed, Ok(Some(_))), attempt == 0);
+            crate::background::publish_enrichment_result(
+                &fixture.manager, &service, changed, |_| publications += 1,
+            );
+            if attempt == 0 {
+                assert!(matches!(receiver.try_recv(), Ok(Command::ConfigCommitted)));
+                service.events.config_pending.store(false, Ordering::Release);
+            } else {
+                assert!(receiver.try_recv().is_err());
+                assert_eq!(fixture.manager.snapshot().unwrap(), origin);
+                assert_eq!(std::fs::read(&origin.config_path).unwrap(), bytes);
+            }
+        }
+        assert_eq!(publications, 1);
+        let after = fixture.manager.snapshot().unwrap();
+        let mut expected = before.settings.apps[0].clone();
+        expected.alternate_exes = vec!["aoe3de.exe".into()];
+        assert_eq!(after.settings.apps, [expected]);
+        assert_eq!(after.settings.resolve_app(None, "AoE3DE.exe"), Resolution::Disabled);
+        assert_eq!(after.settings.resolve_app(None, "GameLaunchHelper.exe"), Resolution::Excluded);
+        assert_eq!(after.revision.parse::<u64>().unwrap(), before.revision.parse::<u64>().unwrap() + 1);
+    }
+
+    #[test]
+    fn known_id_creation_veto_is_not_merge_authority_and_is_persistently_quiet() {
+        use crate::automatic_authority::{self, Authority as GameAuthority, InstallEvidence, Provider};
+        let root = tempfile::tempdir().unwrap();
+        for exe in ["game.exe", "renderer.exe"] {
+            std::fs::write(root.path().join(exe), b"fixture, never executed").unwrap();
+        }
+        let catalog = vec![serde_json::from_value::<crate::database::CatalogEntry>(serde_json::json!({
+            "name": "Catalog game", "exe_name": "game.exe", "steam_id": "123",
+            "hdr_type": "native", "support_tier": "native", "alternate_exes": ["renderer.exe"],
+        })).unwrap()];
+        let evidence = InstallEvidence::observe(Provider::Steam, Some("123"), root.path(), &[]).unwrap();
+        let GameAuthority::Resolved(resolved) = automatic_authority::resolve(&catalog, Some(&evidence))
+        else { panic!("fixture must resolve"); };
+        for enabled in [false, true] {
+            for equal_id in [false, true] {
+                let fixture = GateFixture::new();
+                let ready = fixture.ready();
+                let before = fixture.manager.mutate(&ready.context_token, None, true, |settings| {
+                    let row = &mut settings.apps[0];
+                    row.name = "My independent binding".into();
+                    row.exe_name = if equal_id { "my-choice.exe" } else { "game.exe" }.into();
+                    row.steam_id = Some(if equal_id { "123" } else { "999" }.into());
+                    row.launcher = Some("Steam".into());
+                    row.enabled = enabled;
+                    Ok(())
+                }).unwrap();
+                let bytes = std::fs::read(&before.config_path).unwrap();
+                let (service, receiver) = idle_service(fixture.manager.clone());
+                assert!(crate::library::automatic_enrollment_veto(&before.settings.apps, &resolved.as_app(true)));
+                let unchanged = fixture.manager.mutate_if_changed(
+                    &before.context_token, Some(&before.library_generation), true, |settings| {
+                        assert!(!crate::library::enrich_verified_aliases(settings, std::slice::from_ref(&resolved)));
+                        assert!(!crate::library::enrich_verified_metadata(settings, std::slice::from_ref(&resolved)));
+                        Ok(())
+                    },
+                );
+                assert!(matches!(&unchanged, Ok(None)));
+                crate::background::publish_enrichment_result(
+                    &fixture.manager, &service, unchanged, |_| panic!("ID-only/ID-conflict emitted"),
+                );
+                assert!(receiver.try_recv().is_err());
+                assert_eq!(fixture.manager.snapshot().unwrap(), before);
+                assert_eq!(std::fs::read(&before.config_path).unwrap(), bytes);
+            }
+        }
+    }
+
+    #[test]
+    fn legacy_aoe4_quarantine_is_derived_quiet_and_repair_retires_status() {
+        let fixture = GateFixture::new();
+        let ready = fixture.ready();
+        let before = fixture.manager.mutate(&ready.context_token, None, true, |settings| {
+            let row = &mut settings.apps[0];
+            row.name = "My Age of Empires IV".into();
+            row.exe_name = "BsSndRpt64.exe".into();
+            row.path = Some(r"D:\AOE4\BsSndRpt64.exe".into());
+            row.alternate_exes = vec!["historical.exe".into(), "BugSplatHD64.exe".into()];
+            row.enabled = false;
+            row.hdr_type = HdrType::Custom;
+            row.steam_id = Some("1466860".into());
+            row.launcher = Some("My launcher".into());
+            Ok(())
+        }).unwrap();
+        let bytes = std::fs::read(&before.config_path).unwrap();
+        let (service, receiver) = idle_service(fixture.manager.clone());
+        let mut publication = StatusPublication::default();
+        let mut publications = 0;
+        for _ in 0..100 {
+            let latest = fixture.manager.snapshot().unwrap();
+            assert_eq!(latest.settings.resolve_app(None, "historical.exe"), Resolution::Quarantined);
+            assert_eq!(latest.settings.resolve_app(None, "BsSndRpt64.exe"), Resolution::Excluded);
+            let mut payload = HdrStatePayload::unavailable("test display unavailable".into());
+            payload.quarantined_apps = quarantined_apps(&latest.settings);
+            assert_eq!(payload.quarantined_apps, [QuarantinedApp {
+                name: "My Age of Empires IV".into(), exe_name: "BsSndRpt64.exe".into(),
+            }]);
+            if publication.changed(&payload) {
+                publications += 1;
+                publication.published(payload);
+            }
+        }
+        assert_eq!(publications, 1);
+        assert_eq!(fixture.manager.snapshot().unwrap(), before);
+        assert_eq!(std::fs::read(&before.config_path).unwrap(), bytes);
+        assert!(receiver.try_recv().is_err(), "derivation must not wake the actor");
+
+        let invalid = fixture.manager.mutate(
+            &before.context_token, Some(&before.library_generation), true,
+            |settings| crate::library::repair_executable(
+                settings, "BsSndRpt64.exe", "GameLaunchHelper.exe", r"D:\AOE4\GameLaunchHelper.exe",
+            ),
+        );
+        assert!(invalid.is_err());
+        assert_eq!(fixture.manager.snapshot().unwrap(), before);
+        assert_eq!(std::fs::read(&before.config_path).unwrap(), bytes);
+
+        // A fixture-selected executable, not a claim about AOE4's real binary.
+        let repaired = fixture.manager.mutate(
+            &before.context_token, Some(&before.library_generation), true,
+            |settings| crate::library::repair_executable(
+                settings, "BsSndRpt64.exe", "user-selected.exe", r"D:\AOE4\user-selected.exe",
+            ),
+        ).unwrap();
+        let mut expected = before.settings.apps[0].clone();
+        expected.exe_name = "user-selected.exe".into();
+        expected.path = Some(r"D:\AOE4\user-selected.exe".into());
+        expected.alternate_exes.clear();
+        assert_eq!(repaired.settings.apps, [expected]);
+        assert!(quarantined_apps(&repaired.settings).is_empty());
+        assert_eq!(repaired.settings.resolve_app(None, "historical.exe"), Resolution::NoMatch);
+        assert_eq!(repaired.settings.resolve_app(
+            Some(r"D:\AOE4\user-selected.exe"), "user-selected.exe",
+        ), Resolution::Disabled);
+        let mut payload = publication.last.clone().unwrap();
+        payload.quarantined_apps = quarantined_apps(&repaired.settings);
+        assert!(publication.changed(&payload));
+        publication.published(payload.clone());
+        assert!(!publication.changed(&payload));
+        assert_eq!(repaired.revision.parse::<u64>().unwrap(), before.revision.parse::<u64>().unwrap() + 1);
+        assert!(fixture.manager.mutate(
+            &before.context_token, Some(&before.library_generation), true,
+            |_| panic!("stale repair must not reach a mutation"),
+        ).is_err());
+        drop(service);
     }
 
     #[test]
@@ -2103,6 +2325,7 @@ mod tests {
         TrackedProcess {
             identity: ProcessIdentity { pid, created_at },
             exe: exe.into(),
+            path: format!(r"C:\Fixture\{exe}"),
             handle: Arc::new(OwnedHandle(handle)),
         }
     }
@@ -2374,6 +2597,118 @@ mod tests {
             assert!(automatic_pause(&snapshot, &cached.exe, &snapshot.context_token).is_some());
             snapshot = ready;
             assert!(automatic_pause(&snapshot, &cached.exe, &snapshot.context_token).is_none());
+        }
+    }
+
+    #[test]
+    fn delayed_and_cached_observations_use_latest_path_disable_and_repair_policy() {
+        let fixture = GateFixture::new();
+        let initial = fixture.ready();
+        let now = Instant::now();
+        for repair in [false, true] {
+            let ready = fixture.manager.mutate(&initial.context_token, None, true, |settings| {
+                settings.apps = initial.settings.apps.clone();
+                settings.apps[0].path = Some(r"C:\Fixture\game.exe".into());
+                Ok(())
+            }).unwrap();
+            let mut observation = ForegroundObservation::default();
+            let key = observation_key(42);
+            let process = observation.sample(
+                key, now,
+                |_| {
+                    fixture.manager.mutate(&ready.context_token, None, true, |settings| {
+                        if repair {
+                            settings.apps[0].exe_name = "user-selected.exe".into();
+                            settings.apps[0].path = Some(r"C:\Fixture\user-selected.exe".into());
+                            settings.apps[0].alternate_exes.clear();
+                        } else {
+                            settings.apps[0].enabled = false;
+                        }
+                        Ok(())
+                    }).unwrap();
+                    Ok(Some(test_process(42, 100, "game.exe")))
+                },
+                || (key, now),
+            ).unwrap();
+            assert!(automatic_pause_for_path(
+                &ready, Some(&process.path), &process.exe, &ready.context_token,
+            ).is_none());
+            let latest = fixture.manager.snapshot().unwrap();
+            assert!(automatic_pause_for_path(
+                &latest, Some(&process.path), &process.exe, &ready.context_token,
+            ).is_some());
+            let cached = observation.sample(
+                key, now, |_| panic!("policy does not need reinspection"),
+                || panic!("cached observation has no in-flight operation"),
+            ).unwrap();
+            assert!(automatic_pause_for_path(
+                &latest, Some(&cached.path), &cached.exe, &ready.context_token,
+            ).is_some());
+        }
+    }
+
+    #[test]
+    fn every_nonmatch_reconciles_owned_hdr_without_claiming_user_hdr() {
+        use crate::display::tests::{monitor, MockDisplay};
+        struct Enable;
+        impl WriteAuthority for Enable {
+            fn authorize(&mut self, _: &NativeAttempt, issue: &mut dyn FnMut()) -> Result<(), DisplayFailure> {
+                issue();
+                Ok(())
+            }
+        }
+        let fixture = GateFixture::new();
+        fixture.ready();
+        for rejection in 0..6 {
+            let mut snapshot = ready_snapshot();
+            let mut rejected = snapshot.settings.apps[0].clone();
+            rejected.exe_name = "other.exe".into();
+            snapshot.settings.apps.push(rejected.clone());
+            let exe = match rejection {
+                0 => "GameLaunchHelper.exe",
+                1 => { snapshot.settings.apps[1].enabled = false; "other.exe" }
+                2 => { snapshot.settings.apps.push(rejected); "other.exe" }
+                3 => "unlisted.exe",
+                4 => {
+                    snapshot.settings.apps[1].exe_name = "BsSndRpt.exe".into();
+                    snapshot.settings.apps[1].alternate_exes.push("other.exe".into());
+                    "other.exe"
+                }
+                _ => {
+                    snapshot.settings.apps[1].path = Some(r"D:\Other\other.exe".into());
+                    "other.exe"
+                }
+            };
+            assert!(automatic_pause_for_path(
+                &snapshot, Some(r"C:\Fixture\other.exe"), exe, "context",
+            ).is_some());
+            let mut controller = HdrController::new(MockDisplay::new(vec![
+                monitor("owned", 1, false), monitor("user", 2, true),
+            ]));
+            controller.refresh_inventory().unwrap();
+            controller.begin(
+                ProcessIdentity { pid: 42, created_at: 100 }, "game.exe".into(),
+                "context".into(), TargetMonitor::All,
+            ).unwrap();
+            controller.enable_activation(&mut Enable);
+            assert_eq!(unmatched_action(true, true, false, false), UnmatchedAction::Debounce);
+            assert_eq!(unmatched_action(true, true, true, true), UnmatchedAction::KeepUntilExit);
+            for (eligible, alive, exit_only, expired) in [
+                (true, true, false, true), (true, false, true, false), (false, true, true, false),
+            ] {
+                assert_eq!(unmatched_action(eligible, alive, exit_only, expired), UnmatchedAction::Finish);
+            }
+            let action = unmatched_action(true, true, false, true);
+            let outcomes = match action {
+                UnmatchedAction::Finish => controller.end(&mut fixture.authority(OperationKind::Cleanup), usize::MAX),
+                _ => panic!("expired nonmatch must follow cleanup"),
+            };
+            assert_eq!(outcomes.len(), 1);
+            assert_eq!(outcomes[0].device_path.as_deref(), Some("owned"));
+            assert!(!outcomes[0].requested_hdr);
+            controller.refresh_inventory().unwrap();
+            assert!(!controller.inventory()[0].is_hdr_enabled);
+            assert!(controller.inventory()[1].is_hdr_enabled);
         }
     }
 

@@ -307,6 +307,24 @@ pub fn add_custom_app(
 }
 
 #[tauri::command]
+pub fn repair_app_executable(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    expected_context: String,
+    expected_library_generation: String,
+    exe_name: String,
+    path: String,
+) -> Result<ConfigSnapshot, String> {
+    require_context(&state, &expected_context)?;
+    let selected = scanner::inspect_exe_path(&path)?;
+    let result = state.config_mgr.mutate(
+        &expected_context, Some(&expected_library_generation), true,
+        |settings| library::repair_executable(settings, &exe_name, &selected.exe_name, &selected.path),
+    );
+    publish(&app, &state, result)
+}
+
+#[tauri::command]
 pub fn remove_app(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -354,9 +372,24 @@ pub fn toggle_app(
     publish(&app, &state, result)
 }
 
+#[derive(Serialize)]
+pub struct RunningProcessView {
+    #[serde(flatten)]
+    process: RunningProcessInfo,
+    tracked_primary: Option<String>,
+}
+
+fn running_process_view(process: RunningProcessInfo, snapshot: &ConfigSnapshot) -> RunningProcessView {
+    let tracked_primary = snapshot.settings.resolve_app(Some(&process.path), &process.exe_name)
+        .matched().map(|app| app.exe_name.clone());
+    RunningProcessView { process, tracked_primary }
+}
+
 #[tauri::command]
-pub fn get_running_processes() -> Vec<RunningProcessInfo> {
-    crate::process::get_running_processes()
+pub fn get_running_processes(state: State<'_, AppState>) -> Result<Vec<RunningProcessView>, String> {
+    let snapshot = state.config_mgr.snapshot()?;
+    Ok(crate::process::get_running_processes().into_iter()
+        .map(|process| running_process_view(process, &snapshot)).collect())
 }
 
 #[tauri::command]
@@ -389,6 +422,28 @@ pub fn verify_game_paths(paths: Vec<String>) -> std::collections::HashMap<String
 mod tests {
     use super::*;
     use crate::config::ConfigManager;
+
+    #[test]
+    fn running_process_badges_use_the_runtime_path_resolver_not_ui_fuzzy_lookup() {
+        let root = tempfile::tempdir().unwrap();
+        let manager = ConfigManager::load(root.path().join("local"), root.path().join("absent")).unwrap();
+        let mut snapshot = manager.snapshot().unwrap();
+        let mut row = crate::config::HdrApp {
+            name: "Game".into(), exe_name: "game.exe".into(), enabled: true,
+            hdr_type: crate::config::HdrType::Native, path: Some(r"C:\Game\game.exe".into()),
+            alternate_exes: vec!["historical.exe".into()], steam_id: None, launcher: None,
+        };
+        let process = |exe: &str, path: &str| RunningProcessInfo {
+            pid: 1, name: "Game".into(), exe_name: exe.into(), title: "Game".into(), path: path.into(),
+        };
+        snapshot.settings.apps = vec![row.clone()];
+        assert_eq!(running_process_view(process("game.exe", r"C:\Game\game.exe"), &snapshot).tracked_primary.as_deref(), Some("game.exe"));
+        assert_eq!(running_process_view(process("game.exe", r"D:\Game\game.exe"), &snapshot).tracked_primary, None);
+        assert_eq!(running_process_view(process("game_dx12.exe", r"C:\Game\game_dx12.exe"), &snapshot).tracked_primary, None);
+        row.exe_name = "BsSndRpt64.exe".into();
+        snapshot.settings.apps = vec![row];
+        assert_eq!(running_process_view(process("historical.exe", r"C:\Game\historical.exe"), &snapshot).tracked_primary, None);
+    }
 
     #[test]
     fn monitor_ipc_does_not_label_untrusted_default_all_as_a_saved_target() {

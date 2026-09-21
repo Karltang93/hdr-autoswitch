@@ -1,6 +1,6 @@
 use crate::config::{HdrApp, HdrType};
 use crate::database;
-use crate::automatic_authority::{self, Authority, InstallEvidence, LaunchField, Provider};
+use crate::automatic_authority::{self, Authority, InstallEvidence, LaunchField, Provider, ResolvedGame};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -23,9 +23,24 @@ pub struct PickedGameInfo {
     pub launcher: Option<String>,
 }
 
+pub struct ScanResult {
+    pub detected: Vec<HdrApp>,
+    pub verified: Vec<ResolvedGame>,
+}
+
+#[derive(Default)]
+struct ScanCollection {
+    detected: HashMap<String, HdrApp>,
+    verified: Vec<ResolvedGame>,
+}
+
 pub fn scan_installed_games(auto_detect: bool) -> Vec<HdrApp> {
+    scan_installed_games_with_authority(auto_detect).detected
+}
+
+pub fn scan_installed_games_with_authority(auto_detect: bool) -> ScanResult {
     let catalog = database::get_full_catalog();
-    let mut detected_map: HashMap<String, HdrApp> = HashMap::new();
+    let mut detected_map = ScanCollection::default();
 
     // 1. Scan Steam via appmanifest_*.acf (across all drives and libraryfolders)
     scan_steam_manifests(&catalog, &mut detected_map);
@@ -45,7 +60,7 @@ pub fn scan_installed_games(auto_detect: bool) -> Vec<HdrApp> {
     // 6. Scan common media players
     scan_media_players(&catalog, &mut detected_map);
 
-    let mut result: Vec<HdrApp> = detected_map.into_values().collect();
+    let mut result: Vec<HdrApp> = detected_map.detected.into_values().collect();
     for game in &mut result {
         game.enabled &= auto_detect;
     }
@@ -60,7 +75,7 @@ pub fn scan_installed_games(auto_detect: bool) -> Vec<HdrApp> {
         }
     });
 
-    result
+    ScanResult { detected: result, verified: detected_map.verified }
 }
 
 // --------------------------------------------------------------------------------------
@@ -95,6 +110,9 @@ pub fn inspect_exe_path(path: &str) -> Result<PickedGameInfo, String> {
 
     if !exe_name.to_lowercase().ends_with(".exe") {
         return Err("Selected file is not an .exe.".to_string());
+    }
+    if crate::runtime_policy::permanently_excluded(&exe_name) {
+        return Err(format!("Selected executable '{exe_name}' is a helper, not a game runtime. Select the game's executable instead."));
     }
 
     let catalog = database::get_full_catalog();
@@ -163,7 +181,7 @@ pub fn inspect_exe_path(path: &str) -> Result<PickedGameInfo, String> {
 // --------------------------------------------------------------------------------------
 // 1. Steam scanner using appmanifest_*.acf
 // --------------------------------------------------------------------------------------
-fn scan_steam_manifests(catalog: &[database::CatalogEntry], map: &mut HashMap<String, HdrApp>) {
+fn scan_steam_manifests(catalog: &[database::CatalogEntry], map: &mut ScanCollection) {
     let mut steam_roots = Vec::new();
 
     // Check registry keys for Steam
@@ -339,7 +357,7 @@ fn scan_steam_manifests(catalog: &[database::CatalogEntry], map: &mut HashMap<St
 // --------------------------------------------------------------------------------------
 // 2. Epic Games manifests scanner
 // --------------------------------------------------------------------------------------
-fn scan_epic_manifests(catalog: &[database::CatalogEntry], map: &mut HashMap<String, HdrApp>) {
+fn scan_epic_manifests(catalog: &[database::CatalogEntry], map: &mut ScanCollection) {
     let mut manifest_dirs = Vec::new();
     if let Ok(prog_data) = std::env::var("ProgramData") {
         manifest_dirs.push(PathBuf::from(prog_data).join(r"Epic\EpicGamesLauncher\Data\Manifests"));
@@ -397,7 +415,7 @@ fn scan_epic_manifests(catalog: &[database::CatalogEntry], map: &mut HashMap<Str
 // --------------------------------------------------------------------------------------
 // 3. GOG Galaxy Registry Scanner
 // --------------------------------------------------------------------------------------
-fn scan_gog_registry(catalog: &[database::CatalogEntry], map: &mut HashMap<String, HdrApp>) {
+fn scan_gog_registry(catalog: &[database::CatalogEntry], map: &mut ScanCollection) {
     let gog_keys = [
         r"SOFTWARE\GOG.com\Games",
         r"SOFTWARE\WOW6432Node\GOG.com\Games",
@@ -469,7 +487,7 @@ fn scan_gog_registry(catalog: &[database::CatalogEntry], map: &mut HashMap<Strin
 // --------------------------------------------------------------------------------------
 // 4. Windows Registry Uninstall Keys (EA App, Ubisoft, Custom Installers)
 // --------------------------------------------------------------------------------------
-fn scan_windows_registry(catalog: &[database::CatalogEntry], map: &mut HashMap<String, HdrApp>) {
+fn scan_windows_registry(catalog: &[database::CatalogEntry], map: &mut ScanCollection) {
     let reg_paths = [
         (HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
         (HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"),
@@ -485,7 +503,7 @@ fn scan_registry_uninstall_hive(
     root: HKEY,
     subkey: &str,
     catalog: &[database::CatalogEntry],
-    map: &mut HashMap<String, HdrApp>,
+    map: &mut ScanCollection,
 ) {
     let subkey_wide = to_wide(subkey);
     let mut h_key = HKEY::default();
@@ -582,7 +600,7 @@ fn scan_registry_uninstall_hive(
 // --------------------------------------------------------------------------------------
 // 5. Xbox Games Folders
 // --------------------------------------------------------------------------------------
-fn scan_xbox_games(catalog: &[database::CatalogEntry], map: &mut HashMap<String, HdrApp>) {
+fn scan_xbox_games(catalog: &[database::CatalogEntry], map: &mut ScanCollection) {
     for drive in ["C", "D", "E", "F", "G"] {
         let xbox_path = PathBuf::from(format!(r"{}:\XboxGames", drive));
         if !xbox_path.exists() {
@@ -610,7 +628,7 @@ fn scan_xbox_games(catalog: &[database::CatalogEntry], map: &mut HashMap<String,
 // --------------------------------------------------------------------------------------
 // 6. Media Players
 // --------------------------------------------------------------------------------------
-fn scan_media_players(catalog: &[database::CatalogEntry], map: &mut HashMap<String, HdrApp>) {
+fn scan_media_players(catalog: &[database::CatalogEntry], map: &mut ScanCollection) {
     for (prog_name, _exe_str, paths) in [
         ("VLC Media Player", "vlc.exe", vec![r"C:\Program Files\VideoLAN\VLC\vlc.exe", r"C:\Program Files (x86)\VideoLAN\VLC\vlc.exe"]),
         ("MPC-HC", "mpc-hc64.exe", vec![r"C:\Program Files\MPC-HC\mpc-hc64.exe", r"C:\Program Files (x86)\MPC-HC\mpc-hc.exe"]),
@@ -639,7 +657,7 @@ fn match_and_insert_game(
     hint_name: &str,
     game_dir: &Path,
     declarations: &[String],
-    map: &mut HashMap<String, HdrApp>,
+    map: &mut ScanCollection,
     provider: Provider,
     product_id: Option<&str>,
 ) {
@@ -654,7 +672,18 @@ fn match_and_insert_game(
         }
     };
     let app = match automatic_authority::resolve(catalog, Some(&evidence)) {
-        Authority::Resolved(resolved) => resolved.as_app(true),
+        Authority::Resolved(resolved) => {
+            let app = resolved.as_app(true);
+            if !map.verified.iter().any(|known| {
+                known.provider == resolved.provider
+                    && known.product_id == resolved.product_id
+                    && known.catalog.exe_name.eq_ignore_ascii_case(&resolved.catalog.exe_name)
+                    && known.executables == resolved.executables
+            }) {
+                map.verified.push(resolved);
+            }
+            app
+        }
         Authority::Unresolved if matches!(provider, Provider::Epic | Provider::Gog | Provider::Windows) => {
             let Some(selected) = evidence.manual_suggestion() else {
                 eprintln!("No unique declared executable for {}", game_dir.display());
@@ -678,7 +707,7 @@ fn match_and_insert_game(
     };
     // Detection is not saved-row association: same titles on different storefronts stay separate.
     let key = format!("{:?}|{}|{}|{}", provider, product_id.unwrap_or_default(), app.exe_name, app.path.as_deref().unwrap_or_default().to_lowercase());
-    map.entry(key).and_modify(|existing| {
+    map.detected.entry(key).and_modify(|existing| {
         if app.name < existing.name {
             *existing = app.clone();
         }
@@ -937,19 +966,22 @@ mod tests {
         let catalog = database::get_full_catalog();
         let root = tempfile::tempdir().unwrap();
         create_files(root.path(), &["BsSndRpt.exe", "BsSndRpt64.exe", "BugSplat.exe", "editor.exe", "tool.exe"]);
-        let mut map = HashMap::new();
+        let mut map = ScanCollection::default();
         match_and_insert_game(&catalog, "Age of Empires IV", root.path(), &[], &mut map, Provider::Steam, Some("1466860"));
-        assert!(map.is_empty());
+        assert!(map.detected.is_empty());
+        assert!(map.verified.is_empty());
         let binding = database::find_storefront_binding(&catalog, database::StorefrontProvider::Steam, Some("1466860")).unwrap().unwrap().1;
         create_files(root.path(), &[&binding.game_executables[0]]);
         match_and_insert_game(&catalog, "Age of Empires IV", root.path(), &[], &mut map, Provider::Steam, Some("1466860"));
-        assert_eq!(map.len(), 1);
-        let app = map.values().next().unwrap();
+        assert_eq!(map.detected.len(), 1);
+        assert_eq!(map.verified.len(), 1);
+        let app = map.detected.values().next().unwrap();
         assert_eq!(app.exe_name, binding.game_executables[0]);
         assert!(app.alternate_exes.is_empty());
-        let before = map.clone();
+        let before = map.detected.clone();
         match_and_insert_game(&catalog, "Changed display title", root.path(), &[], &mut map, Provider::Steam, Some("1466860"));
-        assert_eq!(map, before);
+        assert_eq!(map.detected, before);
+        assert_eq!(map.verified.len(), 1);
     }
 
     #[test]
@@ -958,16 +990,18 @@ mod tests {
         create_files(root.path(), &["unlisted.exe", "re7.exe", "tool.exe"]);
         let catalog = database::get_full_catalog();
         for provider in [Provider::Steam, Provider::Xbox, Provider::Epic, Provider::Gog, Provider::Windows] {
-            let mut map = HashMap::new();
+            let mut map = ScanCollection::default();
             match_and_insert_game(&catalog, "Resident Evil 7: Biohazard", root.path(), &[], &mut map, provider, None);
-            assert!(map.is_empty(), "{provider:?}");
+            assert!(map.detected.is_empty(), "{provider:?}");
+            assert!(map.verified.is_empty());
             if matches!(provider, Provider::Epic | Provider::Gog | Provider::Windows) {
                 match_and_insert_game(&catalog, "Resident Evil 7: Biohazard", root.path(), &["unlisted.exe".into()], &mut map, provider, None);
-                let app = map.values().next().unwrap();
+                let app = map.detected.values().next().unwrap();
                 assert!(!app.enabled);
                 assert_eq!(app.hdr_type, HdrType::Custom);
                 assert_eq!(app.exe_name, "unlisted.exe");
                 assert!(app.alternate_exes.is_empty());
+                assert!(map.verified.is_empty());
             }
         }
     }
@@ -981,12 +1015,76 @@ mod tests {
             "hdr_type": "native", "support_tier": "native", "alternate_exes": ["global.exe"],
             "storefronts": [{"provider": "xbox", "game_executables": ["xbox.exe"]}]
         })).unwrap()];
-        let mut map = HashMap::new();
+        let mut map = ScanCollection::default();
         match_and_insert_game(&catalog, "Shared title", root.path(), &[], &mut map, Provider::Steam, Some("123"));
         match_and_insert_game(&catalog, "Shared title", root.path(), &["xbox.exe".into()], &mut map, Provider::Xbox, None);
-        assert_eq!(map.len(), 2);
-        assert!(map.values().all(|app| app.alternate_exes.is_empty()));
-        assert!(map.values().any(|app| app.exe_name == "xbox.exe" && app.steam_id.is_none()));
+        assert_eq!(map.detected.len(), 2);
+        assert_eq!(map.verified.len(), 2);
+        assert!(map.detected.values().all(|app| app.alternate_exes.is_empty()));
+        assert!(map.detected.values().any(|app| app.exe_name == "xbox.exe" && app.steam_id.is_none()));
+    }
+
+    #[test]
+    fn manual_picker_rejects_permanent_helpers_before_catalog_title_matching() {
+        let root = tempfile::tempdir_in(std::env::current_dir().unwrap()).unwrap();
+        let game_dir = root.path().join("Age of Empires IV");
+        create_files(&game_dir, &["BsSndRpt.exe", "BsSndRpt64.exe", "BugSplat.exe", "GameLaunchHelper.exe"]);
+        for exe in ["BsSndRpt.exe", "BsSndRpt64.exe", "BugSplat.exe", "GameLaunchHelper.exe"] {
+            let error = inspect_exe_path(game_dir.join(exe).to_str().unwrap()).unwrap_err();
+            assert!(error.contains("helper"), "{error}");
+            assert!(error.contains(exe), "{error}");
+        }
+    }
+
+    #[test]
+    fn xbox_aoe3_scan_retains_provenance_for_explicit_import_and_canonical_enrichment() {
+        use crate::config::AppConfig;
+        use crate::library;
+        let catalog = database::get_full_catalog();
+        let canonical = catalog.iter().find(|entry| entry.name == "Age of Empires III: Definitive Edition").unwrap();
+        assert_eq!(canonical.exe_name, "ageofempiresiiidefinitiveedition.exe");
+        let root = tempfile::tempdir_in(std::env::current_dir().unwrap()).unwrap();
+        let install = root.path().join(r"XboxGames\Age of Empires III");
+        create_files(&install, &[r"Content\AoE3DE.exe", r"Content\GameLaunchHelper.exe", r"Content\BsSndRpt.exe"]);
+        fs::write(install.join(r"Content\MicrosoftGame.config"), r#"<Game><ExecutableList><Executable Name="GameLaunchHelper.exe"/><Executable Name="AoE3DE.exe"/><Executable Name="BsSndRpt.exe"/></ExecutableList></Game>"#).unwrap();
+        let declarations = crate::xbox_config::declarations(&install).unwrap();
+        let mut scan = ScanCollection::default();
+        match_and_insert_game(&catalog, "User-facing title", &install, &declarations, &mut scan, Provider::Xbox, None);
+        assert_eq!(scan.detected.len(), 1);
+        assert_eq!(scan.verified.len(), 1);
+        let app = scan.detected.values().next().unwrap().clone();
+        assert_eq!(app.exe_name, "aoe3de.exe");
+        assert!(app.alternate_exes.is_empty());
+        assert!(app.steam_id.is_none());
+        assert_eq!(app.launcher.as_deref(), Some("Xbox"));
+        let mut explicit = AppConfig::default();
+        explicit.apps.clear();
+        library::import_games(&mut explicit, vec![app.clone()]).unwrap();
+        assert_eq!(explicit.apps, [app.clone()]);
+
+        let mut saved = app;
+        saved.exe_name = canonical.exe_name.clone();
+        saved.name = "My AOE3".into();
+        saved.hdr_type = HdrType::Custom;
+        saved.enabled = false;
+        saved.launcher = None;
+        saved.path = None;
+        let mut startup = AppConfig::default();
+        startup.apps = vec![saved.clone()];
+        assert!(library::enrich_verified_aliases(&mut startup, &scan.verified));
+        saved.alternate_exes.push("aoe3de.exe".into());
+        assert_eq!(startup.apps, [saved.clone()]);
+        assert!(!library::enrich_verified_aliases(&mut startup, &scan.verified));
+        assert_eq!(startup.apps, [saved]);
+
+        let mut injected = canonical.clone();
+        injected.exe_name = "age3y.exe".into();
+        let mut alternate_catalog = ScanCollection::default();
+        match_and_insert_game(&[injected], "Irrelevant title", &install, &declarations, &mut alternate_catalog, Provider::Xbox, None);
+        startup.apps[0].exe_name = "age3y.exe".into();
+        startup.apps[0].alternate_exes.clear();
+        assert!(library::enrich_verified_aliases(&mut startup, &alternate_catalog.verified));
+        assert_eq!(startup.apps[0].alternate_exes, ["aoe3de.exe"]);
     }
 
     #[test]

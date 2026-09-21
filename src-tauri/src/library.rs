@@ -1,4 +1,38 @@
 use crate::config::{AppConfig, HdrApp};
+use crate::automatic_authority::{Provider, ResolvedGame};
+use crate::runtime_policy::{is_quarantined, normalize_windows_path, permanently_excluded};
+
+fn same_path(left: &str, right: &str) -> bool {
+    matches!((normalize_windows_path(left), normalize_windows_path(right)), (Some(left), Some(right)) if left == right)
+}
+
+/// An ID can veto duplicate creation, never establish an association for enrichment.
+/// A saved path scopes only its primary; historical aliases have no saved path.
+pub fn automatic_enrollment_veto(existing: &[HdrApp], candidate: &HdrApp) -> bool {
+    existing.iter().any(|app| {
+        if matches!((&app.steam_id, &candidate.steam_id), (Some(left), Some(right)) if !left.trim().is_empty() && left == right) {
+            return true;
+        }
+        std::iter::once(&app.exe_name).chain(&app.alternate_exes).any(|exe| {
+            !permanently_excluded(exe)
+                && std::iter::once(&candidate.exe_name).chain(&candidate.alternate_exes).any(|other| {
+                    if !exe.eq_ignore_ascii_case(other) || permanently_excluded(other) {
+                        return false;
+                    }
+                    if exe.eq_ignore_ascii_case(&app.exe_name)
+                        && other.eq_ignore_ascii_case(&candidate.exe_name)
+                    {
+                        return !matches!(
+                            (app.path.as_deref().and_then(normalize_windows_path),
+                             candidate.path.as_deref().and_then(normalize_windows_path)),
+                            (Some(left), Some(right)) if left != right
+                        );
+                    }
+                    true
+                })
+        })
+    })
+}
 
 fn same_game(existing: &HdrApp, item: &HdrApp) -> bool {
     if existing.exe_name.eq_ignore_ascii_case(&item.exe_name) {
@@ -32,15 +66,24 @@ fn merge_aliases(existing: &mut HdrApp, item: &HdrApp) {
     }
 }
 
+fn apply_explicit_executables(existing: &mut HdrApp, item: &HdrApp) {
+    if is_quarantined(existing) {
+        existing.exe_name = item.exe_name.trim().to_lowercase();
+        existing.path.clone_from(&item.path);
+        existing.alternate_exes.clear();
+    }
+    merge_aliases(existing, item);
+    if existing.exe_name.eq_ignore_ascii_case(&item.exe_name) && item.path.is_some() {
+        existing.path.clone_from(&item.path);
+    }
+}
+
 pub fn import_games(config: &mut AppConfig, detected: Vec<HdrApp>) -> Result<(), String> {
     for mut item in detected {
         validate_app(&item)?;
         item.enabled = true;
         if let Some(existing) = config.apps.iter_mut().find(|app| same_game(app, &item)) {
-            merge_aliases(existing, &item);
-            if item.path.is_some() {
-                existing.path = item.path;
-            }
+            apply_explicit_executables(existing, &item);
             if item.launcher.is_some() {
                 existing.launcher = item.launcher;
             }
@@ -75,39 +118,115 @@ pub fn enrich_existing(config: &mut AppConfig, detected: &[HdrApp]) -> bool {
     changed
 }
 
-/// Startup may fill metadata only for one exact primary and the same known storefront.
-/// Saved-row alias/title association and user-directed import policy remain separate.
-pub fn enrich_verified_metadata(config: &mut AppConfig, detected: &[HdrApp]) -> bool {
+fn verified_association(existing: &HdrApp, resolved: &ResolvedGame) -> bool {
+    let Some(primary) = resolved.executables.first() else { return false };
+    if is_quarantined(existing)
+        || resolved.executables.iter().any(|file| permanently_excluded(&file.basename))
+        || !(existing.exe_name.eq_ignore_ascii_case(&primary.basename)
+            || existing.exe_name.eq_ignore_ascii_case(&resolved.catalog.exe_name))
+    {
+        return false;
+    }
+    let known_id = if resolved.provider == Provider::Steam {
+        resolved.product_id.as_ref()
+    } else {
+        resolved.catalog.steam_id.as_ref()
+    };
+    if matches!((&existing.steam_id, known_id), (Some(left), Some(right)) if left != right)
+        || (existing.steam_id.is_some() && resolved.provider != Provider::Steam)
+        || existing.launcher.as_ref().is_some_and(|launcher| {
+            !launcher.eq_ignore_ascii_case(resolved.provider.launcher())
+        })
+    {
+        return false;
+    }
+    if let Some(path) = &existing.path {
+        // A canonical name alone cannot associate an independently path-bound installation.
+        return resolved.executables.iter().any(|file| {
+            existing.exe_name.eq_ignore_ascii_case(&file.basename)
+                && same_path(path, &file.path.to_string_lossy())
+        });
+    }
+    true
+}
+
+fn unique_verified_associations(config: &AppConfig, detected: &[ResolvedGame]) -> Vec<Option<usize>> {
+    let associations: Vec<Vec<usize>> = detected.iter().map(|resolved| {
+        config.apps.iter().enumerate()
+            .filter_map(|(index, existing)| verified_association(existing, resolved).then_some(index))
+            .collect()
+    }).collect();
+    let mut candidate_counts = vec![0usize; config.apps.len()];
+    for candidates in &associations {
+        for &index in candidates {
+            candidate_counts[index] += 1;
+        }
+    }
+    associations.iter().map(|candidates| match candidates.as_slice() {
+        [index] if candidate_counts[*index] == 1 => Some(*index),
+        _ => None,
+    }).collect()
+}
+
+/// Selected local basenames are the only additions; every saved metadata field stays unchanged.
+pub fn enrich_verified_aliases(config: &mut AppConfig, detected: &[ResolvedGame]) -> bool {
     if !config.auto_detect_new_games {
         return false;
     }
-    let mut primary_counts = std::collections::HashMap::new();
-    for app in &config.apps {
-        *primary_counts.entry(app.exe_name.to_lowercase()).or_insert(0usize) += 1;
-    }
+    let associations = unique_verified_associations(config, detected);
     let mut changed = false;
-    for existing in &mut config.apps {
-        if primary_counts[&existing.exe_name.to_lowercase()] != 1 {
-            continue;
-        }
-        let candidates: Vec<_> = detected.iter().filter(|item| {
-            item.enabled
-                && existing.exe_name.eq_ignore_ascii_case(&item.exe_name)
-                && !matches!((&existing.steam_id, &item.steam_id), (Some(a), Some(b)) if a != b)
-                && !matches!((&existing.launcher, &item.launcher), (Some(a), Some(b)) if !a.eq_ignore_ascii_case(b))
-                && !(existing.steam_id.is_some() && item.launcher.as_deref() != Some("Steam"))
-        }).collect();
-        let [item] = candidates.as_slice() else { continue };
-        if existing.steam_id.is_none() && item.steam_id.is_some() {
-            existing.steam_id.clone_from(&item.steam_id);
-            changed = true;
-        }
-        if existing.launcher.is_none() && item.launcher.is_some() {
-            existing.launcher.clone_from(&item.launcher);
-            changed = true;
+    for (resolved, index) in detected.iter().zip(associations) {
+        let Some(index) = index else { continue };
+        let existing = &mut config.apps[index];
+        for file in &resolved.executables {
+            if !existing.exe_name.eq_ignore_ascii_case(&file.basename)
+                && !existing.alternate_exes.iter().any(|exe| exe.eq_ignore_ascii_case(&file.basename))
+            {
+                existing.alternate_exes.push(file.basename.clone());
+                changed = true;
+            }
         }
     }
     changed
+}
+
+/// Layer3's separate metadata-only policy: fill missing values for an exact selected primary.
+pub fn enrich_verified_metadata(config: &mut AppConfig, detected: &[ResolvedGame]) -> bool {
+    if !config.auto_detect_new_games {
+        return false;
+    }
+    let associations = unique_verified_associations(config, detected);
+    let mut changed = false;
+    for (resolved, index) in detected.iter().zip(associations) {
+        let Some(index) = index else { continue };
+        let existing = &mut config.apps[index];
+        if existing.exe_name.eq_ignore_ascii_case(&resolved.executables[0].basename) {
+            if existing.steam_id.is_none() && resolved.provider == Provider::Steam {
+                if let Some(id) = &resolved.product_id {
+                    existing.steam_id = Some(id.clone());
+                    changed = true;
+                }
+            }
+            if existing.launcher.is_none() {
+                existing.launcher = Some(resolved.provider.launcher().into());
+                changed = true;
+            }
+        }
+    }
+    changed
+}
+
+fn validate_executable(exe: &str) -> Result<(), String> {
+    if permanently_excluded(exe) {
+        return Err(format!("Executable '{exe}' is a helper, not a game runtime. Select the game's executable instead."));
+    }
+    if exe.trim().is_empty()
+        || exe.contains(['\\', '/'])
+        || !exe.to_ascii_lowercase().ends_with(".exe")
+    {
+        return Err("A game needs executable filenames ending in .exe, without a directory path.".into());
+    }
+    Ok(())
 }
 
 pub fn validate_app(app: &HdrApp) -> Result<(), String> {
@@ -117,6 +236,9 @@ pub fn validate_app(app: &HdrApp) -> Result<(), String> {
         || !app.exe_name.to_ascii_lowercase().ends_with(".exe")
     {
         return Err("A game needs a name and an executable filename ending in .exe.".into());
+    }
+    for exe in std::iter::once(&app.exe_name).chain(&app.alternate_exes) {
+        validate_executable(exe)?;
     }
     Ok(())
 }
@@ -129,13 +251,10 @@ pub fn add_app(config: &mut AppConfig, mut app: HdrApp) -> Result<(), String> {
         .iter_mut()
         .find(|entry| same_game(entry, &app))
     {
-        merge_aliases(existing, &app);
+        apply_explicit_executables(existing, &app);
         existing.name = app.name;
         existing.enabled = app.enabled;
         existing.hdr_type = app.hdr_type;
-        if app.path.is_some() {
-            existing.path = app.path;
-        }
         if app.steam_id.is_some() {
             existing.steam_id = app.steam_id;
         }
@@ -145,6 +264,36 @@ pub fn add_app(config: &mut AppConfig, mut app: HdrApp) -> Result<(), String> {
     } else {
         config.apps.push(app);
     }
+    Ok(())
+}
+
+/// Explicitly repair one quarantined row, without title matching or changing user policy.
+pub fn repair_executable(
+    config: &mut AppConfig,
+    exe_name: &str,
+    selected_exe: &str,
+    selected_path: &str,
+) -> Result<(), String> {
+    let mut matches = config.apps.iter().enumerate()
+        .filter_map(|(index, app)| app.exe_name.eq_ignore_ascii_case(exe_name).then_some(index));
+    let index = matches.next().ok_or("No saved app has that executable. Refresh the library and try again.")?;
+    if matches.next().is_some() {
+        return Err("More than one saved app has that executable. Resolve duplicate rows before repairing.".into());
+    }
+    if !is_quarantined(&config.apps[index]) {
+        return Err("This app is no longer quarantined. Refresh the library and try again.".into());
+    }
+    let selected_exe = selected_exe.trim().to_lowercase();
+    validate_executable(&selected_exe)?;
+    if !normalize_windows_path(selected_path).is_some_and(|path| {
+        path.rsplit('\\').next() == Some(selected_exe.as_str())
+    }) {
+        return Err("Selected path must identify the selected game executable.".into());
+    }
+    let existing = &mut config.apps[index];
+    existing.exe_name = selected_exe;
+    existing.path = Some(selected_path.to_owned());
+    existing.alternate_exes.clear();
     Ok(())
 }
 
@@ -191,18 +340,18 @@ mod tests {
     }
 
     #[test]
-    fn explicit_import_may_update_path_and_enable_existing_entry() {
+    fn explicit_import_preserves_primary_path_when_adding_an_alias() {
         let mut existing = game("My game", "game.exe");
         existing.enabled = false;
         existing.path = Some("D:\\Old\\game.exe".into());
         let mut detected = game("My game", "game-dx12.exe");
         detected.path = Some("E:\\Moved\\game-dx12.exe".into());
         let mut config = AppConfig::default();
-        config.apps = vec![existing];
+        config.apps = vec![existing.clone()];
         import_games(&mut config, vec![detected.clone()]).unwrap();
         assert_eq!(config.apps.len(), 1);
         assert!(config.apps[0].enabled);
-        assert_eq!(config.apps[0].path, detected.path);
+        assert_eq!(config.apps[0].path, existing.path);
         assert_eq!(config.apps[0].alternate_exes, vec!["game-dx12.exe"]);
     }
 
@@ -217,6 +366,29 @@ mod tests {
         assert_eq!(config.apps.len(), 1);
         assert_eq!(config.apps[0].path, existing.path);
         assert_eq!(config.apps[0].steam_id, existing.steam_id);
+    }
+
+    #[test]
+    fn explicit_add_and_import_update_path_only_for_the_same_healthy_primary() {
+        for import in [false, true] {
+            for primary in ["GAME.EXE", "alternate.exe"] {
+                let mut existing = game("Game", "game.exe");
+                existing.enabled = false;
+                existing.path = Some(r"D:\Old\game.exe".into());
+                let mut incoming = game("Game", primary);
+                incoming.path = Some(format!(r"E:\New\{primary}"));
+                let mut config = AppConfig::default();
+                config.apps = vec![existing.clone()];
+                if import {
+                    import_games(&mut config, vec![incoming.clone()]).unwrap();
+                } else {
+                    add_app(&mut config, incoming.clone()).unwrap();
+                }
+                assert_eq!(config.apps[0].exe_name, "game.exe");
+                assert_eq!(config.apps[0].path, if primary == "GAME.EXE" { incoming.path } else { existing.path });
+                assert!(config.apps[0].enabled);
+            }
+        }
     }
 
     #[test]
@@ -324,71 +496,387 @@ mod tests {
         assert!(!enrich_existing(&mut config, &[detected]));
     }
 
-    #[test]
-    fn verified_metadata_enrichment_is_exact_primary_only_and_never_changes_policy() {
-        let mut existing = game("User title", "game.exe");
-        existing.enabled = false;
-        existing.hdr_type = HdrType::Custom;
-        existing.path = Some(r"D:\User\game.exe".into());
-        existing.alternate_exes = vec!["user.exe".into()];
-        let mut incoming = game("Catalog title", "GAME.EXE");
-        incoming.path = Some(r"C:\Other\game.exe".into());
-        incoming.alternate_exes = vec!["new.exe".into()];
-        incoming.steam_id = Some("123".into());
-        incoming.launcher = Some("Steam".into());
-        let mut config = AppConfig::default();
-        config.apps = vec![existing.clone()];
-        assert!(enrich_verified_metadata(&mut config, &[incoming.clone()]));
-        existing.steam_id = incoming.steam_id.clone();
-        existing.launcher = incoming.launcher.clone();
-        assert_eq!(config.apps, [existing.clone()]);
-        assert!(!enrich_verified_metadata(&mut config, &[incoming]));
-
-        for (exe, launcher, id, enabled) in [
-            ("new.exe", "Steam", "123", true),
-            ("user.exe", "Steam", "123", true),
-            ("game.exe", "Xbox", "123", true),
-            ("game.exe", "Steam", "999", true),
-            ("game.exe", "Steam", "123", false),
-        ] {
-            let mut candidate = game("User title", exe);
-            candidate.launcher = Some(launcher.into());
-            candidate.steam_id = Some(id.into());
-            candidate.enabled = enabled;
-            assert!(!enrich_verified_metadata(&mut config, &[candidate]));
-            assert_eq!(config.apps, [existing.clone()]);
+    fn verified_game(canonical: &str, selected: &[&str], provider: Provider) -> ResolvedGame {
+        use crate::automatic_authority::{self, Authority, InstallEvidence};
+        let root = tempfile::tempdir_in(std::env::current_dir().unwrap()).unwrap();
+        for exe in selected {
+            std::fs::write(root.path().join(exe), b"fixture, never executed").unwrap();
+        }
+        let storefronts = match provider {
+            Provider::Steam => serde_json::json!([{
+                "provider": "steam", "product_id": "123", "game_executables": selected
+            }]),
+            Provider::Xbox => serde_json::json!([{
+                "provider": "xbox", "game_executables": selected
+            }]),
+            _ => serde_json::json!([]),
+        };
+        let catalog = serde_json::from_value(serde_json::json!({
+            "name": "Catalog title", "exe_name": canonical, "steam_id": "123",
+            "hdr_type": "native", "support_tier": "native",
+            "alternate_exes": ["historical.exe"], "storefronts": storefronts
+        })).unwrap();
+        let declarations = selected.iter().map(|exe| exe.to_string()).collect::<Vec<_>>();
+        let observed = InstallEvidence::observe(
+            provider, (provider == Provider::Steam).then_some("123"), root.path(), &declarations,
+        ).unwrap();
+        match automatic_authority::resolve(&[catalog], Some(&observed)) {
+            Authority::Resolved(game) => game,
+            other => panic!("Expected resolved fixture, got {other:?}"),
         }
     }
 
     #[test]
-    fn competing_provider_metadata_and_unresolved_suggestions_do_not_enrich() {
-        let existing = game("Shared title", "game.exe");
-        let mut steam = existing.clone();
-        steam.launcher = Some("Steam".into());
-        steam.steam_id = Some("123".into());
-        let mut xbox = existing.clone();
-        xbox.launcher = Some("Xbox".into());
+    fn verified_enrichment_preserves_disabled_custom_metadata_and_is_idempotent() {
+        let incoming = verified_game("game.exe", &["game.exe", "new.exe"], Provider::Steam);
+        let mut existing = game("User title", "game.exe");
+        existing.enabled = false;
+        existing.hdr_type = HdrType::Custom;
+        existing.path = incoming.as_app(false).path;
+        existing.alternate_exes = vec!["user.exe".into()];
         let mut config = AppConfig::default();
         config.apps = vec![existing.clone()];
-        assert!(!enrich_verified_metadata(&mut config, &[steam, xbox.clone()]));
-        xbox.enabled = false;
+        assert!(enrich_verified_aliases(&mut config, &[incoming.clone()]));
+        existing.alternate_exes.push("new.exe".into());
+        assert_eq!(config.apps, [existing.clone()]);
+        assert!(!enrich_verified_aliases(&mut config, &[incoming.clone()]));
+        assert!(enrich_verified_metadata(&mut config, &[incoming.clone()]));
+        existing.steam_id = Some("123".into());
+        existing.launcher = Some("Steam".into());
+        assert_eq!(config.apps, [existing.clone()]);
+        assert!(!enrich_verified_metadata(&mut config, &[incoming]));
+        assert_eq!(config.apps, [existing]);
+    }
+
+    #[test]
+    fn verified_association_requires_selected_primary_or_canonical_not_alias_title_or_id() {
+        let incoming = verified_game("canonical.exe", &["selected.exe", "zalias.exe"], Provider::Steam);
+        for exe in ["canonical.exe", "SELECTED.EXE"] {
+            let mut config = AppConfig::default();
+            config.apps = vec![game("Independent user title", exe)];
+            assert!(enrich_verified_aliases(&mut config, &[incoming.clone()]), "{exe}");
+            assert_eq!(config.apps[0].exe_name, exe);
+            assert!(config.apps[0].alternate_exes.iter().any(|exe| exe == "zalias.exe"));
+            assert!(!config.apps[0].alternate_exes.iter().any(|exe| exe == "historical.exe"));
+        }
+        for exe in ["other.exe", "historical.exe", "zalias.exe"] {
+            let mut existing = game("Catalog title", exe);
+            existing.steam_id = Some("123".into());
+            existing.alternate_exes = vec!["canonical.exe".into(), "selected.exe".into()];
+            let mut config = AppConfig::default();
+            config.apps = vec![existing.clone()];
+            assert!(!enrich_verified_aliases(&mut config, &[incoming.clone()]), "{exe}");
+            assert!(!enrich_verified_metadata(&mut config, &[incoming.clone()]), "{exe}");
+            assert_eq!(config.apps, [existing]);
+        }
+    }
+
+    #[test]
+    fn verified_association_is_unique_in_both_directions_independent_of_order() {
+        let steam = verified_game("canonical.exe", &["steam.exe"], Provider::Steam);
+        let xbox = verified_game("canonical.exe", &["xbox.exe"], Provider::Xbox);
+        for candidates in [vec![steam.clone(), xbox.clone()], vec![xbox, steam.clone()]] {
+            let existing = game("User title", "canonical.exe");
+            let mut config = AppConfig::default();
+            config.apps = vec![existing.clone()];
+            assert!(!enrich_verified_aliases(&mut config, &candidates));
+            assert!(!enrich_verified_metadata(&mut config, &candidates));
+            assert_eq!(config.apps, [existing]);
+        }
+        let canonical = game("Canonical user title", "canonical.exe");
+        let selected = game("Selected user title", "steam.exe");
+        for existing in [vec![canonical.clone(), selected.clone()], vec![selected, canonical]] {
+            let mut config = AppConfig::default();
+            config.apps = existing.clone();
+            assert!(!enrich_verified_aliases(&mut config, &[steam.clone()]));
+            assert!(!enrich_verified_metadata(&mut config, &[steam.clone()]));
+            assert_eq!(config.apps, existing);
+        }
+    }
+
+    #[test]
+    fn provider_conflicts_known_ids_and_different_installations_do_not_enrich() {
+        let steam = verified_game("canonical.exe", &["steam.exe"], Provider::Steam);
+        let xbox = verified_game("canonical.exe", &["xbox.exe"], Provider::Xbox);
+        for (candidate, exe, id, launcher, path) in [
+            (&steam, "canonical.exe", Some("999"), None, None),
+            (&steam, "steam.exe", Some("999"), None, None),
+            (&steam, "canonical.exe", None, Some("Xbox"), None),
+            (&steam, "steam.exe", None, Some("Custom"), None),
+            (&steam, "steam.exe", None, None, Some(r"D:\Other\steam.exe")),
+            (&steam, "canonical.exe", None, None, Some(r"D:\Other\canonical.exe")),
+            (&xbox, "canonical.exe", Some("123"), None, None),
+            (&xbox, "canonical.exe", None, Some("GOG"), None),
+        ] {
+            let mut existing = game("Catalog title", exe);
+            existing.steam_id = id.map(str::to_owned);
+            existing.launcher = launcher.map(str::to_owned);
+            existing.path = path.map(str::to_owned);
+            let mut config = AppConfig::default();
+            config.apps = vec![existing.clone()];
+            assert!(!enrich_verified_aliases(&mut config, std::slice::from_ref(candidate)));
+            assert!(!enrich_verified_metadata(&mut config, std::slice::from_ref(candidate)));
+            assert_eq!(config.apps, [existing]);
+        }
+    }
+
+    #[test]
+    fn exact_primary_path_disambiguates_separate_installations_without_order_dependence() {
+        let first = verified_game("game.exe", &["game.exe", "renderer.exe"], Provider::Steam);
+        let second = verified_game("game.exe", &["game.exe", "renderer.exe"], Provider::Steam);
+        let mut first_row = game("First installation", "game.exe");
+        first_row.path = first.as_app(false).path;
+        let mut second_row = game("Second installation", "game.exe");
+        second_row.path = second.as_app(false).path;
+        for mut rows in [
+            vec![first_row.clone(), second_row.clone()],
+            vec![second_row, first_row],
+        ] {
+            let mut config = AppConfig::default();
+            config.apps = rows.clone();
+            assert!(enrich_verified_aliases(&mut config, &[second.clone(), first.clone()]));
+            for row in &mut rows {
+                row.alternate_exes.push("renderer.exe".into());
+            }
+            assert_eq!(config.apps, rows);
+            assert!(!enrich_verified_aliases(&mut config, &[first.clone(), second.clone()]));
+        }
+    }
+
+    #[test]
+    fn canonical_unscoped_row_gains_only_selected_provider_aliases_without_metadata_changes() {
+        let xbox = verified_game("canonical.exe", &["xbox.exe"], Provider::Xbox);
+        let mut existing = game("My chosen title", "canonical.exe");
+        existing.hdr_type = HdrType::Custom;
+        existing.enabled = false;
+        existing.alternate_exes = vec!["user.exe".into()];
+        let mut config = AppConfig::default();
+        config.apps = vec![existing.clone()];
+        assert!(enrich_verified_aliases(&mut config, &[xbox.clone()]));
+        existing.alternate_exes.push("xbox.exe".into());
+        assert_eq!(config.apps, [existing.clone()]);
+        assert!(!enrich_verified_aliases(&mut config, &[xbox.clone()]));
         assert!(!enrich_verified_metadata(&mut config, &[xbox]));
+        assert_eq!(config.apps, [existing]);
+    }
+
+    #[test]
+    fn alias_enrichment_preserves_exact_customized_storefront_metadata() {
+        for (provider, id, launcher) in [
+            (Provider::Steam, Some("123"), "sTeAm"),
+            (Provider::Xbox, None, "xBoX"),
+        ] {
+            let incoming = verified_game("game.exe", &["game.exe", "renderer.exe"], provider);
+            let mut existing = game("Custom title", "game.exe");
+            existing.enabled = false;
+            existing.hdr_type = HdrType::Custom;
+            existing.steam_id = id.map(str::to_owned);
+            existing.launcher = Some(launcher.into());
+            let mut config = AppConfig::default();
+            config.apps = vec![existing.clone()];
+            assert!(enrich_verified_aliases(&mut config, &[incoming.clone()]));
+            existing.alternate_exes.push("renderer.exe".into());
+            assert_eq!(config.apps, [existing.clone()]);
+            assert!(!enrich_verified_metadata(&mut config, &[incoming.clone()]));
+            assert!(!enrich_verified_aliases(&mut config, &[incoming]));
+            assert_eq!(config.apps, [existing]);
+        }
+    }
+
+    #[test]
+    fn exact_primary_missing_metadata_policy_is_separate_from_alias_enrichment() {
+        let incoming = verified_game("canonical.exe", &["game.exe", "renderer.exe"], Provider::Steam);
+        let mut existing = game("User title", "game.exe");
+        existing.enabled = false;
+        existing.alternate_exes = vec!["user.exe".into()];
+        let mut config = AppConfig::default();
+        config.apps = vec![existing.clone()];
+        assert!(enrich_verified_metadata(&mut config, &[incoming.clone()]));
+        existing.steam_id = Some("123".into());
+        existing.launcher = Some("Steam".into());
+        assert_eq!(config.apps, [existing.clone()]);
+        assert!(!enrich_verified_metadata(&mut config, &[incoming.clone()]));
+        assert!(enrich_verified_aliases(&mut config, &[incoming.clone()]));
+        existing.alternate_exes.push("renderer.exe".into());
+        assert_eq!(config.apps, [existing.clone()]);
+        assert!(!enrich_verified_aliases(&mut config, &[incoming]));
         assert_eq!(config.apps, [existing]);
     }
 
     #[test]
     fn automatic_metadata_is_gated_and_duplicate_saved_primaries_remain_untouched() {
         let existing = game("Game", "game.exe");
-        let mut incoming = existing.clone();
-        incoming.launcher = Some("Steam".into());
-        incoming.steam_id = Some("123".into());
+        let incoming = verified_game("game.exe", &["game.exe", "renderer.exe"], Provider::Steam);
         let mut config = AppConfig::default();
         config.apps = vec![existing.clone(), existing.clone()];
+        assert!(!enrich_verified_aliases(&mut config, &[incoming.clone()]));
         assert!(!enrich_verified_metadata(&mut config, &[incoming.clone()]));
         assert_eq!(config.apps, [existing.clone(), existing.clone()]);
         config.apps.pop();
         config.auto_detect_new_games = false;
+        assert!(!enrich_verified_aliases(&mut config, &[incoming.clone()]));
         assert!(!enrich_verified_metadata(&mut config, &[incoming]));
         assert_eq!(config.apps, [existing]);
+    }
+
+    #[test]
+    fn excluded_primary_or_supplied_alias_cannot_be_added_or_imported() {
+        for exe in ["GameLaunchHelper.exe", "BsSndRpt.exe", "BsSndRpt64.exe", "BugSplat.exe"] {
+            for alias in [false, true] {
+                let mut incoming = game("Game", if alias { "game.exe" } else { exe });
+                if alias {
+                    incoming.alternate_exes.push(exe.into());
+                }
+                for import in [false, true] {
+                    let mut config = AppConfig::default();
+                    config.apps.clear();
+                    let result = if import {
+                        import_games(&mut config, vec![incoming.clone()])
+                    } else {
+                        add_app(&mut config, incoming.clone())
+                    };
+                    assert!(result.unwrap_err().contains("helper"), "{exe}");
+                    assert!(config.apps.is_empty());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn explicit_actions_repair_quarantined_primary_and_discard_historical_aliases() {
+        for import in [false, true] {
+            for new_path in [None, Some(r"E:\XboxGames\Game\Content\game.exe".to_string())] {
+                let mut existing = game("Game", "BsSndRpt.exe");
+                existing.enabled = false;
+                existing.hdr_type = HdrType::Custom;
+                existing.path = Some(r"D:\Old\BsSndRpt.exe".into());
+                existing.alternate_exes = vec!["gamelaunchhelper.exe".into(), "suspect.exe".into()];
+                let mut incoming = game("Game", "game.exe");
+                incoming.path = new_path.clone();
+                incoming.alternate_exes = vec!["safe.exe".into()];
+                incoming.launcher = Some("Xbox".into());
+                let mut config = AppConfig::default();
+                config.apps = vec![existing.clone()];
+                if import {
+                    import_games(&mut config, vec![incoming]).unwrap();
+                } else {
+                    add_app(&mut config, incoming).unwrap();
+                }
+                assert_eq!(config.apps.len(), 1);
+                let repaired = &config.apps[0];
+                assert_eq!(repaired.exe_name, "game.exe");
+                assert_eq!(repaired.path, new_path);
+                assert_eq!(repaired.alternate_exes, ["safe.exe"]);
+                assert_eq!(repaired.launcher.as_deref(), Some("Xbox"));
+                assert!(repaired.enabled);
+                assert_eq!(repaired.hdr_type, if import { HdrType::Custom } else { HdrType::Native });
+                assert!(!is_quarantined(repaired));
+            }
+        }
+    }
+
+    #[test]
+    fn targeted_repair_preserves_custom_title_and_all_nonexecutable_metadata() {
+        for enabled in [false, true] {
+            let mut existing = game("My custom-renamed favorite", "BsSndRpt.exe");
+            existing.enabled = enabled;
+            existing.hdr_type = HdrType::Custom;
+            existing.path = Some(r"D:\Old\BsSndRpt.exe".into());
+            existing.steam_id = Some("1466860".into());
+            existing.launcher = Some("User chosen launcher".into());
+            existing.alternate_exes = vec!["gamelaunchhelper.exe".into(), "suspect.exe".into()];
+            let other = game("Unrelated app", "other.exe");
+            let mut config = AppConfig::default();
+            config.apps = vec![other.clone(), existing.clone()];
+            repair_executable(&mut config, "BSSNDRPT.EXE", "Game.EXE", r"E:\Chosen\Game.EXE").unwrap();
+            existing.exe_name = "game.exe".into();
+            existing.path = Some(r"E:\Chosen\Game.EXE".into());
+            existing.alternate_exes.clear();
+            assert_eq!(config.apps, [other, existing]);
+            let repaired = config.apps.clone();
+            assert!(repair_executable(&mut config, "bssndrpt.exe", "new.exe", r"E:\Chosen\new.exe").is_err());
+            assert!(repair_executable(&mut config, "game.exe", "new.exe", r"E:\Chosen\new.exe").unwrap_err().contains("no longer quarantined"));
+            assert_eq!(config.apps, repaired);
+        }
+    }
+
+    #[test]
+    fn targeted_repair_requires_unique_current_primary_not_title_or_alias() {
+        let helper = game("Game", "BsSndRpt.exe");
+        let mut alias_only = game("BsSndRpt.exe", "healthy.exe");
+        alias_only.alternate_exes.push("bssndrpt.exe".into());
+        let mut duplicate = helper.clone();
+        duplicate.exe_name = "BSSNDRPT.EXE".into();
+        for rows in [vec![], vec![alias_only], vec![helper, duplicate]] {
+            let mut config = AppConfig::default();
+            config.apps = rows.clone();
+            assert!(repair_executable(&mut config, "bssndrpt.exe", "game.exe", r"D:\Game\game.exe").is_err());
+            assert_eq!(config.apps, rows);
+        }
+    }
+
+    #[test]
+    fn targeted_repair_rejects_helpers_and_invalid_selected_bindings_without_mutation() {
+        for selected in [
+            "GameLaunchHelper.exe", "BsSndRpt.exe", "BsSndRpt64.exe", "BugSplat.exe",
+            "BugSplatHD64.exe", "game.txt", r"bin\game.exe", "",
+        ] {
+            let original = game("Preserved title", "bssndrpt.exe");
+            let mut config = AppConfig::default();
+            config.apps = vec![original.clone()];
+            assert!(repair_executable(&mut config, "bssndrpt.exe", selected, &format!(r"D:\Game\{selected}")).is_err());
+            assert_eq!(config.apps, [original]);
+        }
+        for path in ["", "game.exe", r"D:\Game\other.exe", r"D:\Game\BsSndRpt.exe"] {
+            let original = game("Preserved title", "bssndrpt.exe");
+            let mut config = AppConfig::default();
+            config.apps = vec![original.clone()];
+            assert!(repair_executable(&mut config, "bssndrpt.exe", "game.exe", path).is_err());
+            assert_eq!(config.apps, [original]);
+        }
+    }
+
+    #[test]
+    fn quarantine_is_never_implicitly_repaired_by_verified_enrichment() {
+        let incoming = verified_game("BsSndRpt.exe", &["game.exe"], Provider::Xbox);
+        let mut existing = game("Catalog title", "BsSndRpt.exe");
+        existing.alternate_exes.push("game.exe".into());
+        let mut config = AppConfig::default();
+        config.apps = vec![existing.clone()];
+        assert!(!enrich_verified_aliases(&mut config, &[incoming.clone()]));
+        assert!(!enrich_verified_metadata(&mut config, &[incoming]));
+        assert_eq!(config.apps, [existing]);
+    }
+
+    #[test]
+    fn automatic_enrollment_id_is_only_a_veto_and_primary_paths_scope_exact_vetoes() {
+        let mut existing = game("User title", "unrelated.exe");
+        existing.steam_id = Some("123".into());
+        let incoming = verified_game("game.exe", &["game.exe"], Provider::Steam);
+        assert!(automatic_enrollment_veto(&[existing.clone()], &incoming.as_app(true)));
+        let mut config = AppConfig::default();
+        config.apps = vec![existing.clone()];
+        assert!(!enrich_verified_aliases(&mut config, &[incoming.clone()]));
+        assert!(!enrich_verified_metadata(&mut config, &[incoming]));
+        assert_eq!(config.apps, [existing]);
+
+        let mut existing = game("Title", "game.exe");
+        existing.path = Some(r"D:\InstallA\game.exe".into());
+        let mut candidate = existing.clone();
+        candidate.path = Some(r"E:\InstallB\game.exe".into());
+        assert!(!automatic_enrollment_veto(&[existing.clone()], &candidate));
+        candidate.path = Some(r"\\?\D:\INSTALLA\GAME.EXE".into());
+        assert!(automatic_enrollment_veto(&[existing.clone()], &candidate));
+        candidate.path = Some("D:/InstallA/sub/../game.exe".into());
+        assert!(automatic_enrollment_veto(&[existing.clone()], &candidate));
+        candidate.path = None;
+        assert!(automatic_enrollment_veto(&[existing.clone()], &candidate));
+        candidate.exe_name = "other.exe".into();
+        candidate.name = existing.name.clone();
+        assert!(!automatic_enrollment_veto(&[existing.clone()], &candidate));
+        existing.alternate_exes.push("other.exe".into());
+        assert!(automatic_enrollment_veto(&[existing.clone()], &candidate));
+        existing.exe_name = "BsSndRpt.exe".into();
+        assert!(automatic_enrollment_veto(&[existing], &candidate));
     }
 }

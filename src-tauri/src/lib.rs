@@ -10,6 +10,7 @@ mod legacy_upgrade;
 mod library;
 mod monitor_hook;
 mod process;
+mod runtime_policy;
 mod scanner;
 mod tray;
 mod xbox_config;
@@ -229,6 +230,7 @@ pub fn run() {
             commands::scan_installed_games,
             commands::import_detected_games,
             commands::add_custom_app,
+            commands::repair_app_executable,
             commands::remove_app,
             commands::toggle_app,
             commands::get_running_processes,

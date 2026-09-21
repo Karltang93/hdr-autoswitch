@@ -3,6 +3,7 @@
 
 use crate::config::HdrApp;
 use crate::database::{self, CatalogEntry, StorefrontBinding, StorefrontProvider};
+use crate::runtime_policy::permanently_excluded;
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Component, Path, PathBuf, Prefix};
@@ -214,7 +215,7 @@ impl InstallEvidence {
 
     fn nominated(&self, nomination: &str) -> Result<SelectedExecutable, Authority> {
         let nomination = normalize_relative_exe(nomination).map_err(|_| Authority::Unresolved)?;
-        if nomination.rsplit('\\').next() == Some("gamelaunchhelper.exe") {
+        if permanently_excluded(nomination.rsplit('\\').next().unwrap_or_default()) {
             return Err(Authority::Unresolved);
         }
         let explicit_path = nomination.contains('\\');
@@ -280,7 +281,7 @@ fn observe_directory(
     Ok(())
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ResolvedGame {
     pub catalog: CatalogEntry,
     pub provider: Provider,
@@ -317,7 +318,7 @@ pub enum Authority {
 }
 
 fn binding_matches(binding: &StorefrontBinding, basename: &str) -> bool {
-    basename != "gamelaunchhelper.exe"
+    !permanently_excluded(basename)
         && binding.game_executables.iter().any(|exe| exe == basename)
         && !binding
             .excluded_executables
@@ -397,7 +398,13 @@ pub fn resolve(catalog: &[CatalogEntry], evidence: Option<&InstallEvidence>) -> 
                         Authority::Unresolved
                     }
                 }
-                Ok(Some((entry, binding))) => finish(entry, evidence, &binding.game_executables),
+                Ok(Some((entry, binding))) => {
+                    let nominations = binding.game_executables.iter()
+                        .filter(|exe| binding_matches(&binding, exe))
+                        .cloned()
+                        .collect::<Vec<_>>();
+                    finish(entry, evidence, &nominations)
+                }
             }
         }
         Provider::Xbox => resolve_declared(catalog, evidence, true),
@@ -428,7 +435,7 @@ fn resolve_declared(catalog: &[CatalogEntry], evidence: &InstallEvidence, xbox: 
             .iter()
             .filter(|declaration| {
                 let basename = declaration.rsplit('\\').next().unwrap_or_default();
-                if basename == "gamelaunchhelper.exe" {
+                if permanently_excluded(basename) {
                     return false;
                 }
                 binding.as_ref().map_or_else(
@@ -629,6 +636,69 @@ mod tests {
         assert!(app.alternate_exes.is_empty());
         assert_eq!(app.steam_id, None);
         assert!(!xbox.as_app(false).enabled);
+    }
+
+    #[test]
+    fn injected_catalog_cannot_authorize_permanent_helpers_for_any_provider() {
+        let root = fixture(&["GameLaunchHelper.exe", "BsSndRpt.exe", "BsSndRpt64.exe", "BugSplat.exe"]);
+        for helper in ["GameLaunchHelper.exe", "BsSndRpt.exe", "BsSndRpt64.exe", "BugSplat.exe"] {
+            let catalog: CatalogEntry = serde_json::from_value(json!({
+                "name": "Injected helper", "exe_name": helper, "steam_id": "123",
+                "hdr_type": "native", "support_tier": "native", "alternate_exes": [helper],
+                "storefronts": [{"provider": "xbox", "game_executables": [helper]}]
+            })).unwrap();
+            for provider in [Provider::Steam, Provider::Xbox, Provider::Epic, Provider::Gog, Provider::Windows] {
+                let observed = evidence(root.path(), provider, (provider == Provider::Steam).then_some("123"), &[helper]);
+                assert!(matches!(resolve(&[catalog.clone()], Some(&observed)), Authority::Unresolved), "{provider:?}: {helper}");
+                assert!(observed.manual_suggestion().is_none());
+            }
+        }
+    }
+
+    #[test]
+    fn selected_runtimes_never_inherit_permanent_helpers_from_injected_positives() {
+        let root = fixture(&["game.exe", "BsSndRpt.exe"]);
+        let catalog: CatalogEntry = serde_json::from_value(json!({
+            "name": "Game", "exe_name": "game.exe", "steam_id": "123",
+            "hdr_type": "native", "support_tier": "native", "alternate_exes": ["BsSndRpt.exe"],
+            "storefronts": [
+                {"provider": "steam", "product_id": "123", "game_executables": ["game.exe", "BsSndRpt.exe"]},
+                {"provider": "xbox", "game_executables": ["game.exe", "BsSndRpt.exe"]}
+            ]
+        })).unwrap();
+        for provider in [Provider::Steam, Provider::Xbox, Provider::Epic, Provider::Gog, Provider::Windows] {
+            let observed = evidence(root.path(), provider, (provider == Provider::Steam).then_some("123"), &["game.exe", "BsSndRpt.exe"]);
+            let app = resolved(resolve(&[catalog.clone()], Some(&observed))).as_app(true);
+            assert_eq!(app.exe_name, "game.exe", "{provider:?}");
+            assert!(app.alternate_exes.is_empty());
+        }
+    }
+
+    #[test]
+    fn provider_exclusions_override_positives_only_for_their_own_provider() {
+        let root = fixture(&["steam.exe", "xbox.exe"]);
+        let mut catalog = entry();
+        catalog.storefronts[0].excluded_executables.push("steam.exe".into());
+        catalog.storefronts.push(StorefrontBinding {
+            provider: StorefrontProvider::Steam,
+            product_id: Some("123".into()),
+            game_executables: vec!["steam.exe".into()],
+            excluded_executables: vec!["xbox.exe".into()],
+        });
+        for (provider, expected) in [
+            (Provider::Steam, "steam.exe"), (Provider::Xbox, "xbox.exe"),
+            (Provider::Epic, "steam.exe"), (Provider::Gog, "steam.exe"), (Provider::Windows, "steam.exe"),
+        ] {
+            let observed = evidence(root.path(), provider, (provider == Provider::Steam).then_some("123"), &["steam.exe", "xbox.exe"]);
+            let app = resolved(resolve(&[catalog.clone()], Some(&observed))).as_app(true);
+            assert_eq!(app.exe_name, expected, "{provider:?}");
+            assert!(app.alternate_exes.is_empty());
+        }
+        catalog.storefronts[0].excluded_executables.push("xbox.exe".into());
+        let xbox = evidence(root.path(), Provider::Xbox, None, &["xbox.exe"]);
+        assert!(matches!(resolve(&[catalog.clone()], Some(&xbox)), Authority::Ambiguous));
+        let steam = evidence(root.path(), Provider::Steam, Some("123"), &[]);
+        assert_eq!(resolved(resolve(&[catalog], Some(&steam))).as_app(true).exe_name, "steam.exe");
     }
 
     #[test]

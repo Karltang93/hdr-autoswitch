@@ -1,6 +1,16 @@
 import type { ActivityLogEntry, HdrStatePayload } from './types.ts';
 import type { Language, Translations } from './i18n.ts';
 
+export function statusWarnings(
+  status: Pick<HdrStatePayload, 'warning' | 'quarantined_apps'>,
+  t: Translations,
+): string[] {
+  return [
+    ...(status.warning ? [status.warning] : []),
+    ...(status.quarantined_apps ?? []).map((row) => t.quarantineWarning(row.name, row.exe_name)),
+  ];
+}
+
 export function activityMessage(message: ActivityLogEntry['message'], t: Translations): string {
   switch (message.kind) {
     case 'init_system': return t.activityInitSystem;

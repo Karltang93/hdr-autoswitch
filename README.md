@@ -36,11 +36,13 @@ HDR Auto-Switch uses the native `SetWinEventHook` `EVENT_SYSTEM_FOREGROUND`
 notification as its primary trigger. A lightweight once-per-second watchdog only
 compares the current foreground process ID and runs the full controller logic when
 that ID changes, recovering if Windows drops a foreground event after startup or
-resume.
+resume. Incomplete observations retry with bounded backoff and a slow rearm;
+successful observations keep the cheap cached-process path. Settings changes
+always recheck current authorization, including after a delayed observation.
 
 ### 🔍 2. Automated Multi-Drive Game Scanner
 * **Deep Multi-Drive Discovery**: Automatically scans all connected storage drives (`C:`, `D:`, `E:`, etc.) via Steam's `libraryfolders.vdf` and `appmanifest_*.acf` manifests, Epic Games Launcher manifests (`%ProgramData%\Epic`), GOG Galaxy, and Windows Registry.
-* **Modern Shipping Binary Resolution**: Traverses directory structures in under **2.5 seconds** to locate actual Unreal Engine 5 & Northlight executables (e.g. `Binaries/Win64/*-Shipping.exe`) while ignoring asset and content folders.
+* **Provider-specific Executable Support**: Automatic selection requires a provider-authorized executable that exists locally. Finding an `.exe` recursively, matching a title, or knowing a Steam AppID alone is not executable authority. Unsupported or conflicting evidence remains unresolved rather than guessed.
 * **Categorized & Pre-Selected Results**:
   - **HDR Supported Games (Top)**: Verified HDR titles are grouped at the top and pre-selected (`[x]`) by default.
   - **SDR Installed Games (Bottom)**: Other installed games are listed in a separate section below (`[ ]` un-checked by default), allowing you to enable tracking for RTX HDR or community mods with one click.
@@ -58,7 +60,7 @@ resume.
 * **Deactivate on Alt+Tab (with Debounce)**: Reverts to SDR when leaving the game window after a configurable delay (0 to 10 seconds).
 
 ### 📚 5. Multi-Source Verified Database (Steam Curator, HDR Gamer, PCGamingWiki)
-* **Direct Steam AppID Pairing**: Pre-linked with **347+ official Steam AppIDs** (from Steam Curator *HDR Games*) for instant, 100% accurate game identification without guessing folder or binary names.
+* **Steam AppID Pairing**: Pre-linked Steam AppIDs identify catalog candidates; automatic selection also requires that provider's supported game executable on disk.
 * Comprehensive catalog of **1,027+ verified PC titles** including Native HDR (*Silent Hill 2, Alan Wake 2 & Remastered, Resident Evil 2/3/4/7/Village, Cyberpunk 2077, Black Myth: Wukong, Borderlands GOTY Enhanced, Baldur's Gate 3, Ghostrunner 1 & 2, Mass Effect Legendary Edition*), Windows Auto HDR, and HDR Gamer calibration profiles.
 * Built-in 1-click online synchronization with PCGamingWiki API and GitHub master database.
 
@@ -133,6 +135,39 @@ changing authority.
 
 Background library updates and recovery-state changes notify the controller
 without waiting for a foreground-window change.
+
+### Storefront executables and legacy helper repair
+
+Executable support is provider-specific, not a universal storefront mapping.
+Xbox discovery covers accessible local `XboxGames` installations with a bounded,
+valid `MicrosoftGame.config`; it does not enumerate packages or bypass protected
+WindowsApps folders. The verified AOE3 Xbox binding selects `AoE3DE.exe`, never
+`GameLaunchHelper.exe`. No AOE3 Steam executable or real AOE4 executable is guessed.
+These guarantees are fixture-tested, not a claim of live AOE3 HDR verification.
+
+Startup may enrich one independently valid canonical row with locally resolved
+aliases from the selected provider, preserving disabled state and custom metadata.
+Steam ID equality can prevent duplicate automatic creation but cannot merge rows.
+Repeated identical discovery is a no-op. Automatic detection disabled means no
+startup enrichment; manual imports remain explicit user actions.
+
+Runtime matching uses exact Windows-normalized full paths first, including disabled
+owners. A known primary path cannot fall back to its basename at another location.
+Only unscoped primaries and saved aliases use exact basename matching; competing
+owners are not resolved by list order. Title/stem guesses only assist manual UI
+suggestions, never HDR authorization. Nonmatches follow the selected exit/Alt+Tab
+cleanup policy and never undo HDR that was already enabled by the user.
+
+Legacy rows whose primary is a confirmed shared helper or crash reporter
+(`GameLaunchHelper.exe`, `BsSndRpt.exe`, `BsSndRpt64.exe`, `BugSplat.exe`, or
+`BugSplatHD64.exe`) are **quarantined at runtime**, including all historical aliases.
+Their saved fields and enabled/disabled preferences stay unchanged. An English/Czech
+status warning and tray attention identify the repair; repeated polling does not
+resave settings or repeat unchanged status events. In **My Games**, use **Select
+actual game executable** on the blocked row. This explicit repair replaces only
+its primary/path, removes suspect historical aliases, and preserves other choices.
+The warning retires after repair. Manual selection of these helpers is rejected;
+generic editor/server names are not permanent runtime bans.
 
 Manual native **On**/**Off** explicitly targets one display or **All**. These
 actions remain available during first-run, recovery, unsupported settings, and
