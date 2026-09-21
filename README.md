@@ -7,14 +7,14 @@
 **Automatic, lightweight HDR display switcher for Windows 10 and 11.**\
 *No more manual `Win + Alt + B` or monitor blackouts before and after every gaming session.*
 
-[![Version](https://img.shields.io/badge/Version-v1.0.6-5accf5?style=for-the-badge)](https://github.com/Soptik1290/hdr-autoswitch/releases/tag/v1.0.6)
+[![Version](https://img.shields.io/badge/Version-v1.0.7-5accf5?style=for-the-badge)](https://github.com/Soptik1290/hdr-autoswitch/releases/tag/v1.0.7)
 [![Windows](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/Soptik1290/hdr-autoswitch)
 [![Tauri v2](https://img.shields.io/badge/Tauri-v2-FFC131?style=for-the-badge&logo=tauri&logoColor=black)](https://v2.tauri.app/)
 [![Rust](https://img.shields.io/badge/Rust-Backend-orange?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![React 19](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
 
-[**Download Latest Release (.exe Installer)**](https://github.com/Soptik1290/hdr-autoswitch/releases/latest) • [**Release Notes**](RELEASE_NOTES_v1.0.6.md) • [**Report Bug**](https://github.com/Soptik1290/hdr-autoswitch/issues)
+[**Download Latest Release (.exe Installer)**](https://github.com/Soptik1290/hdr-autoswitch/releases/latest) • [**Release Notes**](RELEASE_NOTES_v1.0.7.md) • [**Report Bug**](https://github.com/Soptik1290/hdr-autoswitch/issues)
 
 
 </div>
@@ -261,8 +261,8 @@ To compile the release binaries and generate Windows NSIS and MSI installers:
 npm run tauri build
 ```
 Output files will be generated in:
-- `src-tauri/target/release/bundle/nsis/HDR Auto-Switch_1.0.4_x64-setup.exe`
-- `src-tauri/target/release/bundle/msi/HDR Auto-Switch_1.0.4_x64_en-US.msi`
+- `src-tauri/target/release/bundle/nsis/HDR Auto-Switch_1.0.7_x64-setup.exe`
+- `src-tauri/target/release/bundle/msi/HDR Auto-Switch_1.0.7_x64_en-US.msi`
 
 ### Checks without changing real HDR or installed settings
 
@@ -316,7 +316,15 @@ fully atomic by the application.
 
 ## 🤝 Community & Contributors
 
-* A special thank you to **[@Karltang93](https://github.com/Karltang93)** for contributing [PR #2](https://github.com/Soptik1290/hdr-autoswitch/pull/2), resolving persistent monitor identification across restarts, transactional settings storage, and background safety hardening!
+* A special thank you to **[@Karltang93](https://github.com/Karltang93)** for contributing [PR #2](https://github.com/Soptik1290/hdr-autoswitch/pull/2) (persistent monitor identification across restarts, transactional settings storage) and [PR #3](https://github.com/Soptik1290/hdr-autoswitch/pull/3) (provider executable authority, Xbox config resolution, helper quarantine, and bounded foreground retries)!
+
+---
+
+## ☕ Support the Project
+
+If you find HDR Auto-Switch helpful and want to support ongoing development, maintenance, and catalog updates, you can support the project on Ko-fi!
+
+[![Support on Ko-fi](https://img.shields.io/badge/Ko--fi-Support%20the%20Project-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/soptik1290)
 
 ---
 
