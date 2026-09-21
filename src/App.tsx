@@ -22,6 +22,7 @@ import { HdrLogo } from './components/HdrLogo';
 import { GlitchNavItem } from './components/GlitchNavItem';
 import { Sun, Moon, Globe } from 'lucide-react';
 import { I18nContext, Language, dictionaries, detectDefaultLanguage } from './i18n';
+import { ThemeContext } from './theme';
 import './App.css';
 
 type Tab = 'dashboard' | 'apps' | 'catalog' | 'processes' | 'settings';
@@ -397,187 +398,222 @@ export default function App() {
 
   return (
     <I18nContext.Provider value={{ lang, setLang: handleSetLang, t }}>
-      <div
-        className={`min-h-screen flex flex-col transition-colors duration-200 font-mono ${
-          isDark ? 'bg-retro-dark text-[#e5e0e1]' : 'bg-retro-light text-slate-900'
-        }`}
-      >
-        {/* Top Header Bar - CodePen Retro Glitch Aesthetic */}
-        <header
-          className={`sticky top-0 z-30 px-6 py-2.5 border-b transition-colors ${
-            isDark
-              ? 'bg-[#0f0b0b]/95 border-[#f55a6b]/30'
-              : 'bg-white/95 border-[#f55a6b]/30 shadow-xs'
+      <ThemeContext.Provider value={{ isDark }}>
+        <div
+          className={`min-h-screen flex flex-col transition-colors duration-200 font-mono ${
+            isDark ? 'bg-retro-dark text-[#e5e0e1]' : 'bg-retro-light text-slate-900'
           }`}
         >
-          <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
-            {/* Brand Logo & Name with Solid Glitch Title Bar */}
-            <div className="flex items-center gap-3">
-              <div className="p-1.5 border border-[#f55a6b]/40 bg-[#180e10] flex items-center justify-center shrink-0 aspect-square">
-                <HdrLogo size={28} mode={headerMode} />
-              </div>
-
-              <div className="flex items-center gap-2.5">
-                <h1 className="glitch-title-bar px-2 py-0.5 text-xs font-bold tracking-wider inline-block">
-                  {t.appTitle}
-                </h1>
-
-                {/* Status Pill Badge */}
+          {/* Top Header Bar - CodePen Retro Glitch Aesthetic */}
+          <header
+            className={`sticky top-0 z-30 px-6 py-2.5 border-b transition-colors ${
+              isDark
+                ? 'bg-[#0f0b0b]/95 border-[#f55a6b]/30'
+                : 'bg-white/95 border-[#f55a6b]/30 shadow-xs'
+            }`}
+          >
+            <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
+              {/* Brand Logo & Name with Solid Glitch Title Bar */}
+              <div className="flex items-center gap-3">
                 <div
-                  className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-[11px] font-bold tracking-wider border uppercase transition-all ${headerVisuals.badge}`}
+                  className={`p-1.5 border flex items-center justify-center shrink-0 aspect-square ${
+                    isDark ? 'border-[#f55a6b]/40 bg-[#180e10]' : 'border-[#f55a6b]/30 bg-rose-50/50'
+                  }`}
                 >
-                  <span
-                    className={`w-1.5 h-1.5 ${headerVisuals.dot}`}
-                  />
-                  <span>{!statusLoaded
-                    ? t.configStatusUnknown
-                    : scopePresentation.badge}</span>
+                  <HdrLogo size={28} mode={headerMode} />
+                </div>
+
+                <div className="flex items-center gap-2.5">
+                  <h1 className="glitch-title-bar px-2 py-0.5 text-xs font-bold tracking-wider inline-block">
+                    {t.appTitle}
+                  </h1>
+
+                  {/* Status Pill Badge */}
+                  <div
+                    className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-[11px] font-bold tracking-wider border uppercase transition-all ${
+                      isDark
+                        ? headerVisuals.badge
+                        : headerMode === 'hdr'
+                        ? 'bg-[#f55a6b] text-white border-[#f55a6b]'
+                        : headerMode === 'sdr'
+                        ? 'bg-sky-100 text-sky-900 border-sky-300'
+                        : headerMode === 'mixed'
+                        ? 'bg-amber-100 text-amber-900 border-amber-400'
+                        : 'bg-slate-100 text-slate-800 border-slate-400 border-dashed'
+                    }`}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 ${
+                        isDark
+                          ? headerVisuals.dot
+                          : headerMode === 'hdr'
+                          ? 'bg-white animate-status-pulse'
+                          : headerMode === 'sdr'
+                          ? 'bg-sky-600'
+                          : headerMode === 'mixed'
+                          ? 'bg-amber-600'
+                          : 'border border-slate-500'
+                      }`}
+                    />
+                    <span>{!statusLoaded
+                      ? t.configStatusUnknown
+                      : scopePresentation.badge}</span>
+                  </div>
                 </div>
               </div>
+
+              {/* Glitch Navigation Bar (GSAP SVG Displacement from CodePen) */}
+              <nav className="flex items-center gap-2">
+                <GlitchNavItem
+                  label={t.navOverview}
+                  isActive={activeTab === 'dashboard'}
+                  onClick={() => setActiveTab('dashboard')}
+                  width={lang === 'en' ? 125 : 125}
+                  height={36}
+                  isDark={isDark}
+                />
+                <GlitchNavItem
+                  label={t.navApps}
+                  count={config?.apps.length ?? 0}
+                  isActive={activeTab === 'apps'}
+                  onClick={() => setActiveTab('apps')}
+                  width={lang === 'en' ? 140 : 145}
+                  height={36}
+                  isDark={isDark}
+                />
+                <GlitchNavItem
+                  label={t.navCatalog}
+                  isActive={activeTab === 'catalog'}
+                  onClick={() => setActiveTab('catalog')}
+                  width={lang === 'en' ? 140 : 140}
+                  height={36}
+                  isDark={isDark}
+                />
+                <GlitchNavItem
+                  label={t.navProcesses}
+                  isActive={activeTab === 'processes'}
+                  onClick={() => setActiveTab('processes')}
+                  width={lang === 'en' ? 150 : 135}
+                  height={36}
+                  isDark={isDark}
+                />
+                <GlitchNavItem
+                  label={t.navSettings}
+                  isActive={activeTab === 'settings'}
+                  onClick={() => setActiveTab('settings')}
+                  width={lang === 'en' ? 125 : 125}
+                  height={36}
+                  isDark={isDark}
+                />
+              </nav>
+
+              {/* Right Controls: Language & Theme Switch */}
+              <div className="flex items-center gap-2">
+                {/* Language Switch Button */}
+                <button
+                  onClick={() => handleSetLang(lang === 'cs' ? 'en' : 'cs')}
+                  className={`px-2 py-1 border text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    isDark
+                      ? 'border-[#f55a6b]/30 bg-[#180e10] text-[#5accf5] hover:border-[#f55a6b] hover:shadow-[0_0_10px_rgba(245,90,107,0.3)]'
+                      : 'border-[#f55a6b]/40 bg-white text-[#e03e52] hover:bg-slate-50 shadow-xs'
+                  }`}
+                  title={t.langToggle}
+                >
+                  <Globe className="w-3.5 h-3.5" />
+                  <span>{lang.toUpperCase()}</span>
+                </button>
+
+                <button
+                  onClick={() => setIsDark(!isDark)}
+                  className={`p-1.5 border transition-all cursor-pointer ${
+                    isDark
+                      ? 'border-[#f55a6b]/30 bg-[#180e10] text-[#5accf5] hover:border-[#f55a6b] hover:shadow-[0_0_10px_rgba(245,90,107,0.4)]'
+                      : 'border-[#f55a6b]/40 bg-white text-[#e03e52] hover:bg-slate-50 shadow-xs'
+                  }`}
+                  title={t.themeToggle}
+                >
+                  {isDark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+                </button>
+              </div>
             </div>
+          </header>
 
-            {/* Glitch Navigation Bar (GSAP SVG Displacement from CodePen) */}
-            <nav className="flex items-center gap-2">
-              <GlitchNavItem
-                label={t.navOverview}
-                isActive={activeTab === 'dashboard'}
-                onClick={() => setActiveTab('dashboard')}
-                width={lang === 'en' ? 125 : 125}
-                height={36}
-              />
-              <GlitchNavItem
-                label={t.navApps}
-                count={config?.apps.length ?? 0}
-                isActive={activeTab === 'apps'}
-                onClick={() => setActiveTab('apps')}
-                width={lang === 'en' ? 140 : 145}
-                height={36}
-              />
-              <GlitchNavItem
-                label={t.navCatalog}
-                isActive={activeTab === 'catalog'}
-                onClick={() => setActiveTab('catalog')}
-                width={lang === 'en' ? 140 : 140}
-                height={36}
-              />
-              <GlitchNavItem
-                label={t.navProcesses}
-                isActive={activeTab === 'processes'}
-                onClick={() => setActiveTab('processes')}
-                width={lang === 'en' ? 150 : 135}
-                height={36}
-              />
-              <GlitchNavItem
-                label={t.navSettings}
-                isActive={activeTab === 'settings'}
-                onClick={() => setActiveTab('settings')}
-                width={lang === 'en' ? 125 : 125}
-                height={36}
-              />
-            </nav>
+        {/* Main Content Body */}
+        <main className="flex-1 max-w-7xl w-full mx-auto p-6">
+          <ConfigNotice onSettings={() => setActiveTab('settings')} />
+          {[controlError, monitorError, statusError].filter(Boolean).map((error, index) =>
+            <p key={index} role="alert" className={`mb-4 p-3 border text-xs ${
+              isDark ? 'border-amber-400/50 text-amber-200 bg-amber-950/20' : 'border-amber-500/40 text-amber-900 bg-amber-50 shadow-xs'
+            }`}>{t.configError} {error}</p>
+          )}
+          {statusWarnings(status, t).map((warning) => (
+            <p key={warning} role="alert" className={`mb-4 p-3 border text-xs ${
+              isDark ? 'border-amber-400/50 text-amber-200 bg-amber-950/20' : 'border-amber-500/40 text-amber-900 bg-amber-50 shadow-xs'
+            }`}>{warning}</p>
+          ))}
+          {status.target_deferred && status.active_target && <p className={`mb-4 text-xs ${isDark ? 'text-[#5accf5]' : 'text-sky-700 font-semibold'}`}>
+            {t.configActiveTarget}: {status.active_target.kind === 'all'
+              ? t.settingsAllMonitors
+              : status.active_target.kind === 'monitor' ? status.active_target.display_name : t.configConfirmTarget}.
+            {' '}{t.configTargetHint}
+          </p>}
+          {activeTab === 'dashboard' && (
+            <Dashboard
+              status={status}
+              monitors={monitors}
+              libraryCount={config?.apps.length ?? null}
+              activityLogs={activityLogs}
+              recentGames={recentGames}
+              onRefreshMonitors={() => {
+                void refreshMonitors();
+                void refreshStatus();
+              }}
+              onManualToggle={() => {
+                void refreshStatus();
+                void refreshMonitors();
+              }}
+              onNavigateToApps={() => setActiveTab('apps')}
+              onControlError={setControlError}
+              controlAvailable={manualControlAvailable(status, statusLoaded)}
+              isDark={isDark}
+            />
+          )}
 
-            {/* Right Controls: Language & Theme Switch */}
-            <div className="flex items-center gap-2">
-              {/* Language Switch Button */}
-              <button
-                onClick={() => handleSetLang(lang === 'cs' ? 'en' : 'cs')}
-                className={`px-2 py-1 border text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                  isDark
-                    ? 'border-[#f55a6b]/30 bg-[#180e10] text-[#5accf5] hover:border-[#f55a6b] hover:shadow-[0_0_10px_rgba(245,90,107,0.3)]'
-                    : 'border-[#f55a6b]/40 bg-white text-[#f55a6b] hover:bg-slate-50'
-                }`}
-                title={t.langToggle}
-              >
-                <Globe className="w-3.5 h-3.5" />
-                <span>{lang.toUpperCase()}</span>
-              </button>
+          <fieldset disabled={pending} className={`min-w-0 ${pending ? 'pointer-events-none opacity-70' : ''}`}>
+          {config && activeTab === 'apps' && (
+            <AppsManager
+              quarantinedExes={(status.quarantined_apps ?? []).map((row) => row.exe_name)}
+              config={config}
+              isDark={isDark}
+              onNavigateToCatalog={() => setActiveTab('catalog')}
+            />
+          )}
 
-              <button
-                onClick={() => setIsDark(!isDark)}
-                className={`p-1.5 border transition-all cursor-pointer ${
-                  isDark
-                    ? 'border-[#f55a6b]/30 bg-[#180e10] text-[#5accf5] hover:border-[#f55a6b] hover:shadow-[0_0_10px_rgba(245,90,107,0.4)]'
-                    : 'border-[#f55a6b]/40 bg-white text-[#f55a6b] hover:bg-slate-50'
-                }`}
-                title={t.themeToggle}
-              >
-                {isDark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
-              </button>
-            </div>
-          </div>
-        </header>
+          {config && activeTab === 'catalog' && (
+            <CatalogBrowser
+              config={config}
+              isDark={isDark}
+            />
+          )}
 
-      {/* Main Content Body */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-6">
-        <ConfigNotice onSettings={() => setActiveTab('settings')} />
-        {[controlError, monitorError, statusError].filter(Boolean).map((error, index) =>
-          <p key={index} role="alert" className="mb-4 p-3 border border-amber-400/50 text-amber-200 text-xs">{t.configError} {error}</p>
-        )}
-        {statusWarnings(status, t).map((warning) => (
-          <p key={warning} role="alert" className="mb-4 p-3 border border-amber-400/50 text-amber-200 text-xs">{warning}</p>
-        ))}
-        {status.target_deferred && status.active_target && <p className="mb-4 text-xs text-[#5accf5]">
-          {t.configActiveTarget}: {status.active_target.kind === 'all'
-            ? t.settingsAllMonitors
-            : status.active_target.kind === 'monitor' ? status.active_target.display_name : t.configConfirmTarget}.
-          {' '}{t.configTargetHint}
-        </p>}
-        {activeTab === 'dashboard' && (
-          <Dashboard
-            status={status}
-            monitors={monitors}
-            libraryCount={config?.apps.length ?? null}
-            activityLogs={activityLogs}
-            recentGames={recentGames}
-            onRefreshMonitors={() => {
-              void refreshMonitors();
-              void refreshStatus();
-            }}
-            onManualToggle={() => {
-              void refreshStatus();
-              void refreshMonitors();
-            }}
-            onNavigateToApps={() => setActiveTab('apps')}
-            onControlError={setControlError}
-            controlAvailable={manualControlAvailable(status, statusLoaded)}
-            isDark={isDark}
-          />
-        )}
+          {config && activeTab === 'processes' && (
+            <RunningProcesses
+              config={config}
+              isDark={isDark}
+            />
+          )}
 
-        <fieldset disabled={pending} className={`min-w-0 ${pending ? 'pointer-events-none opacity-70' : ''}`}>
-        {config && activeTab === 'apps' && (
-          <AppsManager
-            quarantinedExes={(status.quarantined_apps ?? []).map((row) => row.exe_name)}
-            config={config}
-            isDark={isDark}
-            onNavigateToCatalog={() => setActiveTab('catalog')}
-          />
-        )}
-
-        {config && activeTab === 'catalog' && (
-          <CatalogBrowser
-            config={config}
-            isDark={isDark}
-          />
-        )}
-
-        {config && activeTab === 'processes' && (
-          <RunningProcesses
-            config={config}
-            isDark={isDark}
-          />
-        )}
-
-        {config && activeTab === 'settings' && (
-          <Settings
-            config={config}
-            monitors={monitors}
-            isDark={isDark}
-          />
-        )}
-        </fieldset>
-      </main>
-    </div>
+          {config && activeTab === 'settings' && (
+            <Settings
+              config={config}
+              monitors={monitors}
+              isDark={isDark}
+            />
+          )}
+          </fieldset>
+        </main>
+      </div>
+    </ThemeContext.Provider>
   </I18nContext.Provider>
   );
 }

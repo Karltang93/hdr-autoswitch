@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useId } from 'react';
 import { gsap } from 'gsap';
 import { RoughEase } from 'gsap/EasePack';
+import { useTheme } from '../theme';
 
 gsap.registerPlugin(RoughEase);
 
@@ -11,6 +12,7 @@ interface GlitchNavItemProps {
   onClick: () => void;
   width?: number;
   height?: number;
+  isDark?: boolean;
 }
 
 export const GlitchNavItem: React.FC<GlitchNavItemProps> = ({
@@ -20,7 +22,10 @@ export const GlitchNavItem: React.FC<GlitchNavItemProps> = ({
   onClick,
   width = 160,
   height = 38,
+  isDark: propIsDark,
 }) => {
+  const theme = useTheme();
+  const isDark = propIsDark ?? theme.isDark ?? true;
   const uniqueId = useId().replace(/[:]/g, '');
   const filterId = `displace-${uniqueId}`;
   const patternId = `scanline-${uniqueId}`;
@@ -113,7 +118,7 @@ export const GlitchNavItem: React.FC<GlitchNavItemProps> = ({
 
     // Scanline animation
     timelines.scanline
-      .to(scanlineRef.current, { fill: '#521d20', duration: 0.2 }, 0)
+      .to(scanlineRef.current, { fill: isDark ? '#521d20' : '#f5c6cb', duration: 0.2 }, 0)
       .to(scanlineRef.current, { opacity: 0.3, duration: 0.1, repeat: -1, yoyo: true }, 0);
 
     timelines.scanlinePattern.to(scanlinePatternRef.current, {
@@ -254,8 +259,8 @@ export const GlitchNavItem: React.FC<GlitchNavItemProps> = ({
             width="5"
             height="10"
           >
-            <rect ref={scanlineRef} className="scanline" x="0" y="0" width="5" height="1" fill="#221314" />
-            <rect x="0" y="1" width="5" height="9" fill="#0f0b0b" />
+            <rect ref={scanlineRef} className="scanline" x="0" y="0" width="5" height="1" fill={isDark ? '#221314' : '#faebeb'} />
+            <rect x="0" y="1" width="5" height="9" fill={isDark ? '#0f0b0b' : '#ffffff'} />
           </pattern>
 
           <radialGradient
@@ -266,9 +271,9 @@ export const GlitchNavItem: React.FC<GlitchNavItemProps> = ({
             r="40"
             gradientTransform={`translate(${width / 2} ${height / 2}) scale(${width / 40} 1) translate(-${width / 2} -${height / 2})`}
           >
-            <stop offset="0%" stopColor="#0f0b0b" stopOpacity="0" />
-            <stop offset="60%" stopColor="#0f0b0b" stopOpacity="0" />
-            <stop offset="100%" stopColor="#0f0b0b" stopOpacity="0.8" />
+            <stop offset="0%" stopColor={isDark ? '#0f0b0b' : '#ffffff'} stopOpacity="0" />
+            <stop offset="60%" stopColor={isDark ? '#0f0b0b' : '#ffffff'} stopOpacity="0" />
+            <stop offset="100%" stopColor={isDark ? '#0f0b0b' : '#ffffff'} stopOpacity={isDark ? 0.8 : 0.3} />
           </radialGradient>
         </defs>
 
@@ -282,7 +287,7 @@ export const GlitchNavItem: React.FC<GlitchNavItemProps> = ({
             ref={blueTextRef}
             x={width / 2}
             y={height / 2 + 1}
-            fill="#5accf5"
+            fill={isDark ? '#5accf5' : '#0284c7'}
             fontSize="12"
             fontWeight="700"
             fontFamily="'Kode Mono', monospace"
@@ -297,7 +302,7 @@ export const GlitchNavItem: React.FC<GlitchNavItemProps> = ({
             ref={redTextRef}
             x={width / 2}
             y={height / 2 + 1}
-            fill={isActive ? '#ffffff' : '#f55a6b'}
+            fill={isActive ? (isDark ? '#ffffff' : '#0f172a') : '#f55a6b'}
             fontSize="12"
             fontWeight="700"
             fontFamily="'Kode Mono', monospace"

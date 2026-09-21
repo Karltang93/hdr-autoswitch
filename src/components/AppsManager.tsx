@@ -41,6 +41,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
   config,
   quarantinedExes,
   onNavigateToCatalog,
+  isDark,
 }) => {
   const { t, lang } = useI18n();
   const [search, setSearch] = useState('');
@@ -321,11 +322,15 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
             <h2 className="glitch-title-bar px-2.5 py-0.5 text-xs font-bold tracking-wider inline-block">
               {t.appsTitle}
             </h2>
-            <span className="text-xs px-2 py-0.5 border border-[#5accf5]/40 text-[#5accf5] bg-[#140e10]">
+            <span className={`text-xs px-2 py-0.5 border ${
+              isDark
+                ? 'border-[#5accf5]/40 text-[#5accf5] bg-[#140e10]'
+                : 'border-sky-300 text-sky-800 bg-sky-50 shadow-xs'
+            }`}>
               {t.appsCountSummary(config.apps.length, activeCount)}
             </span>
           </div>
-          <p className="text-xs text-[#8a7f81] mt-1">
+          <p className={`text-xs mt-1 ${isDark ? 'text-[#8a7f81]' : 'text-slate-500'}`}>
             {t.appsSubtitle}
           </p>
         </div>
@@ -345,7 +350,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
             label={t.appsAddManualBtn}
             variant="outline"
             size="sm"
-            icon={<Plus className="w-3.5 h-3.5 text-[#5accf5]" />}
+            icon={<Plus className={`w-3.5 h-3.5 ${isDark ? 'text-[#5accf5]' : 'text-[#e03e52]'}`} />}
             onClick={() => setShowAddModal(true)}
           />
 
@@ -353,15 +358,19 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
             label={t.appsCatalogBtn}
             variant="outline"
             size="sm"
-            icon={<Compass className="w-3.5 h-3.5 text-[#f55a6b]" />}
+            icon={<Compass className={`w-3.5 h-3.5 ${isDark ? 'text-[#f55a6b]' : 'text-[#e03e52]'}`} />}
             onClick={onNavigateToCatalog}
           />
         </div>
       </div>
 
       {scanMessage && (
-        <div className="p-3 border border-[#5accf5]/40 bg-[#120e10] text-[#5accf5] text-xs flex items-center gap-2.5">
-          <Sparkles className="w-4 h-4 shrink-0 text-[#5accf5]" />
+        <div className={`p-3 border text-xs flex items-center gap-2.5 ${
+          isDark
+            ? 'border-[#5accf5]/40 bg-[#120e10] text-[#5accf5]'
+            : 'border-sky-300 bg-sky-50 text-sky-800 shadow-xs'
+        }`}>
+          <Sparkles className={`w-4 h-4 shrink-0 ${isDark ? 'text-[#5accf5]' : 'text-sky-600'}`} />
           <span>&gt; {scanMessage}</span>
         </div>
       )}
@@ -370,24 +379,30 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         {/* Search input */}
         <div className="relative flex-1">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#8a7f81]" />
+          <Search className={`w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 ${isDark ? 'text-[#8a7f81]' : 'text-slate-400'}`} />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={t.appsSearchPlaceholder}
-            className="w-full pl-9 pr-4 py-2 text-xs border border-[#f55a6b]/30 bg-[#120d0e] focus:border-[#f55a6b] text-white placeholder-[#8a7f81] focus:outline-none transition-all"
+            className={`w-full pl-9 pr-4 py-2 text-xs border focus:outline-none transition-all ${
+              isDark
+                ? 'border-[#f55a6b]/30 bg-[#120d0e] focus:border-[#f55a6b] text-white placeholder-[#8a7f81]'
+                : 'border-slate-300 bg-white focus:border-[#f55a6b] text-slate-900 placeholder-slate-400 shadow-xs'
+            }`}
           />
         </div>
 
         {/* View mode toggle (Grid vs List) */}
-        <div className="flex items-center gap-1 bg-[#120d0e] p-1 border border-[#f55a6b]/30">
+        <div className={`flex items-center gap-1 p-1 border ${
+          isDark ? 'bg-[#120d0e] border-[#f55a6b]/30' : 'bg-white border-slate-300 shadow-xs'
+        }`}>
           <button
             onClick={() => setViewMode('grid')}
             className={`p-1 text-xs cursor-pointer transition-all ${
               viewMode === 'grid'
-                ? 'bg-[#f55a6b] text-[#0f0b0b]'
-                : 'text-[#8a7f81] hover:text-white'
+                ? 'bg-[#f55a6b] text-white'
+                : isDark ? 'text-[#8a7f81] hover:text-white' : 'text-slate-500 hover:text-slate-900'
             }`}
             title={t.appsGridView}
           >
@@ -397,8 +412,8 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
             onClick={() => setViewMode('list')}
             className={`p-1 text-xs cursor-pointer transition-all ${
               viewMode === 'list'
-                ? 'bg-[#f55a6b] text-[#0f0b0b]'
-                : 'text-[#8a7f81] hover:text-white'
+                ? 'bg-[#f55a6b] text-white'
+                : isDark ? 'text-[#8a7f81] hover:text-white' : 'text-slate-500 hover:text-slate-900'
             }`}
             title={t.appsListView}
           >
@@ -420,8 +435,12 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
             onClick={() => setSelectedLauncher(tab.id)}
             className={`px-3 py-1 text-xs uppercase font-bold cursor-pointer transition-all border ${
               selectedLauncher === tab.id
-                ? 'bg-[#f55a6b] text-[#0f0b0b] border-[#f55a6b] neon-glow-coral'
-                : 'bg-[#120d0e] text-[#8a7f81] border-[#f55a6b]/20 hover:border-[#f55a6b]/50 hover:text-white'
+                ? isDark
+                  ? 'bg-[#f55a6b] text-[#0f0b0b] border-[#f55a6b] neon-glow-coral'
+                  : 'bg-[#f55a6b] text-white border-[#f55a6b] shadow-xs'
+                : isDark
+                ? 'bg-[#120d0e] text-[#8a7f81] border-[#f55a6b]/20 hover:border-[#f55a6b]/50 hover:text-white'
+                : 'bg-white text-slate-700 border-slate-200 hover:border-slate-400 hover:text-slate-900 shadow-xs'
             }`}
           >
             {tab.label}
@@ -431,13 +450,15 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
 
       {/* Main Content: Posters Grid or List */}
       {filteredApps.length === 0 ? (
-        <div className="p-16 text-center border border-[#f55a6b]/20 bg-[#120d0e] space-y-4">
-          <Gamepad2 className="w-12 h-12 text-[#8a7f81] mx-auto stroke-1" />
+        <div className={`p-16 text-center border space-y-4 ${
+          isDark ? 'border-[#f55a6b]/20 bg-[#120d0e]' : 'border-slate-200 bg-white shadow-xs'
+        }`}>
+          <Gamepad2 className={`w-12 h-12 mx-auto stroke-1 ${isDark ? 'text-[#8a7f81]' : 'text-slate-400'}`} />
           <div className="space-y-1">
-            <h3 className="text-sm font-bold text-white">
+            <h3 className={`text-sm font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
               {search ? t.appsNoGamesSearchTitle : t.appsNoGamesTitle}
             </h3>
-            <p className="text-xs text-[#8a7f81] max-w-md mx-auto">
+            <p className={`text-xs max-w-md mx-auto ${isDark ? 'text-[#8a7f81]' : 'text-slate-500'}`}>
               {t.appsNoGamesSubtitle}
             </p>
           </div>
@@ -471,8 +492,12 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                 key={app.exe_name}
                 className={`relative group border overflow-hidden flex flex-col justify-between transition-all duration-200 ${
                   app.enabled
-                    ? 'bg-[#120d0e] border-[#f55a6b]/35 hover:border-[#f55a6b] hover:shadow-[0_0_15px_rgba(245,90,107,0.3)]'
-                    : 'bg-[#120d0e]/60 border-white/10 opacity-65'
+                    ? isDark
+                      ? 'bg-[#120d0e] border-[#f55a6b]/35 hover:border-[#f55a6b] hover:shadow-[0_0_15px_rgba(245,90,107,0.3)]'
+                      : 'bg-white border-slate-200 hover:border-[#f55a6b] hover:shadow-md'
+                    : isDark
+                    ? 'bg-[#120d0e]/60 border-white/10 opacity-65'
+                    : 'bg-slate-100/70 border-slate-200 opacity-65'
                 }`}
                 style={{ height: '240px' }}
               >
@@ -488,11 +513,15 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                       }}
                     />
                   ) : (
-                    <div className="w-full h-full bg-gradient-to-b from-[#221314] to-[#0f0b0b]" />
+                    <div className={`w-full h-full ${isDark ? 'bg-gradient-to-b from-[#221314] to-[#0f0b0b]' : 'bg-gradient-to-b from-slate-100 to-slate-200'}`} />
                   )}
-                  {/* CRT Scanline overlay on image */}
-                  <div className="absolute inset-0 scanlines-overlay opacity-35 pointer-events-none" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#0f0b0b] via-[#0f0b0b]/60 to-transparent pointer-events-none" />
+                  {/* CRT Scanline overlay on image in dark mode */}
+                  {isDark && <div className="absolute inset-0 scanlines-overlay opacity-35 pointer-events-none" />}
+                  <div className={`absolute inset-0 pointer-events-none ${
+                    isDark
+                      ? 'bg-gradient-to-t from-[#0f0b0b] via-[#0f0b0b]/60 to-transparent'
+                      : 'bg-gradient-to-t from-black/60 via-transparent to-transparent'
+                  }`} />
                 </div>
 
                 {/* Top Badges */}
@@ -517,12 +546,16 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                 </div>
 
                 {/* Bottom Overlay & Controls */}
-                <div className="relative z-10 p-2.5 space-y-1.5 bg-[#0f0b0b]/90 border-t border-[#f55a6b]/20">
-                  <div className="font-bold text-xs truncate text-white" title={app.name}>
+                <div className={`relative z-10 p-2.5 space-y-1.5 ${
+                  isDark
+                    ? 'bg-[#0f0b0b]/90 border-t border-[#f55a6b]/20'
+                    : 'bg-white/95 border-t border-slate-200 shadow-xs'
+                }`}>
+                  <div className={`font-bold text-xs truncate ${isDark ? 'text-white' : 'text-slate-900'}`} title={app.name}>
                     <GlitchText text={app.name} scrambleOnHover={true} />
                   </div>
 
-                  <div className="text-[10px] text-[#5accf5] font-mono truncate">
+                  <div className={`text-[10px] font-mono truncate ${isDark ? 'text-[#5accf5]' : 'text-sky-700 font-semibold'}`}>
                     [{app.exe_name}]
                   </div>
 
@@ -533,8 +566,12 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                       disabled={isQuarantined(app)}
                       className={`px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider cursor-pointer border transition-all ${
                         app.enabled
-                          ? 'bg-[#f55a6b] text-[#0f0b0b] border-[#f55a6b]'
-                          : 'bg-[#120d0e] text-[#8a7f81] border-[#8a7f81]/30 hover:border-white'
+                          ? isDark
+                            ? 'bg-[#f55a6b] text-[#0f0b0b] border-[#f55a6b]'
+                            : 'bg-[#f55a6b] text-white border-[#f55a6b]'
+                          : isDark
+                          ? 'bg-[#120d0e] text-[#8a7f81] border-[#8a7f81]/30 hover:border-white'
+                          : 'bg-slate-100 text-slate-600 border-slate-300 hover:border-slate-500'
                       }`}
                     >
                       {isQuarantined(app) ? t.appsQuarantined : app.enabled ? t.appsStatusTracked : t.appsStatusPaused}
@@ -543,14 +580,16 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                     {/* Delete button */}
                     {isQuarantined(app) && (
                       <button onClick={() => handleRepairExecutable(app)}
-                        className="p-1 text-amber-200 cursor-pointer"
+                        className={`p-1 cursor-pointer ${isDark ? 'text-amber-200' : 'text-amber-700'}`}
                         title={t.appsRepairExecutable} aria-label={t.appsRepairExecutable}>
                         <FolderOpen className="w-3.5 h-3.5" />
                       </button>
                     )}
                     <button
                       onClick={() => handleDeleteApp(app.exe_name)}
-                      className="p-1 text-[#8a7f81] hover:text-[#f55a6b] cursor-pointer transition-colors"
+                      className={`p-1 cursor-pointer transition-colors ${
+                        isDark ? 'text-[#8a7f81] hover:text-[#f55a6b]' : 'text-slate-400 hover:text-rose-600'
+                      }`}
                       title={t.appsRemoveFromLibrary}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -574,35 +613,45 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                 key={app.exe_name}
                 className={`p-3 border transition-all flex items-center justify-between gap-4 relative ${
                   app.enabled
-                    ? 'bg-[#120d0e] border-[#f55a6b]/35 hover:border-[#f55a6b]'
-                    : 'bg-[#120d0e]/50 border-white/10 opacity-65'
+                    ? isDark
+                      ? 'bg-[#120d0e] border-[#f55a6b]/35 hover:border-[#f55a6b]'
+                      : 'bg-white border-slate-200 hover:border-[#f55a6b] shadow-xs'
+                    : isDark
+                    ? 'bg-[#120d0e]/50 border-white/10 opacity-65'
+                    : 'bg-slate-50 border-slate-200 opacity-65'
                 }`}
               >
                 <div className="flex items-center gap-3 min-w-0">
                   {/* Thumbnail */}
-                  <div className="w-16 h-10 border border-[#f55a6b]/30 bg-black shrink-0 overflow-hidden relative">
+                  <div className={`w-16 h-10 border shrink-0 overflow-hidden relative ${
+                    isDark ? 'border-[#f55a6b]/30 bg-black' : 'border-slate-300 bg-slate-100'
+                  }`}>
                     {steamCover ? (
                       <img src={steamCover} alt={app.name} className="w-full h-full object-cover" />
                     ) : (
-                      <div className="w-full h-full bg-[#221314] flex items-center justify-center">
-                        <Gamepad2 className="w-4 h-4 text-[#8a7f81]" />
+                      <div className={`w-full h-full flex items-center justify-center ${isDark ? 'bg-[#221314]' : 'bg-slate-200'}`}>
+                        <Gamepad2 className={`w-4 h-4 ${isDark ? 'text-[#8a7f81]' : 'text-slate-400'}`} />
                       </div>
                     )}
-                    <div className="absolute inset-0 scanlines-overlay opacity-20" />
+                    {isDark && <div className="absolute inset-0 scanlines-overlay opacity-20" />}
                   </div>
 
                   <div className="space-y-0.5 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-bold text-sm text-white truncate">{app.name}</span>
+                      <span className={`font-bold text-sm truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>{app.name}</span>
                       {getHdrBadge(app.hdr_type)}
                       {app.launcher && (
-                        <span className="text-[9px] px-1.5 py-0.2 bg-black border border-white/15 text-[#b5a9ac] uppercase">
+                        <span className={`text-[9px] px-1.5 py-0.2 border uppercase ${
+                          isDark ? 'bg-black border-white/15 text-[#b5a9ac]' : 'bg-slate-100 border-slate-300 text-slate-600'
+                        }`}>
                           {launcherName(app.launcher, lang)}
                         </span>
                       )}
                       {app.path && pathStatus[app.path] === false && (
                         <span
-                          className="text-[9px] px-1.5 py-0.2 bg-rose-950/70 border border-rose-500/50 text-rose-300 font-mono flex items-center gap-1"
+                          className={`text-[9px] px-1.5 py-0.2 border font-mono flex items-center gap-1 ${
+                            isDark ? 'bg-rose-950/70 border-rose-500/50 text-rose-300' : 'bg-rose-50 border-rose-300 text-rose-700'
+                          }`}
                           title={t.appsPathMissingTooltip}
                         >
                           <AlertCircle className="w-3 h-3" />
@@ -610,7 +659,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                         </span>
                       )}
                     </div>
-                    <div className="text-xs text-[#5accf5] font-mono">[{app.exe_name}]</div>
+                    <div className={`text-xs font-mono ${isDark ? 'text-[#5accf5]' : 'text-sky-700'}`}>[{app.exe_name}]</div>
                   </div>
                 </div>
 
@@ -620,8 +669,12 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                     disabled={isQuarantined(app)}
                     className={`px-2.5 py-1 text-xs font-bold uppercase tracking-wider cursor-pointer border transition-all ${
                       app.enabled
-                        ? 'bg-[#f55a6b] text-[#0f0b0b] border-[#f55a6b]'
-                        : 'bg-[#120d0e] text-[#8a7f81] border-[#8a7f81]/30'
+                        ? isDark
+                          ? 'bg-[#f55a6b] text-[#0f0b0b] border-[#f55a6b]'
+                          : 'bg-[#f55a6b] text-white border-[#f55a6b]'
+                        : isDark
+                        ? 'bg-[#120d0e] text-[#8a7f81] border-[#8a7f81]/30'
+                        : 'bg-slate-100 text-slate-600 border-slate-300'
                     }`}
                   >
                     {isQuarantined(app) ? t.appsQuarantined : app.enabled ? t.appsStatusTracked : t.appsStatusPaused}
@@ -629,14 +682,16 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
 
                   {isQuarantined(app) && (
                     <button onClick={() => handleRepairExecutable(app)}
-                      className="p-1.5 text-amber-200 cursor-pointer"
+                      className={`p-1.5 cursor-pointer ${isDark ? 'text-amber-200' : 'text-amber-700'}`}
                       title={t.appsRepairExecutable} aria-label={t.appsRepairExecutable}>
                       <FolderOpen className="w-4 h-4" />
                     </button>
                   )}
                   <button
                     onClick={() => handleDeleteApp(app.exe_name)}
-                    className="p-1.5 text-[#8a7f81] hover:text-[#f55a6b] cursor-pointer transition-colors"
+                    className={`p-1.5 cursor-pointer transition-colors ${
+                      isDark ? 'text-[#8a7f81] hover:text-[#f55a6b]' : 'text-slate-400 hover:text-rose-600'
+                    }`}
                     title={t.appsRemoveFromLibrary}
                   >
                     <Trash2 className="w-4 h-4" />
@@ -656,45 +711,63 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
 
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-            <div className="bg-[#0f0b0b] border-2 border-[#f55a6b] max-w-2xl w-full p-6 space-y-4 relative shadow-[0_0_30px_rgba(245,90,107,0.4)] max-h-[90vh] flex flex-col">
-              <div className="flex items-center justify-between border-b border-[#f55a6b]/30 pb-3">
+            <div className={`border-2 max-w-2xl w-full p-6 space-y-4 relative max-h-[90vh] flex flex-col ${
+              isDark
+                ? 'bg-[#0f0b0b] border-[#f55a6b] shadow-[0_0_30px_rgba(245,90,107,0.4)]'
+                : 'bg-white border-[#f55a6b] shadow-2xl text-slate-900'
+            }`}>
+              <div className={`flex items-center justify-between border-b pb-3 ${
+                isDark ? 'border-[#f55a6b]/30' : 'border-slate-200'
+              }`}>
                 <div className="flex items-center gap-2">
-                  <ScanSearch className="w-5 h-5 text-[#5accf5]" />
+                  <ScanSearch className={`w-5 h-5 ${isDark ? 'text-[#5accf5]' : 'text-sky-600'}`} />
                   <h3 className="glitch-title-bar px-2 py-0.5 text-xs font-bold uppercase">
                     {t.scanModalTitle(scannedGames.length)}
                   </h3>
                 </div>
                 <button
                   onClick={() => setShowScanModal(false)}
-                  className="text-[#8a7f81] hover:text-white cursor-pointer"
+                  className={`cursor-pointer ${isDark ? 'text-[#8a7f81] hover:text-white' : 'text-slate-400 hover:text-slate-900'}`}
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-                <p className="text-[#8a7f81]">
+                <p className={isDark ? 'text-[#8a7f81]' : 'text-slate-500'}>
                   {t.scanModalSubtitle}
                 </p>
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <button
                     type="button"
                     onClick={selectAllHdr}
-                    className="text-[10px] uppercase px-2 py-1 bg-[#120d0e] border border-[#5accf5]/50 text-[#5accf5] hover:bg-[#5accf5]/10 cursor-pointer font-mono"
+                    className={`text-[10px] uppercase px-2 py-1 border cursor-pointer font-mono ${
+                      isDark
+                        ? 'bg-[#120d0e] border-[#5accf5]/50 text-[#5accf5] hover:bg-[#5accf5]/10'
+                        : 'bg-sky-50 border-sky-300 text-sky-700 hover:bg-sky-100'
+                    }`}
                   >
                     {t.scanModalSelectAllHdr}
                   </button>
                   <button
                     type="button"
                     onClick={selectAll}
-                    className="text-[10px] uppercase px-2 py-1 bg-[#120d0e] border border-white/20 text-white hover:bg-white/10 cursor-pointer font-mono"
+                    className={`text-[10px] uppercase px-2 py-1 border cursor-pointer font-mono ${
+                      isDark
+                        ? 'bg-[#120d0e] border-white/20 text-white hover:bg-white/10'
+                        : 'bg-slate-100 border-slate-300 text-slate-800 hover:bg-slate-200'
+                    }`}
                   >
                     {t.scanModalSelectAll}
                   </button>
                   <button
                     type="button"
                     onClick={deselectAll}
-                    className="text-[10px] uppercase px-2 py-1 bg-[#120d0e] border border-white/10 text-[#8a7f81] hover:text-white cursor-pointer font-mono"
+                    className={`text-[10px] uppercase px-2 py-1 border cursor-pointer font-mono ${
+                      isDark
+                        ? 'bg-[#120d0e] border-white/10 text-[#8a7f81] hover:text-white'
+                        : 'bg-slate-50 border-slate-200 text-slate-500 hover:text-slate-800'
+                    }`}
                   >
                     {t.scanModalDeselectAll}
                   </button>
@@ -705,9 +778,13 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                 {/* SECTION 1: HDR Games (Top, Pre-selected) */}
                 {hdrGames.length > 0 && (
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between px-2 py-1.5 bg-[#121c1f] border-l-2 border-[#5accf5] text-[#5accf5]">
+                    <div className={`flex items-center justify-between px-2 py-1.5 border-l-2 ${
+                      isDark
+                        ? 'bg-[#121c1f] border-[#5accf5] text-[#5accf5]'
+                        : 'bg-sky-50 border-sky-500 text-sky-800'
+                    }`}>
                       <div className="flex items-center gap-2 text-xs font-bold uppercase">
-                        <Sparkles className="w-4 h-4 text-[#5accf5]" />
+                        <Sparkles className={`w-4 h-4 ${isDark ? 'text-[#5accf5]' : 'text-sky-600'}`} />
                         <span>{t.scanModalSectionHdr(hdrGames.length)}</span>
                       </div>
                       <span className="text-[10px] font-mono opacity-80">[AUTO ON]</span>
@@ -728,46 +805,60 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                             }
                             className={`p-2.5 border cursor-pointer flex items-center justify-between text-xs transition-all ${
                               isSelected
-                                ? 'bg-[#121c1f] border-[#5accf5] text-white shadow-[0_0_10px_rgba(90,204,245,0.15)]'
-                                : 'bg-black/40 border-white/10 text-[#8a7f81] hover:border-white/30'
+                                ? isDark
+                                  ? 'bg-[#121c1f] border-[#5accf5] text-white shadow-[0_0_10px_rgba(90,204,245,0.15)]'
+                                  : 'bg-sky-50 border-sky-500 text-slate-900 shadow-xs'
+                                : isDark
+                                ? 'bg-black/40 border-white/10 text-[#8a7f81] hover:border-white/30'
+                                : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-400'
                             }`}
                           >
                             <div className="space-y-0.5 min-w-0 flex-1 pr-2">
                               <div className="font-bold flex items-center gap-2 flex-wrap">
-                                <span>{game.name}</span>
+                                <span className={!isDark && isSelected ? 'text-slate-900' : ''}>{game.name}</span>
                                 {game.launcher && (
-                                  <span className="text-[9px] px-1 bg-black border border-[#5accf5]/30 text-[#5accf5]">
+                                  <span className={`text-[9px] px-1 border ${
+                                    isDark ? 'bg-black border-[#5accf5]/30 text-[#5accf5]' : 'bg-white border-sky-300 text-sky-700'
+                                  }`}>
                                     {launcherName(game.launcher, lang)}
                                   </span>
                                 )}
-                                <span className="text-[9px] px-1.5 py-0.2 bg-[#5accf5]/10 border border-[#5accf5]/50 text-[#5accf5] font-mono uppercase">
+                                <span className={`text-[9px] px-1.5 py-0.2 border font-mono uppercase ${
+                                  isDark ? 'bg-[#5accf5]/10 border-[#5accf5]/50 text-[#5accf5]' : 'bg-sky-100 border-sky-300 text-sky-800'
+                                }`}>
                                   {game.hdr_type === 'autohdr' ? 'Auto HDR' : 'Native HDR'}
                                 </span>
 
                                 {/* Status Badges */}
                                 {pathChanged && (
-                                  <span className="text-[9px] px-1.5 py-0.2 bg-amber-500/15 border border-amber-500/60 text-amber-300 font-mono font-bold uppercase tracking-wider flex items-center gap-1">
+                                  <span className={`text-[9px] px-1.5 py-0.2 border font-mono font-bold uppercase tracking-wider flex items-center gap-1 ${
+                                    isDark ? 'bg-amber-500/15 border-amber-500/60 text-amber-300' : 'bg-amber-50 border-amber-400 text-amber-800'
+                                  }`}>
                                     <RefreshCw className="w-2.5 h-2.5" />
                                     {t.scanModalStatusPathUpdate}
                                   </span>
                                 )}
                                 {isAlreadyInLib && (
-                                  <span className="text-[9px] px-1.5 py-0.2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono uppercase">
+                                  <span className={`text-[9px] px-1.5 py-0.2 border font-mono uppercase ${
+                                    isDark ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-emerald-50 border-emerald-400 text-emerald-800'
+                                  }`}>
                                     ✓ {t.scanModalStatusInLibrary}
                                   </span>
                                 )}
                                 {!existing && (
-                                  <span className="text-[9px] px-1.5 py-0.2 bg-[#5accf5]/15 border border-[#5accf5]/70 text-[#5accf5] font-mono font-bold uppercase tracking-wider">
+                                  <span className={`text-[9px] px-1.5 py-0.2 border font-mono font-bold uppercase tracking-wider ${
+                                    isDark ? 'bg-[#5accf5]/15 border-[#5accf5]/70 text-[#5accf5]' : 'bg-sky-100 border-sky-400 text-sky-800'
+                                  }`}>
                                     ★ {t.scanModalStatusNew}
                                   </span>
                                 )}
                               </div>
-                              <div className="text-[10px] text-[#5accf5] font-mono truncate">[{game.exe_name}]</div>
+                              <div className={`text-[10px] font-mono truncate ${isDark ? 'text-[#5accf5]' : 'text-sky-700'}`}>[{game.exe_name}]</div>
                               {game.path && !pathChanged && (
-                                <div className="text-[9px] font-mono truncate" title={game.path}>{game.path}</div>
+                                <div className={`text-[9px] font-mono truncate ${isDark ? '' : 'text-slate-500'}`} title={game.path}>{game.path}</div>
                               )}
                               {pathChanged && game.path && (
-                                <div className="text-[9px] text-amber-300/80 font-mono truncate" title={game.path}>
+                                <div className={`text-[9px] font-mono truncate ${isDark ? 'text-amber-300/80' : 'text-amber-700'}`} title={game.path}>
                                   ➔ {t.scanModalNewLocation}: {game.path}
                                 </div>
                               )}
@@ -777,7 +868,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                               className={`w-4 h-4 border flex items-center justify-center shrink-0 transition-colors ${
                                 isSelected
                                   ? 'bg-[#5accf5] border-[#5accf5] text-black'
-                                  : 'border-[#8a7f81]'
+                                  : isDark ? 'border-[#8a7f81]' : 'border-slate-300'
                               }`}
                             >
                               {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
@@ -792,9 +883,13 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                 {/* SECTION 2: SDR Games (Bottom, Unchecked by default) */}
                 {sdrGames.length > 0 && (
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between px-2 py-1.5 bg-[#120d0e] border-l-2 border-[#8a7f81] text-[#8a7f81]">
+                    <div className={`flex items-center justify-between px-2 py-1.5 border-l-2 ${
+                      isDark
+                        ? 'bg-[#120d0e] border-[#8a7f81] text-[#8a7f81]'
+                        : 'bg-slate-100 border-slate-400 text-slate-700'
+                    }`}>
                       <div className="flex items-center gap-2 text-xs font-bold uppercase">
-                        <Gamepad2 className="w-4 h-4 text-[#8a7f81]" />
+                        <Gamepad2 className={`w-4 h-4 ${isDark ? 'text-[#8a7f81]' : 'text-slate-500'}`} />
                         <span>{t.scanModalSectionSdr(sdrGames.length)}</span>
                       </div>
                       <span className="text-[10px] font-mono opacity-80">[AUTO OFF]</span>
@@ -815,41 +910,53 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                             }
                             className={`p-2.5 border cursor-pointer flex items-center justify-between text-xs transition-all ${
                               isSelected
-                                ? 'bg-[#1c0f12] border-[#f55a6b] text-white'
-                                : 'bg-black/40 border-white/10 text-[#8a7f81] hover:border-white/30'
+                                ? isDark
+                                  ? 'bg-[#1c0f12] border-[#f55a6b] text-white'
+                                  : 'bg-rose-50 border-[#f55a6b] text-slate-900 shadow-xs'
+                                : isDark
+                                ? 'bg-black/40 border-white/10 text-[#8a7f81] hover:border-white/30'
+                                : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-400'
                             }`}
                           >
                             <div className="space-y-0.5 min-w-0 flex-1 pr-2">
                               <div className="font-bold flex items-center gap-2 flex-wrap">
-                                <span>{game.name}</span>
+                                <span className={!isDark && isSelected ? 'text-slate-900' : ''}>{game.name}</span>
                                 {game.launcher && (
-                                  <span className="text-[9px] px-1 bg-black border border-white/20 text-[#8a7f81]">
+                                  <span className={`text-[9px] px-1 border ${
+                                    isDark ? 'bg-black border-white/20 text-[#8a7f81]' : 'bg-white border-slate-300 text-slate-600'
+                                  }`}>
                                     {launcherName(game.launcher, lang)}
                                   </span>
                                 )}
-                                <span className="text-[9px] px-1.5 py-0.2 bg-white/5 border border-white/10 text-[#8a7f81] font-mono uppercase">
+                                <span className={`text-[9px] px-1.5 py-0.2 border font-mono uppercase ${
+                                  isDark ? 'bg-white/5 border-white/10 text-[#8a7f81]' : 'bg-slate-100 border-slate-300 text-slate-600'
+                                }`}>
                                   SDR
                                 </span>
 
                                 {/* Status Badges for SDR */}
                                 {pathChanged && (
-                                  <span className="text-[9px] px-1.5 py-0.2 bg-amber-500/15 border border-amber-500/60 text-amber-300 font-mono font-bold uppercase tracking-wider flex items-center gap-1">
+                                  <span className={`text-[9px] px-1.5 py-0.2 border font-mono font-bold uppercase tracking-wider flex items-center gap-1 ${
+                                    isDark ? 'bg-amber-500/15 border-amber-500/60 text-amber-300' : 'bg-amber-50 border-amber-400 text-amber-800'
+                                  }`}>
                                     <RefreshCw className="w-2.5 h-2.5" />
                                     {t.scanModalStatusPathUpdate}
                                   </span>
                                 )}
                                 {isAlreadyInLib && (
-                                  <span className="text-[9px] px-1.5 py-0.2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono uppercase">
+                                  <span className={`text-[9px] px-1.5 py-0.2 border font-mono uppercase ${
+                                    isDark ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-emerald-50 border-emerald-400 text-emerald-800'
+                                  }`}>
                                     ✓ {t.scanModalStatusInLibrary}
                                   </span>
                                 )}
                               </div>
-                              <div className="text-[10px] text-[#8a7f81] font-mono truncate">[{game.exe_name}]</div>
+                              <div className={`text-[10px] font-mono truncate ${isDark ? 'text-[#8a7f81]' : 'text-slate-500'}`}>[{game.exe_name}]</div>
                               {game.path && !pathChanged && (
-                                <div className="text-[9px] font-mono truncate" title={game.path}>{game.path}</div>
+                                <div className={`text-[9px] font-mono truncate ${isDark ? '' : 'text-slate-500'}`} title={game.path}>{game.path}</div>
                               )}
                               {pathChanged && game.path && (
-                                <div className="text-[9px] text-amber-300/80 font-mono truncate" title={game.path}>
+                                <div className={`text-[9px] font-mono truncate ${isDark ? 'text-amber-300/80' : 'text-amber-700'}`} title={game.path}>
                                   ➔ {t.scanModalNewLocation}: {game.path}
                                 </div>
                               )}
@@ -859,7 +966,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                               className={`w-4 h-4 border flex items-center justify-center shrink-0 transition-colors ${
                                 isSelected
                                   ? 'bg-[#f55a6b] border-[#f55a6b] text-black'
-                                  : 'border-[#8a7f81]'
+                                  : isDark ? 'border-[#8a7f81]' : 'border-slate-300'
                               }`}
                             >
                               {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
@@ -872,8 +979,10 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                 )}
               </div>
 
-              <div className="flex items-center justify-between border-t border-[#f55a6b]/30 pt-3">
-                <div className="text-xs text-[#8a7f81]">
+              <div className={`flex items-center justify-between border-t pt-3 ${
+                isDark ? 'border-[#f55a6b]/30' : 'border-slate-200'
+              }`}>
+                <div className={`text-xs ${isDark ? 'text-[#8a7f81]' : 'text-slate-500'}`}>
                   {t.scanModalSelected(selectedCount)}
                 </div>
                 <div className="flex items-center gap-3">
@@ -899,8 +1008,14 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
       {/* Manual Add Modal & File Picker */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-          <div className="bg-[#0f0b0b] border-2 border-[#f55a6b] max-w-lg w-full p-6 space-y-4 relative shadow-[0_0_30px_rgba(245,90,107,0.4)]">
-            <div className="flex items-center justify-between border-b border-[#f55a6b]/30 pb-3">
+          <div className={`border-2 max-w-lg w-full p-6 space-y-4 relative ${
+            isDark
+              ? 'bg-[#0f0b0b] border-[#f55a6b] shadow-[0_0_30px_rgba(245,90,107,0.4)]'
+              : 'bg-white border-[#f55a6b] shadow-2xl text-slate-900'
+          }`}>
+            <div className={`flex items-center justify-between border-b pb-3 ${
+              isDark ? 'border-[#f55a6b]/30' : 'border-slate-200'
+            }`}>
               <h3 className="glitch-title-bar px-2 py-0.5 text-xs font-bold uppercase">
                 {t.manualModalTitle}
               </h3>
@@ -910,7 +1025,7 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                   setNewPath('');
                   setIsHdrMatched(false);
                 }}
-                className="text-[#8a7f81] hover:text-white cursor-pointer"
+                className={`cursor-pointer ${isDark ? 'text-[#8a7f81] hover:text-white' : 'text-slate-400 hover:text-slate-900'}`}
               >
                 <X className="w-5 h-5" />
               </button>
@@ -930,48 +1045,68 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
               }}
               className={`p-4 border-2 border-dashed cursor-pointer text-center transition-all ${
                 isDraggingOver
-                  ? 'border-[#5accf5] bg-[#5accf5]/15 text-white shadow-[0_0_15px_rgba(90,204,245,0.3)]'
-                  : 'border-[#f55a6b]/40 hover:border-[#f55a6b] bg-[#120d0e]/60 text-[#8a7f81] hover:text-white'
+                  ? isDark
+                    ? 'border-[#5accf5] bg-[#5accf5]/15 text-white shadow-[0_0_15px_rgba(90,204,245,0.3)]'
+                    : 'border-sky-500 bg-sky-50 text-sky-900 shadow-xs'
+                  : isDark
+                  ? 'border-[#f55a6b]/40 hover:border-[#f55a6b] bg-[#120d0e]/60 text-[#8a7f81] hover:text-white'
+                  : 'border-slate-300 hover:border-[#f55a6b] bg-slate-50 text-slate-600 hover:text-slate-900'
               }`}
             >
-              <UploadCloud className={`w-7 h-7 mx-auto mb-1.5 transition-colors ${isDraggingOver ? 'text-[#5accf5]' : 'text-[#f55a6b]'}`} />
-              <div className="text-xs font-bold uppercase text-white flex items-center justify-center gap-1.5">
-                <FolderOpen className="w-3.5 h-3.5 text-[#5accf5]" />
+              <UploadCloud className={`w-7 h-7 mx-auto mb-1.5 transition-colors ${
+                isDraggingOver
+                  ? isDark ? 'text-[#5accf5]' : 'text-sky-600'
+                  : isDark ? 'text-[#f55a6b]' : 'text-[#e03e52]'
+              }`} />
+              <div className={`text-xs font-bold uppercase flex items-center justify-center gap-1.5 ${
+                isDark ? 'text-white' : 'text-slate-900'
+              }`}>
+                <FolderOpen className={`w-3.5 h-3.5 ${isDark ? 'text-[#5accf5]' : 'text-sky-600'}`} />
                 <span>{t.manualModalBrowseBtn}</span>
               </div>
-              <p className="text-[10px] mt-1 text-[#8a7f81]">
+              <p className={`text-[10px] mt-1 ${isDark ? 'text-[#8a7f81]' : 'text-slate-500'}`}>
                 {t.manualModalDragDropHint}
               </p>
             </div>
 
             {/* Catalog Match Banner */}
             {isHdrMatched && (
-              <div className="p-2 bg-[#121c1f] border border-[#5accf5] text-[#5accf5] flex items-center gap-2 text-xs">
-                <Sparkles className="w-4 h-4 flex-shrink-0" />
+              <div className={`p-2 border flex items-center gap-2 text-xs ${
+                isDark
+                  ? 'bg-[#121c1f] border-[#5accf5] text-[#5accf5]'
+                  : 'bg-sky-50 border-sky-400 text-sky-800'
+              }`}>
+                <Sparkles className={`w-4 h-4 flex-shrink-0 ${isDark ? 'text-[#5accf5]' : 'text-sky-600'}`} />
                 <span className="font-bold uppercase tracking-wider">{t.manualModalDetectedBadge}</span>
               </div>
             )}
 
             <form onSubmit={handleAddCustomApp} className="space-y-4">
               <div className="space-y-1">
-                <label className="text-xs uppercase text-[#8a7f81]">{t.manualModalName}</label>
+                <label className={`text-xs uppercase ${isDark ? 'text-[#8a7f81]' : 'text-slate-600'}`}>{t.manualModalName}</label>
                 <input
                   type="text"
                   required
                   placeholder={t.manualNamePlaceholder}
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
-                  className="w-full px-3 py-2 text-xs border border-[#f55a6b]/30 bg-[#120d0e] focus:border-[#f55a6b] text-white focus:outline-none"
+                  className={`w-full px-3 py-2 text-xs border focus:outline-none ${
+                    isDark
+                      ? 'border-[#f55a6b]/30 bg-[#120d0e] focus:border-[#f55a6b] text-white'
+                      : 'border-slate-300 bg-white focus:border-[#f55a6b] text-slate-900 shadow-xs'
+                  }`}
                 />
               </div>
 
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs uppercase text-[#8a7f81]">{t.manualModalExe}</label>
+                  <label className={`text-xs uppercase ${isDark ? 'text-[#8a7f81]' : 'text-slate-600'}`}>{t.manualModalExe}</label>
                   <button
                     type="button"
                     onClick={handleBrowseExe}
-                    className="text-[10px] text-[#5accf5] hover:underline flex items-center gap-1 cursor-pointer font-mono"
+                    className={`text-[10px] hover:underline flex items-center gap-1 cursor-pointer font-mono ${
+                      isDark ? 'text-[#5accf5]' : 'text-sky-600'
+                    }`}
                   >
                     <FolderOpen className="w-3 h-3" />
                     {t.manualModalBrowseBtn}
@@ -984,29 +1119,41 @@ export const AppsManager: React.FC<AppsManagerProps> = ({
                     placeholder={t.manualExePlaceholder}
                     value={newExe}
                     onChange={(e) => setNewExe(e.target.value)}
-                    className="w-full px-3 py-2 text-xs border border-[#f55a6b]/30 bg-[#120d0e] focus:border-[#f55a6b] text-white focus:outline-none font-mono"
+                    className={`w-full px-3 py-2 text-xs border focus:outline-none font-mono ${
+                      isDark
+                        ? 'border-[#f55a6b]/30 bg-[#120d0e] focus:border-[#f55a6b] text-white'
+                        : 'border-slate-300 bg-white focus:border-[#f55a6b] text-slate-900 shadow-xs'
+                    }`}
                   />
                   <button
                     type="button"
                     onClick={handleBrowseExe}
-                    className="px-3 py-1.5 bg-[#1c0f12] border border-[#f55a6b] text-[#f55a6b] hover:bg-[#f55a6b] hover:text-black text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                    className={`px-3 py-1.5 border text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors ${
+                      isDark
+                        ? 'bg-[#1c0f12] border-[#f55a6b] text-[#f55a6b] hover:bg-[#f55a6b] hover:text-black'
+                        : 'bg-rose-50 border-[#f55a6b] text-[#e03e52] hover:bg-[#f55a6b] hover:text-white'
+                    }`}
                   >
                     <FolderOpen className="w-4 h-4" />
                   </button>
                 </div>
                 {newPath && (
-                  <div className="text-[9px] text-[#5accf5] font-mono truncate pt-0.5" title={newPath}>
+                  <div className={`text-[9px] font-mono truncate pt-0.5 ${isDark ? 'text-[#5accf5]' : 'text-sky-700'}`} title={newPath}>
                     {t.manualModalPath}: {newPath}
                   </div>
                 )}
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs uppercase text-[#8a7f81]">{t.manualModalType}</label>
+                <label className={`text-xs uppercase ${isDark ? 'text-[#8a7f81]' : 'text-slate-600'}`}>{t.manualModalType}</label>
                 <select
                   value={newType}
                   onChange={(e) => setNewType(e.target.value as HdrType)}
-                  className="w-full px-3 py-2 text-xs border border-[#f55a6b]/30 bg-[#120d0e] focus:border-[#f55a6b] text-white focus:outline-none"
+                  className={`w-full px-3 py-2 text-xs border focus:outline-none ${
+                    isDark
+                      ? 'border-[#f55a6b]/30 bg-[#120d0e] focus:border-[#f55a6b] text-white'
+                      : 'border-slate-300 bg-white focus:border-[#f55a6b] text-slate-900 shadow-xs'
+                  }`}
                 >
                   <option value="native">{t.catalogTierNative}</option>
                   <option value="autohdr">{t.catalogTierAutoHdr}</option>

@@ -14,6 +14,7 @@ interface RunningProcessesProps {
 
 export const RunningProcesses: React.FC<RunningProcessesProps> = ({
   config,
+  isDark,
 }) => {
   const { t } = useI18n();
   const [processes, setProcesses] = useState<RunningProcessInfo[]>([]);
@@ -72,11 +73,13 @@ export const RunningProcesses: React.FC<RunningProcessesProps> = ({
             <h2 className="glitch-title-bar px-2.5 py-0.5 text-xs font-bold tracking-wider inline-block">
               {t.procTitle}
             </h2>
-            <span className="text-xs px-2 py-0.5 border border-[#5accf5]/40 text-[#5accf5] bg-[#140e10]">
+            <span className={`text-xs px-2 py-0.5 border ${
+              isDark ? 'border-[#5accf5]/40 text-[#5accf5] bg-[#140e10]' : 'border-sky-300 text-sky-700 bg-sky-50 font-semibold'
+            }`}>
               {t.procCountActive(processes.length)}
             </span>
           </div>
-          <p className="text-xs text-[#8a7f81] mt-1">
+          <p className={`text-xs mt-1 ${isDark ? 'text-[#8a7f81]' : 'text-slate-600'}`}>
             {t.procSubtitle}
           </p>
         </div>
@@ -86,30 +89,39 @@ export const RunningProcesses: React.FC<RunningProcessesProps> = ({
           variant="outline"
           size="sm"
           disabled={loading}
-          icon={<RefreshCw className={`w-3.5 h-3.5 text-[#5accf5] ${loading ? 'animate-spin' : ''}`} />}
+          isDark={isDark}
+          icon={<RefreshCw className={`w-3.5 h-3.5 ${isDark ? 'text-[#5accf5]' : 'text-sky-600'} ${loading ? 'animate-spin' : ''}`} />}
           onClick={fetchProcesses}
         />
       </div>
 
       {/* Search Field */}
       <div className="relative">
-        <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#8a7f81]" />
+        <Search className={`w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 ${isDark ? 'text-[#8a7f81]' : 'text-slate-400'}`} />
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder={t.procSearchPlaceholder}
-          className="w-full pl-9 pr-4 py-2 text-xs border border-[#f55a6b]/30 bg-[#120d0e] focus:border-[#f55a6b] text-white placeholder-[#8a7f81] focus:outline-none transition-all"
+          className={`w-full pl-9 pr-4 py-2 text-xs border focus:border-[#f55a6b] focus:outline-none transition-all ${
+            isDark
+              ? 'border-[#f55a6b]/30 bg-[#120d0e] text-white placeholder-[#8a7f81]'
+              : 'border-slate-300 bg-white text-slate-900 placeholder-slate-400 shadow-2xs'
+          }`}
         />
       </div>
 
       {/* Process List */}
       {loading ? (
-        <div className="p-12 text-center border border-[#f55a6b]/20 bg-[#120d0e] text-[#5accf5] text-xs">
+        <div className={`p-12 text-center border text-xs ${
+          isDark ? 'border-[#f55a6b]/20 bg-[#120d0e] text-[#5accf5]' : 'border-slate-200 bg-white text-sky-700 shadow-2xs'
+        }`}>
           {t.procLoading}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="p-12 text-center border border-[#f55a6b]/20 bg-[#120d0e] text-[#8a7f81] text-xs">
+        <div className={`p-12 text-center border text-xs ${
+          isDark ? 'border-[#f55a6b]/20 bg-[#120d0e] text-[#8a7f81]' : 'border-slate-200 bg-white text-slate-600 shadow-2xs'
+        }`}>
           {t.procEmpty}
         </div>
       ) : (
@@ -122,35 +134,43 @@ export const RunningProcesses: React.FC<RunningProcessesProps> = ({
               <div
                 key={`${proc.pid}-${proc.exe_name}`}
                 className={`p-3 border transition-all flex items-center justify-between gap-4 relative ${
-                  tracked
-                    ? 'bg-[#180e10] border-[#f55a6b]/50'
-                    : 'bg-[#120d0e] border-[#f55a6b]/20 hover:border-[#f55a6b]/60'
+                  isDark
+                    ? tracked
+                      ? 'bg-[#180e10] border-[#f55a6b]/50'
+                      : 'bg-[#120d0e] border-[#f55a6b]/20 hover:border-[#f55a6b]/60'
+                    : tracked
+                      ? 'bg-rose-50/50 border-[#f55a6b]/50 shadow-2xs'
+                      : 'bg-white border-slate-200 hover:border-[#f55a6b] shadow-2xs'
                 }`}
               >
-                <div className="absolute inset-0 scanlines-overlay opacity-10 pointer-events-none" />
+                {isDark && <div className="absolute inset-0 scanlines-overlay opacity-10 pointer-events-none" />}
 
                 <div className="flex items-center gap-3 min-w-0 relative z-10">
-                  <div className="p-2 border border-[#f55a6b]/30 bg-black text-[#5accf5]">
+                  <div className={`p-2 border ${
+                    isDark ? 'border-[#f55a6b]/30 bg-black text-[#5accf5]' : 'border-slate-200 bg-slate-100 text-sky-700'
+                  }`}>
                     <AppWindow className="w-4 h-4" />
                   </div>
 
                   <div className="space-y-0.5 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-bold text-sm text-white truncate max-w-[280px]">
+                      <span className={`font-bold text-sm truncate max-w-[280px] ${isDark ? 'text-white' : 'text-slate-900'}`}>
                         <GlitchText text={proc.name} scrambleOnHover={true} />
                       </span>
-                      <span className="text-[10px] px-1.5 py-0.2 bg-black border border-white/10 text-[#8a7f81] font-mono">
+                      <span className={`text-[10px] px-1.5 py-0.2 font-mono border ${
+                        isDark ? 'bg-black border-white/10 text-[#8a7f81]' : 'bg-slate-100 border-slate-300 text-slate-600'
+                      }`}>
                         PID: {proc.pid}
                       </span>
                     </div>
 
                     {proc.title && proc.title !== proc.name && (
-                      <div className="text-xs text-[#8a7f81] truncate max-w-[450px]">
+                      <div className={`text-xs truncate max-w-[450px] ${isDark ? 'text-[#8a7f81]' : 'text-slate-500'}`}>
                         "{proc.title}"
                       </div>
                     )}
 
-                    <div className="text-xs text-[#5accf5] font-mono truncate">
+                    <div className={`text-xs font-mono truncate ${isDark ? 'text-[#5accf5]' : 'text-sky-700 font-semibold'}`}>
                       [{proc.exe_name}]
                     </div>
                   </div>
@@ -158,8 +178,10 @@ export const RunningProcesses: React.FC<RunningProcessesProps> = ({
 
                 <div className="shrink-0 relative z-10">
                   {tracked ? (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold uppercase bg-emerald-950/80 text-emerald-300 border border-emerald-500/40">
-                      <Check className="w-3.5 h-3.5" /> {t.procAlreadyTracked}
+                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold uppercase border ${
+                      isDark ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40' : 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                    }`}>
+                      <Check className={`w-3.5 h-3.5 ${isDark ? 'text-emerald-300' : 'text-emerald-600'}`} /> {t.procAlreadyTracked}
                     </span>
                   ) : (
                     <GlitchButton
@@ -167,6 +189,7 @@ export const RunningProcesses: React.FC<RunningProcessesProps> = ({
                       variant="primary"
                       size="sm"
                       disabled={isAdding}
+                      isDark={isDark}
                       icon={<Plus className="w-3.5 h-3.5 fill-current" />}
                       onClick={() => handleAddProcess(proc)}
                     />

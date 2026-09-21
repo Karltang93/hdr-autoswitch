@@ -27,6 +27,7 @@ interface CatalogBrowserProps {
 
 export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
   config,
+  isDark,
 }) => {
   const { t, lang } = useI18n();
   const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
@@ -109,43 +110,57 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
     switch (tier) {
       case 'native':
         return (
-          <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 bg-cyan-950/80 text-[#5accf5] border border-[#5accf5]/40 font-bold uppercase tracking-wider">
-            <CheckCircle2 className="w-3 h-3 text-[#5accf5]" /> {t.catalogTierNative}
+          <span className={`inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 font-bold uppercase tracking-wider border ${
+            isDark ? 'bg-cyan-950/80 text-[#5accf5] border-[#5accf5]/40' : 'bg-cyan-50 text-cyan-800 border-cyan-300'
+          }`}>
+            <CheckCircle2 className={`w-3 h-3 ${isDark ? 'text-[#5accf5]' : 'text-cyan-600'}`} /> {t.catalogTierNative}
           </span>
         );
       case 'limited':
         return (
-          <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 bg-teal-950/80 text-teal-300 border border-teal-500/40 font-bold uppercase tracking-wider">
-            <Sparkles className="w-3 h-3 text-teal-400" /> {t.catalogTierLimited}
+          <span className={`inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 font-bold uppercase tracking-wider border ${
+            isDark ? 'bg-teal-950/80 text-teal-300 border-teal-500/40' : 'bg-teal-50 text-teal-800 border-teal-300'
+          }`}>
+            <Sparkles className={`w-3 h-3 ${isDark ? 'text-teal-400' : 'text-teal-600'}`} /> {t.catalogTierLimited}
           </span>
         );
       case 'always_on':
         return (
-          <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 bg-purple-950/80 text-purple-300 border border-purple-500/40 font-bold uppercase tracking-wider">
-            <Lock className="w-3 h-3 text-purple-400" /> {t.catalogTierAlwaysOn}
+          <span className={`inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 font-bold uppercase tracking-wider border ${
+            isDark ? 'bg-purple-950/80 text-purple-300 border-purple-500/40' : 'bg-purple-50 text-purple-800 border-purple-300'
+          }`}>
+            <Lock className={`w-3 h-3 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} /> {t.catalogTierAlwaysOn}
           </span>
         );
       case 'manual_fix':
         return (
-          <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 bg-amber-950/80 text-amber-300 border border-amber-500/40 font-bold uppercase tracking-wider">
-            <Wrench className="w-3 h-3 text-amber-400" /> {t.catalogTierMod}
+          <span className={`inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 font-bold uppercase tracking-wider border ${
+            isDark ? 'bg-amber-950/80 text-amber-300 border-amber-500/40' : 'bg-amber-50 text-amber-800 border-amber-300'
+          }`}>
+            <Wrench className={`w-3 h-3 ${isDark ? 'text-amber-400' : 'text-amber-600'}`} /> {t.catalogTierMod}
           </span>
         );
       case 'autohdr':
         return (
-          <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 bg-rose-950/80 text-[#f55a6b] border border-[#f55a6b]/40 font-bold uppercase tracking-wider">
-            <Zap className="w-3 h-3 text-[#f55a6b]" /> {t.catalogTierAutoHdr}
+          <span className={`inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 font-bold uppercase tracking-wider border ${
+            isDark ? 'bg-rose-950/80 text-[#f55a6b] border-[#f55a6b]/40' : 'bg-rose-50 text-rose-700 border-rose-300'
+          }`}>
+            <Zap className={`w-3 h-3 ${isDark ? 'text-[#f55a6b]' : 'text-rose-600'}`} /> {t.catalogTierAutoHdr}
           </span>
         );
       case 'media':
         return (
-          <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 bg-blue-950/80 text-blue-300 border border-blue-500/40 font-bold uppercase tracking-wider">
-            <Film className="w-3 h-3 text-blue-400" /> {t.catalogTierMedia}
+          <span className={`inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 font-bold uppercase tracking-wider border ${
+            isDark ? 'bg-blue-950/80 text-blue-300 border-blue-500/40' : 'bg-blue-50 text-blue-800 border-blue-300'
+          }`}>
+            <Film className={`w-3 h-3 ${isDark ? 'text-blue-400' : 'text-blue-600'}`} /> {t.catalogTierMedia}
           </span>
         );
       default:
         return (
-          <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 bg-slate-900 text-slate-300 border border-slate-700 font-bold uppercase tracking-wider">
+          <span className={`inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 font-bold uppercase tracking-wider border ${
+            isDark ? 'bg-slate-900 text-slate-300 border-slate-700' : 'bg-slate-100 text-slate-700 border-slate-300'
+          }`}>
             {t.catalogTierCustom}
           </span>
         );
@@ -166,11 +181,13 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
             <h2 className="glitch-title-bar px-2.5 py-0.5 text-xs font-bold tracking-wider inline-block">
               {t.catalogTitle}
             </h2>
-            <span className="text-xs px-2 py-0.5 border border-[#5accf5]/40 text-[#5accf5] bg-[#140e10]">
+            <span className={`text-xs px-2 py-0.5 border ${
+              isDark ? 'border-[#5accf5]/40 text-[#5accf5] bg-[#140e10]' : 'border-sky-300 text-sky-700 bg-sky-50 font-semibold'
+            }`}>
               {t.catalogArchiveCount(catalog.length)}
             </span>
           </div>
-          <p className="text-xs text-[#8a7f81] mt-1">
+          <p className={`text-xs mt-1 ${isDark ? 'text-[#8a7f81]' : 'text-slate-600'}`}>
             {t.catalogSubtitle}
           </p>
         </div>
@@ -180,14 +197,17 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
           variant="outline"
           size="sm"
           disabled={syncing}
-          icon={<RefreshCw className={`w-3.5 h-3.5 text-[#5accf5] ${syncing ? 'animate-spin' : ''}`} />}
+          isDark={isDark}
+          icon={<RefreshCw className={`w-3.5 h-3.5 ${isDark ? 'text-[#5accf5]' : 'text-sky-600'} ${syncing ? 'animate-spin' : ''}`} />}
           onClick={handleSync}
         />
       </div>
 
       {message && (
-        <div className="p-3 border border-[#5accf5]/40 bg-[#120e10] text-[#5accf5] text-xs flex items-center gap-2.5">
-          <Sparkles className="w-4 h-4 shrink-0 text-[#5accf5]" />
+        <div className={`p-3 border text-xs flex items-center gap-2.5 ${
+          isDark ? 'border-[#5accf5]/40 bg-[#120e10] text-[#5accf5]' : 'border-sky-300 bg-sky-50 text-sky-800'
+        }`}>
+          <Sparkles className={`w-4 h-4 shrink-0 ${isDark ? 'text-[#5accf5]' : 'text-sky-600'}`} />
           <span>&gt; {message}</span>
         </div>
       )}
@@ -195,13 +215,17 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
       {/* Filter and Search Bar */}
       <div className="space-y-3">
         <div className="relative">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#8a7f81]" />
+          <Search className={`w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 ${isDark ? 'text-[#8a7f81]' : 'text-slate-400'}`} />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={t.catalogSearchPlaceholder}
-            className="w-full pl-9 pr-4 py-2 text-xs border border-[#f55a6b]/30 bg-[#120d0e] focus:border-[#f55a6b] text-white placeholder-[#8a7f81] focus:outline-none transition-all"
+            className={`w-full pl-9 pr-4 py-2 text-xs border focus:border-[#f55a6b] focus:outline-none transition-all ${
+              isDark
+                ? 'border-[#f55a6b]/30 bg-[#120d0e] text-white placeholder-[#8a7f81]'
+                : 'border-slate-300 bg-white text-slate-900 placeholder-slate-400 shadow-2xs'
+            }`}
           />
         </div>
 
@@ -221,7 +245,9 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
               className={`px-3 py-1 text-xs uppercase font-bold cursor-pointer transition-all border ${
                 selectedTier === tab.id
                   ? 'bg-[#f55a6b] text-[#0f0b0b] border-[#f55a6b] neon-glow-coral'
-                  : 'bg-[#120d0e] text-[#8a7f81] border-[#f55a6b]/20 hover:border-[#f55a6b]/50 hover:text-white'
+                  : isDark
+                    ? 'bg-[#120d0e] text-[#8a7f81] border-[#f55a6b]/20 hover:border-[#f55a6b]/50 hover:text-white'
+                    : 'bg-white text-slate-700 border-slate-200 hover:border-slate-400 hover:text-slate-900 shadow-2xs'
               }`}
             >
               {tab.label}
@@ -232,11 +258,15 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
 
       {/* Games Catalog List */}
       {loading ? (
-        <div className="p-12 text-center border border-[#f55a6b]/20 bg-[#120d0e] text-[#5accf5] text-xs">
+        <div className={`p-12 text-center border text-xs ${
+          isDark ? 'border-[#f55a6b]/20 bg-[#120d0e] text-[#5accf5]' : 'border-slate-200 bg-white text-sky-700 shadow-2xs'
+        }`}>
           {t.catalogLoading}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="p-12 text-center border border-[#f55a6b]/20 bg-[#120d0e] text-[#8a7f81] text-xs">
+        <div className={`p-12 text-center border text-xs ${
+          isDark ? 'border-[#f55a6b]/20 bg-[#120d0e] text-[#8a7f81]' : 'border-slate-200 bg-white text-slate-600 shadow-2xs'
+        }`}>
           {t.catalogEmpty}
         </div>
       ) : (
@@ -248,23 +278,27 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
               <div
                 key={item.exe_name}
                 className={`p-3 border transition-all flex items-center justify-between gap-4 relative ${
-                  tracked
-                    ? 'bg-[#180e10] border-[#f55a6b]/50'
-                    : 'bg-[#120d0e] border-[#f55a6b]/20 hover:border-[#f55a6b]/60'
+                  isDark
+                    ? tracked
+                      ? 'bg-[#180e10] border-[#f55a6b]/50'
+                      : 'bg-[#120d0e] border-[#f55a6b]/20 hover:border-[#f55a6b]/60'
+                    : tracked
+                      ? 'bg-rose-50/50 border-[#f55a6b]/50 shadow-2xs'
+                      : 'bg-white border-slate-200 hover:border-[#f55a6b] shadow-2xs'
                 }`}
               >
-                <div className="absolute inset-0 scanlines-overlay opacity-10 pointer-events-none" />
+                {isDark && <div className="absolute inset-0 scanlines-overlay opacity-10 pointer-events-none" />}
 
                 <div className="space-y-1 min-w-0 relative z-10">
                   <div className="flex items-center gap-2.5 flex-wrap">
-                    <span className="font-bold text-sm text-white truncate">
+                    <span className={`font-bold text-sm truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>
                       <GlitchText text={item.name} scrambleOnHover={true} />
                     </span>
                     {getTierBadge(item.support_tier)}
                   </div>
 
-                  <div className="flex items-center gap-2 text-xs text-[#8a7f81]">
-                    <span className="text-[#5accf5] font-mono">[{item.exe_name}]</span>
+                  <div className={`flex items-center gap-2 text-xs ${isDark ? 'text-[#8a7f81]' : 'text-slate-500'}`}>
+                    <span className={`font-mono ${isDark ? 'text-[#5accf5]' : 'text-sky-700 font-semibold'}`}>[{item.exe_name}]</span>
                     {item.notes && (
                       <>
                         <span>•</span>
@@ -280,7 +314,8 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
                       label={t.catalogRemoveBtn}
                       variant="outline"
                       size="sm"
-                      icon={<Check className="w-3.5 h-3.5 text-emerald-400" />}
+                      isDark={isDark}
+                      icon={<Check className={`w-3.5 h-3.5 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`} />}
                       onClick={() => handleRemoveGame(tracked.exe_name)}
                     />
                   ) : (
@@ -288,6 +323,7 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
                       label={t.catalogAddBtn}
                       variant="primary"
                       size="sm"
+                      isDark={isDark}
                       icon={<Plus className="w-3.5 h-3.5 fill-current" />}
                       onClick={() => handleAddGame(item)}
                     />

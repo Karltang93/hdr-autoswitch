@@ -7,7 +7,7 @@
 **Automatic, lightweight HDR display switcher for Windows 10 and 11.**\
 *No more manual `Win + Alt + B` or monitor blackouts before and after every gaming session.*
 
-[![Version](https://img.shields.io/badge/Version-v1.0.7-5accf5?style=for-the-badge)](https://github.com/Soptik1290/hdr-autoswitch/releases/tag/v1.0.7)
+[![Version](https://img.shields.io/badge/Version-v1.0.8-5accf5?style=for-the-badge)](https://github.com/Soptik1290/hdr-autoswitch/releases/tag/v1.0.8)
 [![Windows](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/Soptik1290/hdr-autoswitch)
 [![Tauri v2](https://img.shields.io/badge/Tauri-v2-FFC131?style=for-the-badge&logo=tauri&logoColor=black)](https://v2.tauri.app/)
 [![Rust](https://img.shields.io/badge/Rust-Backend-orange?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
@@ -15,7 +15,7 @@
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-Buy%20me%20a%20coffee-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/s0pt1k)
 
-[**Download Latest Release (.exe Installer)**](https://github.com/Soptik1290/hdr-autoswitch/releases/latest) • [**Release Notes**](RELEASE_NOTES_v1.0.7.md) • [**Support on Ko-fi**](https://ko-fi.com/s0pt1k) • [**Report Bug**](https://github.com/Soptik1290/hdr-autoswitch/issues)
+[**Download Latest Release (.exe Installer)**](https://github.com/Soptik1290/hdr-autoswitch/releases/latest) • [**Release Notes**](release-notes/RELEASE_NOTES_v1.0.8.md) • [**Support on Ko-fi**](https://ko-fi.com/s0pt1k) • [**Report Bug**](https://github.com/Soptik1290/hdr-autoswitch/issues)
 
 
 </div>
@@ -88,139 +88,34 @@ always recheck current authorization, including after a delayed observation.
 ### Option 1: Pre-built Windows Installer (Recommended)
 Download the latest installer (`.exe` setup or `.msi`) from the [**Releases Page**](https://github.com/Soptik1290/hdr-autoswitch/releases/latest).
 
-1. Run `HDR Auto-Switch_1.0.4_x64-setup.exe`.
+1. Run `HDR Auto-Switch_1.0.8_x64-setup.exe`.
 2. Follow the installer instructions (creates desktop and start menu shortcuts).
 3. The app will detect your connected displays automatically.
 4. Click **"Scan PC for Games"** on the My Games tab to populate your library.
 
-### Monitor selection, settings migration, and recovery
+### ⚙️ Settings Migration & Technical Invariants
 
-Settings are now machine-local. The directory is resolved using Tauri's
-`app_local_data_dir`; on a standard Windows profile the file is
-`%LOCALAPPDATA%\com.soptik.hdr-autoswitch\config-v2.json`. Settings shows the actual
-resolved path. Updates using the same application identifier use this location.
-The `controller.lock` file protects the running controller across schema versions;
-its presence alone does not mean another instance is running.
+<details>
+<summary><b>Click to expand architecture details (Settings, Storefronts & Recovery)</b></summary>
 
-On first launch after upgrading, explicitly **Import older settings** from
-`%APPDATA%\HDRAutoSwitch\config.json`. The original file is left untouched.
-Your game library and preferences are retained, but a previously selected
-individual monitor must be selected again because the old runtime ID was not
-persistent. An imported **Shortcut** preference pauses automatic switching until
-you explicitly enable **Native HDR control**. There is no automatic keyboard
-fallback: a native error is reported without toggling other displays.
+#### Settings & Migration
+* **Machine-Local Storage**: Settings are stored per-machine in `%LOCALAPPDATA%\com.soptik.hdr-autoswitch\config-v2.json`. The `controller.lock` file coordinates access across running instances.
+* **Legacy Import**: Older settings from `%APPDATA%\HDRAutoSwitch\config.json` can be imported on first launch without modifying the original file.
+* **Persistent Display Identity**: Monitor selection binds to durable Windows display device instances. Primary monitor detection uses Windows GDI primary-source metadata.
+* **Atomic Transactions**: Settings saves use flushed staging files with checksums and atomic file replacement to prevent corruption.
 
-Display identity is stable for the same Windows device instance/connection. Moving
-a cable to another port, replacing a GPU, or reinstalling a driver can require
-selecting the monitor again. Friendly names are labels, not identity matches.
-Target edits apply to the next game activation; an active session retains its
-original target and All retains its original membership.
+#### Storefronts, Executables & Quarantine
+* **Provider Authority**: Executable support is **provider-specific**, **not a universal storefront mapping**. Only embedded executable authority can authorize automatic matching or canonical row enrichment.
+* **Xbox Games**: Discovery covers accessible local `XboxGames` via bounded `MicrosoftGame.config` parsing without probing protected packages. Competing files stay **unresolved rather than guessed**. The verified AOE3 Xbox binding selects `AoE3DE.exe` (**not a claim of live AOE3 HDR verification**).
+* **Crash Reporter Quarantine**: Known shared helpers or crash utilities (`GameLaunchHelper.exe`, `BsSndRpt.exe`, `BugSplat.exe`, etc.) are **quarantined at runtime** with status alerts, allowing one-click repair that **preserves other choices**.
+* **Precise Path Matching**: Runtime matching prioritizes exact normalized paths to prevent spoofing or misattribution between different game editions.
 
-Primary-monitor labels use the Windows GDI primary-source metadata, not display-path ordering. Cloned targets sharing a primary source share its label. Missing or failed primary metadata is logged and omits the label without invalidating monitor identity or HDR state; HDR control still resolves only by durable monitor identity.
+#### Display Control & Cleanup
+* **Native Switching**: Direct per-display Win32 HDR switching without sending simulated hotkeys.
+* **Safe Cleanup**: Automatic restoration only reverts HDR changes that were verified to be initiated by the application, leaving existing user HDR states intact.
+* **Reliable Uninstallation**: Clean rollback and staging protection ensure no orphaned processes or corrupted autostart entries.
 
-Saves use a flushed, validated staging file, preserved checkpoints, and Windows
-file replacement. Failed or uncertain saves are reported, not presented as
-**Saved**. Unreadable files and unresolved transaction artifacts pause automation
-and expose recovery choices instead of silently writing defaults. **Restore**
-and the explicitly confirmed **Reset** preserve original evidence and start a
-new settings history. A future schema is read-only and cannot be downgraded with
-these controls. Close the app before editing its files; live external edits are
-unsupported.
-
-Persisted schema-2 settings, app rows, and monitor targets use strict typed decoding at every document and journal-candidate entry point. All canonical fields must be present, including nullable metadata and journal install sources (explicit `null` remains valid); unknown nested fields are rejected without rewriting the evidence or advertising malformed recovery sources. Legacy import alone retains its recognized defaults, aliases, and permissive compatibility behavior.
-
-A registered recovery source that changes or becomes unreadable retires the
-current settings context and blocks automatic authority before recovery inventory
-is refreshed. Malformed, unknown, or expired candidate IDs are rejected without
-changing authority.
-
-Background library updates and recovery-state changes notify the controller
-without waiting for a foreground-window change.
-
-### Storefront executables and legacy helper repair
-
-Executable support is provider-specific, not a universal storefront mapping.
-Only embedded executable authority can authorize automatic matching or canonical
-row enrichment; downloaded/cache-only names and aliases remain suggestions, for
-every provider. Provider declarations resolve exactly relative to the installation
-root, even a single filename: a similarly named executable under `Tools` cannot
-substitute for a missing root file. Steam catalog basename nominations alone allow
-unique recursive lookup; competing files stay unresolved.
-Xbox discovery covers accessible local `XboxGames` installations with a bounded,
-valid `MicrosoftGame.config`; it does not enumerate packages or bypass protected
-WindowsApps folders. The verified AOE3 Xbox binding selects `AoE3DE.exe`, never
-`GameLaunchHelper.exe`. No AOE3 Steam executable or real AOE4 executable is guessed.
-These guarantees are fixture-tested, not a claim of live AOE3 HDR verification.
-
-Startup may enrich one independently valid canonical row with locally resolved
-aliases from the selected provider, preserving disabled state and custom metadata.
-Steam ID equality can prevent duplicate automatic creation but cannot merge rows.
-Repeated identical discovery is a no-op. Automatic detection disabled means no
-startup enrichment; manual imports remain explicit user actions.
-
-Runtime matching uses exact Windows-normalized full paths first, including disabled
-owners. A known primary path cannot fall back to its basename at another location.
-Only unscoped primaries and saved aliases use exact basename matching; competing
-owners are not resolved by list order. Title/stem guesses only assist manual UI
-suggestions, never HDR authorization. Nonmatches follow the selected exit/Alt+Tab
-cleanup policy and never undo HDR that was already enabled by the user.
-
-Legacy rows whose primary is a confirmed shared helper or crash reporter
-(`GameLaunchHelper.exe`, `BsSndRpt.exe`, `BsSndRpt64.exe`, `BugSplat.exe`, or
-`BugSplatHD64.exe`) are **quarantined at runtime**, including all historical aliases.
-Their saved fields and enabled/disabled preferences stay unchanged. An English/Czech
-status warning and tray attention identify the repair; repeated polling does not
-resave settings or repeat unchanged status events. In **My Games**, use **Select
-actual game executable** on the blocked row. This explicit repair replaces only
-its primary/path, removes suspect historical aliases, and preserves other choices.
-The warning retires after repair. Manual selection of these helpers is rejected;
-generic editor/server names are not permanent runtime bans.
-
-Scan selections distinguish provider and executable path, not just the filename.
-Select one installation when several detected records share a primary executable:
-conflicting batches are rejected without saving, rather than letting the last path
-overwrite earlier selections. Importing one explicitly selected installation still
-supports the existing moved-path update workflow.
-
-Manual native **On**/**Off** explicitly targets one display or **All**. These
-actions remain available during first-run, recovery, unsupported settings, and
-pending automatic Native consent; they neither save settings nor grant that
-consent. No untrusted default All selection is presented as a saved target.
-Controller conflicts, shutdown, or unreadable control authority block manual
-actions, and every request still validates native display identity and HDR state.
-Automatic activation requires ready settings, Native consent, and an eligible
-game; cleanup of changes already owned by the app is a separate operation.
-Tray requests retain click order. Only the latest request can present a result,
-including when a previously queued UI callback runs after a newer request.
-
-Ruční nativní **Zapnout**/**Vypnout** platí jen pro výslovně zvolený displej nebo
-**Vše**, i při pozastavené automatizaci během prvního spuštění, obnovy,
-nepodporovaného nastavení nebo čekání na souhlas s automatickým nativním HDR.
-Nemění nastavení ani tento souhlas. Konflikt ovladače, ukončování a nedostupná
-autorita ovládání ruční zásahy blokují; identita a stav displeje se vždy ověřují.
-Automatické HDR nadále vyžaduje platné nastavení, souhlas a způsobilou hru.
-
-Automatic cleanup only reverses changes the app verified that it made. It leaves
-pre-existing HDR and observed manual/external overrides alone. An unverified
-native result remains unresolved until an explicit, verified per-display (or All)
-**On**/**Off** action, including an already-satisfied request. Refresh does not
-grant ownership, and a disconnected cleanup is not queued for reconnection.
-There is no crash-time HDR restoration journal.
-
-Before upgrading, use **Quit** in the old application's tray menu; closing its
-window only hides it. The new startup guard and installer handoff check the
-identified installed predecessor and owned startup registrations rather than
-killing every process named `tauri-app.exe`. An unresolved conflict pauses all
-HDR writes. After quitting the predecessor, use **Recheck HDR controller**.
-Launching a legacy portable controller later alongside the new app is unsupported.
-
-Upgrade with the **same installer format and installation directory** as the
-existing installation. Cross-format migration, SYSTEM installs, and elevation
-using another account are deliberately refused. Autostart requires a registered
-installation; portable/development copies cannot register themselves. Existing
-Windows Startup Apps disable choices are preserved rather than overridden.
-
-The NSIS uninstaller checks every bundled-file deletion and verifies absence before removing shortcuts or installation ownership. Failure can leave some resources removed and startup disabled; it preserves registration and restores missing cleanup executables without overwriting existing files. Recovery copies remain in the reported temporary recovery directory if a retry or manual repair is needed. Automatic restoration stages a complete copy in an exclusively created directory under the installation before a same-volume, no-overwrite rename. This works with an E: installation and C: temporary backups, and copy failures cannot leave a partial registered executable. Only empty, owned staging directories are removed automatically. If access or locks block restoration, restore only missing original executable paths from the complete recovery copies (not `.restore` staging files) before retrying the registered uninstaller normally (without NSIS `_?=`); an in-place reinstall cannot bypass missing ownership paths. Keep the reported recovery/staging directories until cleanup succeeds, then remove those scoped directories. Unrelated files and user settings are never recursively removed.
+</details>
 
 ---
 
@@ -262,8 +157,8 @@ To compile the release binaries and generate Windows NSIS and MSI installers:
 npm run tauri build
 ```
 Output files will be generated in:
-- `src-tauri/target/release/bundle/nsis/HDR Auto-Switch_1.0.7_x64-setup.exe`
-- `src-tauri/target/release/bundle/msi/HDR Auto-Switch_1.0.7_x64_en-US.msi`
+- `src-tauri/target/release/bundle/nsis/HDR Auto-Switch_1.0.8_x64-setup.exe`
+- `src-tauri/target/release/bundle/msi/HDR Auto-Switch_1.0.8_x64_en-US.msi`
 
 ### Checks without changing real HDR or installed settings
 

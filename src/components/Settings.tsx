@@ -24,6 +24,7 @@ interface SettingsProps {
 export const Settings: React.FC<SettingsProps> = ({
   config,
   monitors,
+  isDark,
 }) => {
   const { t, lang, setLang } = useI18n();
   const { snapshot, pending } = useConfig();
@@ -91,29 +92,35 @@ export const Settings: React.FC<SettingsProps> = ({
             {t.settingsTitle}
           </h2>
         </div>
-        <p className="text-xs text-[#8a7f81] mt-1">
+        <p className={`text-xs mt-1 ${isDark ? 'text-[#8a7f81]' : 'text-slate-600'}`}>
           {t.settingsSubtitle}
         </p>
       </div>
 
       {saveMessage && (
-        <div className="p-3 border border-emerald-500/40 bg-[#120e10] text-emerald-400 text-xs flex items-center gap-2.5">
-          <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+        <div className={`p-3 border text-xs flex items-center gap-2.5 ${
+          isDark ? 'border-emerald-500/40 bg-[#120e10] text-emerald-400' : 'border-emerald-300 bg-emerald-50 text-emerald-800'
+        }`}>
+          <CheckCircle2 className={`w-4 h-4 shrink-0 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`} />
           <span>&gt; {saveMessage}</span>
         </div>
       )}
 
       {/* Language Selection Group */}
-      <div className="p-5 border border-[#f55a6b]/30 bg-[#120d0e] relative space-y-4">
-        <div className="absolute inset-0 scanlines-overlay opacity-15 pointer-events-none" />
+      <div className={`p-5 border relative space-y-4 ${
+        isDark ? 'border-[#f55a6b]/30 bg-[#120d0e]' : 'border-slate-200 bg-white shadow-2xs'
+      }`}>
+        {isDark && <div className="absolute inset-0 scanlines-overlay opacity-15 pointer-events-none" />}
 
-        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#f55a6b]">
-          <Globe className="w-4 h-4 text-[#5accf5]" />
+        <div className={`flex items-center gap-2 text-xs font-bold uppercase tracking-wider ${
+          isDark ? 'text-[#f55a6b]' : 'text-[#e03e52]'
+        }`}>
+          <Globe className={`w-4 h-4 ${isDark ? 'text-[#5accf5]' : 'text-sky-600'}`} />
           <span>{t.settingsLanguageTitle}</span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 relative z-10 items-center">
-          <div className="text-xs text-[#8a7f81]">
+          <div className={`text-xs ${isDark ? 'text-[#8a7f81]' : 'text-slate-600'}`}>
             {t.settingsLanguageDesc}
           </div>
 
@@ -123,7 +130,9 @@ export const Settings: React.FC<SettingsProps> = ({
               className={`px-4 py-2 text-xs font-bold uppercase border cursor-pointer transition-all ${
                 lang === 'en'
                   ? 'bg-[#f55a6b] text-[#0f0b0b] border-[#f55a6b] neon-glow-coral'
-                  : 'bg-[#0f0b0b] text-[#8a7f81] border-[#f55a6b]/30 hover:text-white'
+                  : isDark
+                    ? 'bg-[#0f0b0b] text-[#8a7f81] border-[#f55a6b]/30 hover:text-white'
+                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-slate-300 hover:text-slate-900 shadow-2xs'
               }`}
             >
               {t.settingsEnglish}
@@ -133,7 +142,9 @@ export const Settings: React.FC<SettingsProps> = ({
               className={`px-4 py-2 text-xs font-bold uppercase border cursor-pointer transition-all ${
                 lang === 'cs'
                   ? 'bg-[#f55a6b] text-[#0f0b0b] border-[#f55a6b] neon-glow-coral'
-                  : 'bg-[#0f0b0b] text-[#8a7f81] border-[#f55a6b]/30 hover:text-white'
+                  : isDark
+                    ? 'bg-[#0f0b0b] text-[#8a7f81] border-[#f55a6b]/30 hover:text-white'
+                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-slate-300 hover:text-slate-900 shadow-2xs'
               }`}
             >
               {t.settingsCzech}
@@ -143,21 +154,27 @@ export const Settings: React.FC<SettingsProps> = ({
       </div>
 
       {/* Monitor & Switching Method Group */}
-      <div className="p-5 border border-[#f55a6b]/30 bg-[#120d0e] relative space-y-4">
-        <div className="absolute inset-0 scanlines-overlay opacity-15 pointer-events-none" />
+      <div className={`p-5 border relative space-y-4 ${
+        isDark ? 'border-[#f55a6b]/30 bg-[#120d0e]' : 'border-slate-200 bg-white shadow-2xs'
+      }`}>
+        {isDark && <div className="absolute inset-0 scanlines-overlay opacity-15 pointer-events-none" />}
 
-        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#f55a6b]">
-          <Monitor className="w-4 h-4 text-[#5accf5]" />
+        <div className={`flex items-center gap-2 text-xs font-bold uppercase tracking-wider ${
+          isDark ? 'text-[#f55a6b]' : 'text-[#e03e52]'
+        }`}>
+          <Monitor className={`w-4 h-4 ${isDark ? 'text-[#5accf5]' : 'text-sky-600'}`} />
           <span>{t.settingsDisplayGroup}</span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 relative z-10">
           <div className="space-y-1.5">
-            <label className="text-xs uppercase text-[#8a7f81]">{t.settingsTargetMonitor}</label>
+            <label className={`text-xs uppercase ${isDark ? 'text-[#8a7f81]' : 'text-slate-600'}`}>{t.settingsTargetMonitor}</label>
             <select
               value={targetValue}
               onChange={(e) => handleTarget(e.target.value)}
-              className="w-full px-3 py-2 text-xs border border-[#f55a6b]/30 bg-[#0f0b0b] focus:border-[#f55a6b] text-white focus:outline-none"
+              className={`w-full px-3 py-2 text-xs border focus:border-[#f55a6b] focus:outline-none ${
+                isDark ? 'border-[#f55a6b]/30 bg-[#0f0b0b] text-white' : 'border-slate-300 bg-white text-slate-900 shadow-2xs'
+              }`}
             >
               <option value="all">{t.settingsAllMonitors}</option>
               {targetValue === 'unavailable' && <option value="unavailable" disabled>
@@ -172,31 +189,44 @@ export const Settings: React.FC<SettingsProps> = ({
                   </option>
                 ))}
             </select>
-            <p className="text-[11px] text-[#8a7f81]">{t.configTargetHint}</p>
+            <p className={`text-[11px] ${isDark ? 'text-[#8a7f81]' : 'text-slate-500'}`}>{t.configTargetHint}</p>
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs uppercase text-[#8a7f81]">{t.settingsSwitchMethod}</label>
-            {config.switch_method === 'native' ? <p className="text-xs text-[#5accf5] py-2">{t.settingsMethodNative}</p> : <>
-              <p className="text-xs text-amber-300">{t.configNativeConsent}</p>
-              <button className="p-2 text-xs border border-[#5accf5]/50 text-[#5accf5]" onClick={() => handleSave({ switch_method: 'native' })}>
-                {t.configAcceptNative}
-              </button>
-            </>}
+            <label className={`text-xs uppercase ${isDark ? 'text-[#8a7f81]' : 'text-slate-600'}`}>{t.settingsSwitchMethod}</label>
+            {config.switch_method === 'native' ? (
+              <p className={`text-xs py-2 ${isDark ? 'text-[#5accf5]' : 'text-sky-700 font-semibold'}`}>{t.settingsMethodNative}</p>
+            ) : (
+              <>
+                <p className={`text-xs ${isDark ? 'text-amber-300' : 'text-amber-700 font-semibold'}`}>{t.configNativeConsent}</p>
+                <button
+                  className={`p-2 text-xs border ${
+                    isDark ? 'border-[#5accf5]/50 text-[#5accf5]' : 'border-sky-400 text-sky-700 bg-sky-50'
+                  }`}
+                  onClick={() => handleSave({ switch_method: 'native' })}
+                >
+                  {t.configAcceptNative}
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
 
       {/* Switching Policy Group (Alt+Tab vs Game Exit) */}
-      <div className="p-5 border border-[#f55a6b]/30 bg-[#120d0e] relative space-y-4">
-        <div className="absolute inset-0 scanlines-overlay opacity-15 pointer-events-none" />
+      <div className={`p-5 border relative space-y-4 ${
+        isDark ? 'border-[#f55a6b]/30 bg-[#120d0e]' : 'border-slate-200 bg-white shadow-2xs'
+      }`}>
+        {isDark && <div className="absolute inset-0 scanlines-overlay opacity-15 pointer-events-none" />}
 
-        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#f55a6b]">
-          <Clock className="w-4 h-4 text-[#5accf5]" />
+        <div className={`flex items-center gap-2 text-xs font-bold uppercase tracking-wider ${
+          isDark ? 'text-[#f55a6b]' : 'text-[#e03e52]'
+        }`}>
+          <Clock className={`w-4 h-4 ${isDark ? 'text-[#5accf5]' : 'text-sky-600'}`} />
           <span>{t.settingsSwitchingPolicyTitle}</span>
         </div>
 
-        <p className="text-xs text-[#8a7f81] relative z-10">
+        <p className={`text-xs relative z-10 ${isDark ? 'text-[#8a7f81]' : 'text-slate-600'}`}>
           {t.settingsSwitchingPolicyDesc}
         </p>
 
@@ -206,22 +236,30 @@ export const Settings: React.FC<SettingsProps> = ({
             onClick={() => handleSave({ exit_only_hdr: true })}
             className={`p-3.5 border cursor-pointer transition-all ${
               config.exit_only_hdr
-                ? 'border-[#f55a6b] bg-[#1a0f12] neon-glow-coral'
-                : 'border-white/10 bg-black/40 hover:border-white/20'
+                ? isDark
+                  ? 'border-[#f55a6b] bg-[#1a0f12] neon-glow-coral'
+                  : 'border-[#f55a6b] bg-rose-50/70 shadow-2xs'
+                : isDark
+                  ? 'border-white/10 bg-black/40 hover:border-white/20'
+                  : 'border-slate-200 bg-slate-50/70 hover:border-slate-300 shadow-2xs'
             }`}
           >
             <div className="flex items-center justify-between">
-              <div className="font-bold text-xs text-white flex items-center gap-2">
-                <span className={config.exit_only_hdr ? 'text-[#f55a6b]' : 'text-slate-500'}>
+              <div className={`font-bold text-xs flex items-center gap-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                <span className={config.exit_only_hdr ? 'text-[#f55a6b]' : isDark ? 'text-slate-500' : 'text-slate-400'}>
                   {config.exit_only_hdr ? '●' : '○'}
                 </span>
                 <span>{t.settingsPolicyExitOnly}</span>
               </div>
-              <span className="text-[10px] px-2 py-0.5 border border-emerald-500/40 text-emerald-400 bg-emerald-500/10 font-bold">
+              <span className={`text-[10px] px-2 py-0.5 border font-bold ${
+                isDark
+                  ? 'border-emerald-500/40 text-emerald-400 bg-emerald-500/10'
+                  : 'border-emerald-300 text-emerald-800 bg-emerald-50'
+              }`}>
                 {t.settingsNoFlicker}
               </span>
             </div>
-            <p className="text-[11px] text-[#8a7f81] mt-1.5 pl-4">
+            <p className={`text-[11px] mt-1.5 pl-4 ${isDark ? 'text-[#8a7f81]' : 'text-slate-600'}`}>
               {t.settingsPolicyExitOnlyDesc}
             </p>
           </div>
@@ -231,19 +269,23 @@ export const Settings: React.FC<SettingsProps> = ({
             onClick={() => handleSave({ exit_only_hdr: false })}
             className={`p-3.5 border cursor-pointer transition-all ${
               !config.exit_only_hdr
-                ? 'border-[#f55a6b] bg-[#1a0f12] neon-glow-coral'
-                : 'border-white/10 bg-black/40 hover:border-white/20'
+                ? isDark
+                  ? 'border-[#f55a6b] bg-[#1a0f12] neon-glow-coral'
+                  : 'border-[#f55a6b] bg-rose-50/70 shadow-2xs'
+                : isDark
+                  ? 'border-white/10 bg-black/40 hover:border-white/20'
+                  : 'border-slate-200 bg-slate-50/70 hover:border-slate-300 shadow-2xs'
             }`}
           >
             <div className="flex items-center justify-between">
-              <div className="font-bold text-xs text-white flex items-center gap-2">
-                <span className={!config.exit_only_hdr ? 'text-[#f55a6b]' : 'text-slate-500'}>
+              <div className={`font-bold text-xs flex items-center gap-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                <span className={!config.exit_only_hdr ? 'text-[#f55a6b]' : isDark ? 'text-slate-500' : 'text-slate-400'}>
                   {!config.exit_only_hdr ? '●' : '○'}
                 </span>
                 <span>{t.settingsPolicyAltTab}</span>
               </div>
             </div>
-            <p className="text-[11px] text-[#8a7f81] mt-1.5 pl-4">
+            <p className={`text-[11px] mt-1.5 pl-4 ${isDark ? 'text-[#8a7f81]' : 'text-slate-600'}`}>
               {t.settingsPolicyAltTabDesc}
             </p>
           </div>
@@ -251,10 +293,12 @@ export const Settings: React.FC<SettingsProps> = ({
 
         {/* Debounce slider (only active if Alt+Tab mode is chosen) */}
         {!config.exit_only_hdr && (
-          <div className="space-y-3 pt-3 border-t border-white/10 relative z-10">
+          <div className={`space-y-3 pt-3 border-t relative z-10 ${isDark ? 'border-white/10' : 'border-slate-200'}`}>
             <div className="flex items-center justify-between text-xs">
-              <span className="text-[#8a7f81]">{t.settingsDebounceLabel}</span>
-              <span className="font-bold text-[#5accf5] px-2 py-0.5 border border-[#5accf5]/40 bg-black">
+              <span className={isDark ? 'text-[#8a7f81]' : 'text-slate-600'}>{t.settingsDebounceLabel}</span>
+              <span className={`font-bold px-2 py-0.5 border ${
+                isDark ? 'text-[#5accf5] border-[#5accf5]/40 bg-black' : 'text-sky-700 border-sky-300 bg-sky-50'
+              }`}>
                 {t.settingsDebounceSeconds(config.alt_tab_delay_seconds)}
               </span>
             </div>
@@ -271,7 +315,7 @@ export const Settings: React.FC<SettingsProps> = ({
               className="w-full accent-[#f55a6b] cursor-pointer"
             />
 
-            <p className="text-[11px] text-[#8a7f81]">
+            <p className={`text-[11px] ${isDark ? 'text-[#8a7f81]' : 'text-slate-500'}`}>
               {t.settingsDebounceDesc}
             </p>
           </div>
@@ -279,135 +323,95 @@ export const Settings: React.FC<SettingsProps> = ({
       </div>
 
       {/* System Integration Group */}
-      <div className="p-5 border border-[#f55a6b]/30 bg-[#120d0e] relative space-y-4">
-        <div className="absolute inset-0 scanlines-overlay opacity-15 pointer-events-none" />
+      <div className={`p-5 border relative space-y-4 ${
+        isDark ? 'border-[#f55a6b]/30 bg-[#120d0e]' : 'border-slate-200 bg-white shadow-2xs'
+      }`}>
+        {isDark && <div className="absolute inset-0 scanlines-overlay opacity-15 pointer-events-none" />}
 
-        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#f55a6b]">
-          <Power className="w-4 h-4 text-[#5accf5]" />
+        <div className={`flex items-center gap-2 text-xs font-bold uppercase tracking-wider ${
+          isDark ? 'text-[#f55a6b]' : 'text-[#e03e52]'
+        }`}>
+          <Power className={`w-4 h-4 ${isDark ? 'text-[#5accf5]' : 'text-sky-600'}`} />
           <span>{t.settingsSystemGroup}</span>
         </div>
 
         <div className="space-y-3 relative z-10">
-          <div className="flex items-center justify-between p-3 border border-white/10 bg-black/40">
-            <div className="space-y-0.5">
-              <div className="font-bold text-xs text-white">{t.settingsAutostartTitle}</div>
-              <div className="text-[11px] text-[#8a7f81]">
-                {t.settingsAutostartDesc}
-              </div>
-            </div>
-
-            <button
-              onClick={() => handleSave({ autostart: !config.autostart })}
-              className={`px-3 py-1 text-xs font-bold uppercase tracking-wider border cursor-pointer transition-all ${
-                config.autostart
-                  ? 'bg-[#f55a6b] text-[#0f0b0b] border-[#f55a6b]'
-                  : 'bg-[#120d0e] text-[#8a7f81] border-[#8a7f81]/30'
+          {[
+            {
+              title: t.settingsAutostartTitle,
+              desc: t.settingsAutostartDesc,
+              active: config.autostart,
+              toggle: () => handleSave({ autostart: !config.autostart }),
+            },
+            {
+              title: t.settingsStartMinimizedTitle,
+              desc: t.settingsStartMinimizedDesc,
+              active: config.start_minimized,
+              toggle: () => handleSave({ start_minimized: !config.start_minimized }),
+            },
+            {
+              title: t.settingsAutoDetectTitle,
+              desc: t.settingsAutoDetectDesc,
+              active: config.auto_detect_new_games,
+              toggle: () => handleSave({ auto_detect_new_games: !config.auto_detect_new_games }),
+            },
+            {
+              title: t.settingsAutoSyncTitle,
+              desc: t.settingsAutoSyncDesc,
+              active: config.auto_sync_database,
+              toggle: () => handleSave({ auto_sync_database: !config.auto_sync_database }),
+            },
+            {
+              title: t.settingsNotifTitle,
+              desc: t.settingsNotifDesc,
+              active: config.notifications_enabled,
+              toggle: () => handleSave({ notifications_enabled: !config.notifications_enabled }),
+            },
+          ].map((item, idx) => (
+            <div
+              key={idx}
+              className={`flex items-center justify-between p-3 border ${
+                isDark ? 'border-white/10 bg-black/40' : 'border-slate-200 bg-slate-50/70 shadow-2xs'
               }`}
             >
-              {config.autostart ? t.settingsStateOn : t.settingsStateOff}
-            </button>
-          </div>
-
-          <div className="flex items-center justify-between p-3 border border-white/10 bg-black/40">
-            <div className="space-y-0.5">
-              <div className="font-bold text-xs text-white">{t.settingsStartMinimizedTitle}</div>
-              <div className="text-[11px] text-[#8a7f81]">
-                {t.settingsStartMinimizedDesc}
+              <div className="space-y-0.5">
+                <div className={`font-bold text-xs ${isDark ? 'text-white' : 'text-slate-900'}`}>{item.title}</div>
+                <div className={`text-[11px] ${isDark ? 'text-[#8a7f81]' : 'text-slate-600'}`}>
+                  {item.desc}
+                </div>
               </div>
+
+              <button
+                onClick={item.toggle}
+                className={`px-3 py-1 text-xs font-bold uppercase tracking-wider border cursor-pointer transition-all ${
+                  item.active
+                    ? 'bg-[#f55a6b] text-[#0f0b0b] border-[#f55a6b]'
+                    : isDark
+                      ? 'bg-[#120d0e] text-[#8a7f81] border-[#8a7f81]/30'
+                      : 'bg-white text-slate-600 border-slate-300 hover:text-slate-900 shadow-2xs'
+                }`}
+              >
+                {item.active ? t.settingsStateOn : t.settingsStateOff}
+              </button>
             </div>
-
-            <button
-              onClick={() =>
-                handleSave({ start_minimized: !config.start_minimized })
-              }
-              className={`px-3 py-1 text-xs font-bold uppercase tracking-wider border cursor-pointer transition-all ${
-                config.start_minimized
-                  ? 'bg-[#f55a6b] text-[#0f0b0b] border-[#f55a6b]'
-                  : 'bg-[#120d0e] text-[#8a7f81] border-[#8a7f81]/30'
-              }`}
-            >
-              {config.start_minimized ? t.settingsStateOn : t.settingsStateOff}
-            </button>
-          </div>
-
-          <div className="flex items-center justify-between p-3 border border-white/10 bg-black/40">
-            <div className="space-y-0.5">
-              <div className="font-bold text-xs text-white">{t.settingsAutoDetectTitle}</div>
-              <div className="text-[11px] text-[#8a7f81]">
-                {t.settingsAutoDetectDesc}
-              </div>
-            </div>
-
-            <button
-              onClick={() =>
-                handleSave({ auto_detect_new_games: !config.auto_detect_new_games })
-              }
-              className={`px-3 py-1 text-xs font-bold uppercase tracking-wider border cursor-pointer transition-all ${
-                config.auto_detect_new_games
-                  ? 'bg-[#f55a6b] text-[#0f0b0b] border-[#f55a6b]'
-                  : 'bg-[#120d0e] text-[#8a7f81] border-[#8a7f81]/30'
-              }`}
-            >
-              {config.auto_detect_new_games ? t.settingsStateOn : t.settingsStateOff}
-            </button>
-          </div>
-
-          <div className="flex items-center justify-between p-3 border border-white/10 bg-black/40">
-            <div className="space-y-0.5">
-              <div className="font-bold text-xs text-white">{t.settingsAutoSyncTitle}</div>
-              <div className="text-[11px] text-[#8a7f81]">
-                {t.settingsAutoSyncDesc}
-              </div>
-            </div>
-
-            <button
-              onClick={() =>
-                handleSave({ auto_sync_database: !config.auto_sync_database })
-              }
-              className={`px-3 py-1 text-xs font-bold uppercase tracking-wider border cursor-pointer transition-all ${
-                config.auto_sync_database
-                  ? 'bg-[#f55a6b] text-[#0f0b0b] border-[#f55a6b]'
-                  : 'bg-[#120d0e] text-[#8a7f81] border-[#8a7f81]/30'
-              }`}
-            >
-              {config.auto_sync_database ? t.settingsStateOn : t.settingsStateOff}
-            </button>
-          </div>
-
-          <div className="flex items-center justify-between p-3 border border-white/10 bg-black/40">
-            <div className="space-y-0.5">
-              <div className="font-bold text-xs text-white">{t.settingsNotifTitle}</div>
-              <div className="text-[11px] text-[#8a7f81]">
-                {t.settingsNotifDesc}
-              </div>
-            </div>
-
-            <button
-              onClick={() =>
-                handleSave({ notifications_enabled: !config.notifications_enabled })
-              }
-              className={`px-3 py-1 text-xs font-bold uppercase tracking-wider border cursor-pointer transition-all ${
-                config.notifications_enabled
-                  ? 'bg-[#f55a6b] text-[#0f0b0b] border-[#f55a6b]'
-                  : 'bg-[#120d0e] text-[#8a7f81] border-[#8a7f81]/30'
-              }`}
-            >
-              {config.notifications_enabled ? t.settingsStateOn : t.settingsStateOff}
-            </button>
-          </div>
+          ))}
         </div>
       </div>
 
       {/* Blacklist Group */}
-      <div className="p-5 border border-[#f55a6b]/30 bg-[#120d0e] relative space-y-4">
-        <div className="absolute inset-0 scanlines-overlay opacity-15 pointer-events-none" />
+      <div className={`p-5 border relative space-y-4 ${
+        isDark ? 'border-[#f55a6b]/30 bg-[#120d0e]' : 'border-slate-200 bg-white shadow-2xs'
+      }`}>
+        {isDark && <div className="absolute inset-0 scanlines-overlay opacity-15 pointer-events-none" />}
 
-        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#f55a6b]">
-          <ShieldBan className="w-4 h-4 text-[#5accf5]" />
+        <div className={`flex items-center gap-2 text-xs font-bold uppercase tracking-wider ${
+          isDark ? 'text-[#f55a6b]' : 'text-[#e03e52]'
+        }`}>
+          <ShieldBan className={`w-4 h-4 ${isDark ? 'text-[#5accf5]' : 'text-sky-600'}`} />
           <span>{t.settingsBlacklistGroup}</span>
         </div>
 
-        <p className="text-xs text-[#8a7f81] relative z-10">
+        <p className={`text-xs relative z-10 ${isDark ? 'text-[#8a7f81]' : 'text-slate-600'}`}>
           {t.settingsBlacklistDesc}
         </p>
 
@@ -417,30 +421,37 @@ export const Settings: React.FC<SettingsProps> = ({
             placeholder={t.settingsBlacklistPlaceholder}
             value={newBlacklistExe}
             onChange={(e) => setNewBlacklistExe(e.target.value)}
-            className="flex-1 px-3 py-2 text-xs border border-[#f55a6b]/30 bg-[#0f0b0b] focus:border-[#f55a6b] text-white focus:outline-none"
+            className={`flex-1 px-3 py-2 text-xs border focus:border-[#f55a6b] focus:outline-none ${
+              isDark
+                ? 'border-[#f55a6b]/30 bg-[#0f0b0b] text-white'
+                : 'border-slate-300 bg-white text-slate-900 placeholder-slate-400 shadow-2xs'
+            }`}
           />
           <GlitchButton
             type="submit"
             label={t.settingsBlacklistAddBtn}
             variant="primary"
             size="sm"
+            isDark={isDark}
             icon={<Plus className="w-3.5 h-3.5 fill-current" />}
           />
         </form>
 
         <div className="space-y-1.5 relative z-10">
           {config.blacklist.length === 0 ? (
-            <div className="text-xs text-[#8a7f81] py-2">{t.settingsBlacklistEmpty}</div>
+            <div className={`text-xs py-2 ${isDark ? 'text-[#8a7f81]' : 'text-slate-600'}`}>{t.settingsBlacklistEmpty}</div>
           ) : (
             config.blacklist.map((exe) => (
               <div
                 key={exe}
-                className="p-2 border border-white/10 bg-black/40 flex items-center justify-between text-xs"
+                className={`p-2 border flex items-center justify-between text-xs ${
+                  isDark ? 'border-white/10 bg-black/40' : 'border-slate-200 bg-slate-50/70 shadow-2xs'
+                }`}
               >
-                <span className="font-mono text-[#5accf5]">[{exe}]</span>
+                <span className={`font-mono ${isDark ? 'text-[#5accf5]' : 'text-sky-700 font-semibold'}`}>[{exe}]</span>
                 <button
                   onClick={() => handleRemoveBlacklist(exe)}
-                  className="text-[#8a7f81] hover:text-[#f55a6b] cursor-pointer"
+                  className={`cursor-pointer ${isDark ? 'text-[#8a7f81] hover:text-[#f55a6b]' : 'text-slate-400 hover:text-[#f55a6b]'}`}
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
@@ -449,7 +460,7 @@ export const Settings: React.FC<SettingsProps> = ({
           )}
         </div>
       </div>
-      {snapshot && <p className="text-[11px] text-[#8a7f81] break-all">{t.configFile}: {snapshot.config_path}</p>}
+      {snapshot && <p className={`text-[11px] break-all ${isDark ? 'text-[#8a7f81]' : 'text-slate-500'}`}>{t.configFile}: {snapshot.config_path}</p>}
     </fieldset>
   );
 };

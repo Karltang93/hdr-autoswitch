@@ -45,6 +45,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onNavigateToApps,
   controlAvailable,
   onControlError,
+  isDark,
 }) => {
   const { t, lang } = useI18n();
   const [toggling, setToggling] = useState(false);
@@ -97,16 +98,36 @@ export const Dashboard: React.FC<DashboardProps> = ({
       {/* Hero Display Control Center (Retro Glitch Terminal) */}
       <div
         data-hdr-scope={scope.mode}
-        className={`relative overflow-hidden border p-6 transition-all duration-300 ${visuals.panel}`}
+        className={`relative overflow-hidden border p-6 transition-all duration-300 ${
+          isDark
+            ? visuals.panel
+            : scope.mode === 'hdr'
+            ? 'bg-gradient-to-r from-rose-50 via-white to-white border-[#f55a6b] shadow-md shadow-rose-100/60'
+            : scope.mode === 'sdr'
+            ? 'bg-gradient-to-r from-sky-50/60 via-white to-white border-[#5accf5]/50 shadow-xs'
+            : scope.mode === 'mixed'
+            ? 'bg-gradient-to-r from-amber-50/60 via-white to-white border-amber-400 shadow-xs'
+            : 'bg-white border-slate-400 border-dashed shadow-xs'
+        }`}
       >
         {/* Subtle scanline background texture */}
-        <div className="absolute inset-0 scanlines-overlay opacity-30 pointer-events-none" />
+        {isDark && <div className="absolute inset-0 scanlines-overlay opacity-30 pointer-events-none" />}
 
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
           <div className="flex items-center gap-5">
             {/* Ambient Aperture Dial with Glitch Border */}
             <div
-              className={`p-3 border shrink-0 flex items-center justify-center aspect-square transition-all duration-300 ${visuals.dial}`}
+              className={`p-3 border shrink-0 flex items-center justify-center aspect-square transition-all duration-300 ${
+                isDark
+                  ? visuals.dial
+                  : scope.mode === 'hdr'
+                  ? 'bg-white border-[#f55a6b] shadow-[0_0_20px_rgba(245,90,107,0.3)] scale-105'
+                  : scope.mode === 'sdr'
+                  ? 'bg-white border-[#5accf5]/50 shadow-xs'
+                  : scope.mode === 'mixed'
+                  ? 'bg-white border-amber-400 shadow-xs'
+                  : 'bg-white border-slate-400 border-dashed shadow-xs'
+              }`}
             >
               <HdrLogo size={52} mode={scope.mode} />
             </div>
@@ -114,42 +135,68 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <div className="space-y-1.5">
               <div className="flex items-center gap-2.5 flex-wrap">
                 <span
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider border ${visuals.badge}`}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider border ${
+                    isDark
+                      ? visuals.badge
+                      : scope.mode === 'hdr'
+                      ? 'bg-[#f55a6b] text-white border-[#f55a6b]'
+                      : scope.mode === 'sdr'
+                      ? 'bg-sky-100 text-sky-900 border-sky-300'
+                      : scope.mode === 'mixed'
+                      ? 'bg-amber-100 text-amber-900 border-amber-400'
+                      : 'bg-slate-100 text-slate-800 border-slate-400 border-dashed'
+                  }`}
                 >
                   <span
-                    className={`w-2 h-2 ${visuals.dot}`}
+                    className={`w-2 h-2 ${
+                      isDark
+                        ? visuals.dot
+                        : scope.mode === 'hdr'
+                        ? 'bg-white animate-status-pulse'
+                        : scope.mode === 'sdr'
+                        ? 'bg-sky-600'
+                        : scope.mode === 'mixed'
+                        ? 'bg-amber-600'
+                        : 'border border-slate-500'
+                    }`}
                   />
                   {scope.mode === 'hdr' ? t.heroHdrRec2020 : scope.mode === 'sdr' ? t.heroSdrBt709 : scope.badge}
                 </span>
 
                 {status.switched_by_app && (
-                  <span className="text-xs px-2 py-0.5 bg-[#5accf5]/15 text-[#5accf5] border border-[#5accf5]/40">
+                  <span className={`text-xs px-2 py-0.5 border ${
+                    isDark
+                      ? 'bg-[#5accf5]/15 text-[#5accf5] border-[#5accf5]/40'
+                      : 'bg-sky-50 text-sky-800 border-sky-300'
+                  }`}>
                     {t.heroHookActive}
                   </span>
                 )}
 
-                <span className="text-xs text-[#8a7f81]">
+                <span className={`text-xs ${isDark ? 'text-[#8a7f81]' : 'text-slate-500'}`}>
                   {t.heroDisplaysReady(hdrSupportedMonitors.length)}
                 </span>
               </div>
 
-              <h2 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+              <h2 className={`text-2xl font-bold tracking-tight flex items-center gap-2 ${
+                isDark ? 'text-white' : 'text-slate-900'
+              }`}>
                 <GlitchText
                   text={scope.title}
                   scrambleOnHover={true}
                 />
               </h2>
 
-              <p className="text-xs text-[#b5a9ac]">
+              <p className={`text-xs ${isDark ? 'text-[#b5a9ac]' : 'text-slate-600'}`}>
                 {status.current_app_name ? (
-                  <span className="flex items-center gap-2 text-[#f55a6b]">
-                    <Sparkles className="w-4 h-4 text-[#5accf5] shrink-0" />
+                  <span className={`flex items-center gap-2 ${isDark ? 'text-[#f55a6b]' : 'text-[#e03e52]'}`}>
+                    <Sparkles className={`w-4 h-4 shrink-0 ${isDark ? 'text-[#5accf5]' : 'text-sky-600'}`} />
                     <span>{t.heroActiveProcess}</span>
-                    <strong className="text-white font-bold tracking-wide">
+                    <strong className={`font-bold tracking-wide ${isDark ? 'text-white' : 'text-slate-900'}`}>
                       {status.current_app_name}
                     </strong>
                     {status.current_exe && (
-                      <span className="text-[#5accf5]">[{status.current_exe}]</span>
+                      <span className={isDark ? 'text-[#5accf5]' : 'text-sky-600'}>[{status.current_exe}]</span>
                     )}
                   </span>
                 ) : (
@@ -177,25 +224,25 @@ export const Dashboard: React.FC<DashboardProps> = ({
             />
           </div>
         </div>
-        <p className="relative z-10 mt-4 text-xs text-[#b5a9ac]">{t.configManualPolicy}</p>
+        <p className={`relative z-10 mt-4 text-xs ${isDark ? 'text-[#b5a9ac]' : 'text-slate-500'}`}>{t.configManualPolicy}</p>
       </div>
 
       {/* Connected Displays & Monitor Controls */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Monitor className="w-4 h-4 text-[#5accf5]" />
-            <h3 className="font-bold text-xs uppercase tracking-wider text-[#f55a6b]">
+            <Monitor className={`w-4 h-4 ${isDark ? 'text-[#5accf5]' : 'text-sky-600'}`} />
+            <h3 className={`font-bold text-xs uppercase tracking-wider ${isDark ? 'text-[#f55a6b]' : 'text-[#e03e52]'}`}>
               {t.displaysTitle}
             </h3>
-            <span className="text-xs text-[#8a7f81]">({monitors.length})</span>
+            <span className={`text-xs ${isDark ? 'text-[#8a7f81]' : 'text-slate-500'}`}>({monitors.length})</span>
           </div>
 
           <GlitchButton
             label={t.displaysRefresh}
             variant="outline"
             size="sm"
-            icon={<RefreshCw className="w-3 h-3 text-[#5accf5]" />}
+            icon={<RefreshCw className={`w-3 h-3 ${isDark ? 'text-[#5accf5]' : 'text-[#e03e52]'}`} />}
             onClick={onRefreshMonitors}
           />
         </div>
@@ -209,23 +256,41 @@ export const Dashboard: React.FC<DashboardProps> = ({
               <div
                 key={`${m.adapter_id_low}:${m.adapter_id_high}:${m.target_id}`}
                 data-monitor-state={mode}
-                className={`p-4 border transition-all relative ${scopeVisuals[mode].panel}`}
+                className={`p-4 border transition-all relative ${
+                  isDark
+                    ? scopeVisuals[mode].panel
+                    : mode === 'hdr'
+                    ? 'bg-linear-to-r from-rose-50/80 via-white to-white border-[#f55a6b] shadow-xs'
+                    : mode === 'sdr'
+                    ? 'bg-white border-slate-200 shadow-xs'
+                    : mode === 'mixed'
+                    ? 'bg-amber-50/50 border-amber-400/80 shadow-xs'
+                    : 'bg-slate-50 border-slate-300 border-dashed shadow-xs'
+                }`}
               >
-                <div className="absolute inset-0 scanlines-overlay opacity-20 pointer-events-none" />
+                {isDark && <div className="absolute inset-0 scanlines-overlay opacity-20 pointer-events-none" />}
 
                 <div className="flex flex-wrap items-start justify-between gap-3 relative z-10">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h4 className="font-bold text-sm text-white truncate max-w-[220px]" title={m.name}>
+                      <h4 className={`font-bold text-sm truncate max-w-[220px] ${isDark ? 'text-white' : 'text-slate-900'}`} title={m.name}>
                         {m.name}
                       </h4>
                       {m.is_primary && (
-                        <span className="text-[10px] px-1.5 py-0.5 bg-[#5accf5]/15 text-[#5accf5] border border-[#5accf5]/40 font-bold">
+                        <span className={`text-[10px] px-1.5 py-0.5 border font-bold ${
+                          isDark
+                            ? 'bg-[#5accf5]/15 text-[#5accf5] border-[#5accf5]/40'
+                            : 'bg-sky-50 text-sky-800 border-sky-300'
+                        }`}>
                           {t.displaysPrimary}
                         </span>
                       )}
                       {isTarget && (
-                        <span className="text-[10px] px-1.5 py-0.5 bg-[#f55a6b]/15 text-[#f55a6b] border border-[#f55a6b]/40 font-bold">
+                        <span className={`text-[10px] px-1.5 py-0.5 border font-bold ${
+                          isDark
+                            ? 'bg-[#f55a6b]/15 text-[#f55a6b] border-[#f55a6b]/40'
+                            : 'bg-rose-50 text-rose-800 border-rose-300'
+                        }`}>
                           {t.displaysTargetHdr}
                         </span>
                       )}
@@ -233,17 +298,17 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
                     <div className="flex items-center gap-2 text-xs">
                       {mode === 'unknown' ? (
-                        <span className="text-amber-300">{t.displaysStateUnknown}</span>
+                        <span className={isDark ? 'text-amber-300' : 'text-amber-700 font-semibold'}>{t.displaysStateUnknown}</span>
                       ) : m.is_hdr_supported ? (
-                        <span className="text-emerald-400 flex items-center gap-1 font-semibold">
-                          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                        <span className={`flex items-center gap-1 font-semibold ${isDark ? 'text-emerald-400' : 'text-emerald-700'}`}>
+                          <ShieldCheck className="w-3.5 h-3.5" />
                           {t.displaysHdrSupported}
                         </span>
                       ) : (
-                        <span className="text-[#8a7f81]">{t.displaysSdrOnly}</span>
+                        <span className={isDark ? 'text-[#8a7f81]' : 'text-slate-500'}>{t.displaysSdrOnly}</span>
                       )}
-                      <span className="text-[#8a7f81]">•</span>
-                      <span className="text-[#5accf5] text-xs font-mono">
+                      <span className={isDark ? 'text-[#8a7f81]' : 'text-slate-400'}>•</span>
+                      <span className={`text-xs font-mono ${isDark ? 'text-[#5accf5]' : 'text-sky-700'}`}>
                         {t.displaysTargetId}: {m.target_id}
                       </span>
                     </div>
@@ -267,8 +332,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       />
                     </>}
                   </div>
-                  {m.identity_error && <p className="mt-2 text-xs text-amber-300" role="alert">{m.identity_error}</p>}
-                  {m.state_error && <p className="mt-2 text-xs text-amber-300" role="alert">{m.state_error}</p>}
+                  {m.identity_error && <p className={`mt-2 text-xs ${isDark ? 'text-amber-300' : 'text-amber-700'}`} role="alert">{m.identity_error}</p>}
+                  {m.state_error && <p className={`mt-2 text-xs ${isDark ? 'text-amber-300' : 'text-amber-700'}`} role="alert">{m.state_error}</p>}
                 </div>
               </div>
             );
@@ -280,16 +345,18 @@ export const Dashboard: React.FC<DashboardProps> = ({
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <History className="w-4 h-4 text-[#f55a6b]" />
-            <h3 className="font-bold text-xs uppercase tracking-wider text-[#f55a6b]">
+            <History className={`w-4 h-4 ${isDark ? 'text-[#f55a6b]' : 'text-[#e03e52]'}`} />
+            <h3 className={`font-bold text-xs uppercase tracking-wider ${isDark ? 'text-[#f55a6b]' : 'text-[#e03e52]'}`}>
               {t.recentTitle}
             </h3>
-            <span className="text-xs text-[#8a7f81]">({recentGames.length})</span>
+            <span className={`text-xs ${isDark ? 'text-[#8a7f81]' : 'text-slate-500'}`}>({recentGames.length})</span>
           </div>
 
           {libraryCount !== null && <button
             onClick={onNavigateToApps}
-            className="text-xs text-[#5accf5] hover:text-[#70d6f7] flex items-center gap-1 font-bold cursor-pointer uppercase transition-colors"
+            className={`text-xs flex items-center gap-1 font-bold cursor-pointer uppercase transition-colors ${
+              isDark ? 'text-[#5accf5] hover:text-[#70d6f7]' : 'text-sky-600 hover:text-sky-800'
+            }`}
           >
             <span>{t.recentAllLibrary(libraryCount)}</span>
             <ArrowRight className="w-3.5 h-3.5" />
@@ -297,16 +364,20 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
 
         {recentGames.length === 0 ? (
-          <div className="p-8 border border-[#f55a6b]/20 bg-[#120d0e]/60 flex flex-col sm:flex-row items-center justify-center gap-3 text-center sm:text-left relative overflow-hidden">
-            <div className="absolute inset-0 scanlines-overlay opacity-15 pointer-events-none" />
-            <div className="p-3 border border-[#f55a6b]/30 bg-[#1a0e10] text-[#f55a6b] shrink-0">
+          <div className={`p-8 border flex flex-col sm:flex-row items-center justify-center gap-3 text-center sm:text-left relative overflow-hidden ${
+            isDark ? 'border-[#f55a6b]/20 bg-[#120d0e]/60' : 'border-slate-200 bg-white shadow-xs'
+          }`}>
+            {isDark && <div className="absolute inset-0 scanlines-overlay opacity-15 pointer-events-none" />}
+            <div className={`p-3 border shrink-0 ${
+              isDark ? 'border-[#f55a6b]/30 bg-[#1a0e10] text-[#f55a6b]' : 'border-rose-200 bg-rose-50 text-[#e03e52]'
+            }`}>
               <Gamepad2 className="w-6 h-6" />
             </div>
             <div className="space-y-0.5">
-              <p className="text-xs text-[#e5e0e1] font-bold font-mono">
+              <p className={`text-xs font-bold font-mono ${isDark ? 'text-[#e5e0e1]' : 'text-slate-800'}`}>
                 {t.recentEmpty}
               </p>
-              <p className="text-[11px] text-[#8a7f81] font-mono">
+              <p className={`text-[11px] font-mono ${isDark ? 'text-[#8a7f81]' : 'text-slate-500'}`}>
                 {t.heroSdrSubtext}
               </p>
             </div>
@@ -348,8 +419,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 key={game.exe}
                 className={`relative group border overflow-hidden flex flex-col justify-between transition-all duration-200 ${
                   isHookActive
-                    ? 'bg-[#1c0f12] border-[#f55a6b] neon-glow-coral'
-                    : 'bg-[#120d0e] border-[#f55a6b]/30 hover:border-[#f55a6b] hover:shadow-[0_0_15px_rgba(245,90,107,0.3)]'
+                    ? isDark
+                      ? 'bg-[#1c0f12] border-[#f55a6b] neon-glow-coral'
+                      : 'bg-rose-50/50 border-[#f55a6b] shadow-md shadow-rose-100'
+                    : isDark
+                    ? 'bg-[#120d0e] border-[#f55a6b]/30 hover:border-[#f55a6b] hover:shadow-[0_0_15px_rgba(245,90,107,0.3)]'
+                    : 'bg-white border-slate-200 hover:border-[#f55a6b] hover:shadow-md'
                 }`}
                 style={{ height: '230px' }}
               >
@@ -365,11 +440,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       }}
                     />
                   ) : (
-                    <div className="w-full h-full bg-gradient-to-b from-[#221314] to-[#0f0b0b]" />
+                    <div className={`w-full h-full ${isDark ? 'bg-gradient-to-b from-[#221314] to-[#0f0b0b]' : 'bg-gradient-to-b from-slate-100 to-slate-200'}`} />
                   )}
-                  {/* CRT Scanline overlay on image */}
-                  <div className="absolute inset-0 scanlines-overlay opacity-35 pointer-events-none" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#0f0b0b] via-[#0f0b0b]/60 to-transparent pointer-events-none" />
+                  {/* CRT Scanline overlay on image in dark mode */}
+                  {isDark && <div className="absolute inset-0 scanlines-overlay opacity-35 pointer-events-none" />}
+                  <div className={`absolute inset-0 pointer-events-none ${
+                    isDark
+                      ? 'bg-gradient-to-t from-[#0f0b0b] via-[#0f0b0b]/60 to-transparent'
+                      : 'bg-gradient-to-t from-black/60 via-transparent to-transparent'
+                  }`} />
                 </div>
 
                 {/* Top Badge: HDR Support Type */}
@@ -383,8 +462,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 </div>
 
                 {/* Bottom Overlay: Title & Hook Telemetry Status */}
-                <div className="relative z-10 p-2.5 space-y-1.5 bg-[#0f0b0b]/90 border-t border-[#f55a6b]/20">
-                  <div className="font-bold text-xs truncate text-white">
+                <div className={`relative z-10 p-2.5 space-y-1.5 ${
+                  isDark
+                    ? 'bg-[#0f0b0b]/90 border-t border-[#f55a6b]/20'
+                    : 'bg-white/95 border-t border-slate-200 shadow-xs'
+                }`}>
+                  <div className={`font-bold text-xs truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>
                     <GlitchText text={game.name} scrambleOnHover={true} />
                   </div>
 
@@ -394,22 +477,24 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       <span
                         className={`w-1.5 h-1.5 rounded-full shrink-0 ${
                           isHookActive
-                            ? 'bg-[#5accf5] animate-status-pulse'
-                            : 'bg-emerald-400'
+                            ? isDark ? 'bg-[#5accf5] animate-status-pulse' : 'bg-sky-500 animate-status-pulse'
+                            : isDark ? 'bg-emerald-400' : 'bg-emerald-600'
                         }`}
                       />
                       <span
                         className={`truncate font-semibold ${
-                          isHookActive ? 'text-[#5accf5]' : 'text-emerald-300'
+                          isHookActive
+                            ? isDark ? 'text-[#5accf5]' : 'text-sky-700'
+                            : isDark ? 'text-emerald-300' : 'text-emerald-700'
                         }`}
                       >
                         {isHookActive ? t.recentHookActive : t.recentHookTriggered}
                       </span>
                     </div>
 
-                    <div className="flex items-center justify-between text-[9px] text-[#8a7f81]">
+                    <div className={`flex items-center justify-between text-[9px] ${isDark ? 'text-[#8a7f81]' : 'text-slate-500'}`}>
                       <span>{telemetryTime(game.last_switched_at, lang, t)}</span>
-                      <span className="text-[#5accf5]">{t.recentHdrOk}</span>
+                      <span className={isDark ? 'text-[#5accf5]' : 'text-sky-600 font-bold'}>{t.recentHdrOk}</span>
                     </div>
                   </div>
                 </div>
@@ -423,33 +508,39 @@ export const Dashboard: React.FC<DashboardProps> = ({
       {/* Activity Log (Real-time CRT System Event Feed) */}
       <div className="space-y-3">
         <div className="flex items-center gap-2">
-          <Terminal className="w-4 h-4 text-[#5accf5]" />
-          <h3 className="font-bold text-xs uppercase tracking-wider text-[#f55a6b]">
+          <Terminal className={`w-4 h-4 ${isDark ? 'text-[#5accf5]' : 'text-sky-600'}`} />
+          <h3 className={`font-bold text-xs uppercase tracking-wider ${isDark ? 'text-[#f55a6b]' : 'text-[#e03e52]'}`}>
             {t.activityTitle}
           </h3>
         </div>
 
-        <div className="p-3.5 border border-[#f55a6b]/30 bg-[#0f0b0b] relative space-y-2 max-h-[160px] overflow-y-auto">
-          <div className="absolute inset-0 scanlines-overlay opacity-20 pointer-events-none" />
+        <div className={`p-3.5 border relative space-y-2 max-h-[160px] overflow-y-auto ${
+          isDark
+            ? 'border-[#f55a6b]/30 bg-[#0f0b0b]'
+            : 'border-slate-200 bg-white shadow-xs'
+        }`}>
+          {isDark && <div className="absolute inset-0 scanlines-overlay opacity-20 pointer-events-none" />}
 
           {activityLogs.map((log) => (
             <div
               key={log.id}
-              className="flex items-center gap-2 text-xs font-mono transition-colors hover:text-white relative z-10"
+              className={`flex items-center gap-2 text-xs font-mono transition-colors relative z-10 ${
+                isDark ? 'hover:text-white' : 'hover:text-slate-900'
+              }`}
             >
-              <span className="text-[#8a7f81] shrink-0">[{telemetryTime(log.timestamp, lang, t)}]</span>
+              <span className={`shrink-0 ${isDark ? 'text-[#8a7f81]' : 'text-slate-400'}`}>[{telemetryTime(log.timestamp, lang, t)}]</span>
               <span
                 className={`w-1.5 h-1.5 shrink-0 ${
                   log.type === 'hdr_on'
                     ? 'bg-[#f55a6b]'
                     : log.type === 'hdr_off'
-                    ? 'bg-amber-400'
+                    ? isDark ? 'bg-amber-400' : 'bg-amber-500'
                     : log.type === 'game'
-                    ? 'bg-[#5accf5]'
-                    : 'bg-emerald-400'
+                    ? isDark ? 'bg-[#5accf5]' : 'bg-sky-500'
+                    : isDark ? 'bg-emerald-400' : 'bg-emerald-600'
                 }`}
               />
-              <span className="text-[#d8cfd1] truncate">&gt; {activityMessage(log.message, t)}</span>
+              <span className={`truncate ${isDark ? 'text-[#d8cfd1]' : 'text-slate-700'}`}>&gt; {activityMessage(log.message, t)}</span>
             </div>
           ))}
         </div>
